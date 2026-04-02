@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Verisure Italy Login",
+        "description": "Enter your Verisure Italy credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "2fa": {
+        "title": "Two-Factor Authentication",
+        "description": "SMS code sent to {phone}. Enter it below.",
+        "data": {
+          "code": "SMS Code"
+        }
+      },
+      "installation": {
+        "title": "Select Installation",
+        "description": "Choose which installation to control.",
+        "data": {
+          "installation": "Installation"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid username or password.",
+      "invalid_code": "Invalid SMS code. Please try again."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Verisure Italy Options",
+        "data": {
+          "poll_interval": "Poll interval (seconds)"
+        }
+      }
+    }
+  }
+}
