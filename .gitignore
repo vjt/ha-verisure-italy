@@ -10,3 +10,5 @@ build/
 .pyright/
 .ruff_cache/
 .pytest_cache/
+.env
+e2e_*.py

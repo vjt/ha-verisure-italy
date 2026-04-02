@@ -455,15 +455,14 @@ class VerisureClient:
         envelope = ValidateDeviceEnvelope.model_validate_json(response_text)
         result = envelope.data.xSValidateDevice
 
-        if result.hash is None:
-            raise AuthenticationError(
-                "Device validation returned null auth token"
-            )
-
-        self._auth_token = result.hash
-        self._auth_token_exp = self._decode_jwt_expiry(self._auth_token)
-        if result.refresh_token:
-            self._refresh_token = result.refresh_token
+        # Successful validation may return hash=null (Verisure IT).
+        # This means the device is now authorized — caller must login()
+        # again to obtain the actual auth token.
+        if result.hash is not None:
+            self._auth_token = result.hash
+            self._auth_token_exp = self._decode_jwt_expiry(self._auth_token)
+            if result.refresh_token:
+                self._refresh_token = result.refresh_token
 
         return (None, [])
 

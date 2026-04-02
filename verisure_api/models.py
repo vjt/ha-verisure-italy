@@ -139,7 +139,9 @@ STATE_TO_COMMAND: dict[AlarmState, ArmCommand] = {
 class Installation(BaseModel):
     """A Verisure installation (premises)."""
 
-    number: str
+    model_config = {"populate_by_name": True}
+
+    number: str = Field(alias="numinst")
     alias: str
     panel: str
     type: str
@@ -292,4 +294,4 @@ class Service(BaseModel):
     active: bool
     visible: bool
     request: str
-    description: str = ""
+    description: str | None = None

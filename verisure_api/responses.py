@@ -41,7 +41,7 @@ class _SrvData(BaseModel):
 
 class _OtpResult(BaseModel):
     res: str
-    msg: str
+    msg: str | None
 
 
 # --- Top-level response envelopes (one per GraphQL operation) ---
@@ -61,7 +61,7 @@ class ValidateDeviceEnvelope(BaseModel):
 
     class ValidateResult(BaseModel):
         res: str
-        msg: str
+        msg: str | None
         hash: str | None
         refresh_token: str | None = Field(alias="refreshToken")
 
