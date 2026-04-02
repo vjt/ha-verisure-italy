@@ -24,6 +24,7 @@ from pydantic import ValidationError
 from .exceptions import (
     APIConnectionError,
     APIResponseError,
+    ArmingExceptionError,
     AuthenticationError,
     OperationFailedError,
     OperationTimeoutError,
@@ -39,6 +40,7 @@ from .graphql import (
     DISARM_PANEL_MUTATION,
     DISARM_STATUS_QUERY,
     GENERAL_STATUS_QUERY,
+    GET_EXCEPTIONS_QUERY,
     INSTALLATION_LIST_QUERY,
     LOGIN_TOKEN_MUTATION,
     LOGOUT_MUTATION,
@@ -58,6 +60,7 @@ from .models import (
     OperationResult,
     OtpPhone,
     Service,
+    ZoneException,
 )
 from .responses import (
     ArmPanelEnvelope,
@@ -68,6 +71,7 @@ from .responses import (
     DisarmStatusEnvelope,
     ErrorResponse,
     GeneralStatusEnvelope,
+    GetExceptionsEnvelope,
     InstallationListEnvelope,
     LoginEnvelope,
     SendOtpEnvelope,
@@ -627,22 +631,30 @@ class VerisureClient:
         self,
         installation: Installation,
         target_state: AlarmState,
+        force_arming_remote_id: str | None = None,
     ) -> ArmResult:
         """Arm the alarm. Polls until complete.
 
         Returns ArmResult or raises OperationTimeoutError/OperationFailedError.
+        Raises ArmingExceptionError if open zones detected (NON_BLOCKING with
+        allowForcing). Caller can retry with force_arming_remote_id from the
+        exception to override.
         """
         command = STATE_TO_COMMAND[target_state]
         await self._ensure_auth(installation)
 
+        variables: GraphQLVars = {
+            "request": command.value,
+            "numinst": installation.number,
+            "panel": installation.panel,
+            "currentStatus": self._last_proto,
+        }
+        if force_arming_remote_id is not None:
+            variables["forceArmingRemoteId"] = force_arming_remote_id
+
         content: GraphQLContent = {
             "operationName": "xSArmPanel",
-            "variables": {
-                "request": command.value,
-                "numinst": installation.number,
-                "panel": installation.panel,
-                "currentStatus": self._last_proto,
-            },
+            "variables": variables,
             "query": ARM_PANEL_MUTATION,
         }
         response_text = await self._execute(
@@ -658,7 +670,11 @@ class VerisureClient:
                 error_type=None,
             )
 
-        poll_fn = partial(self._check_arm_status_once, command=command)
+        poll_fn = partial(
+            self._check_arm_status_once,
+            command=command,
+            force_arming_remote_id=force_arming_remote_id,
+        )
         result = await self._poll_operation(
             installation, arm_resp.reference_id, poll_fn
         )
@@ -690,18 +706,23 @@ class VerisureClient:
         reference_id: str,
         counter: int,
         command: ArmCommand,
+        force_arming_remote_id: str | None = None,
     ) -> OperationResult:
         """Single arm status poll."""
+        variables: GraphQLVars = {
+            "request": command.value,
+            "numinst": installation.number,
+            "panel": installation.panel,
+            "currentStatus": self._last_proto,
+            "referenceId": reference_id,
+            "counter": counter,
+        }
+        if force_arming_remote_id is not None:
+            variables["forceArmingRemoteId"] = force_arming_remote_id
+
         content: GraphQLContent = {
             "operationName": "ArmStatus",
-            "variables": {
-                "request": command.value,
-                "numinst": installation.number,
-                "panel": installation.panel,
-                "currentStatus": self._last_proto,
-                "referenceId": reference_id,
-                "counter": counter,
-            },
+            "variables": variables,
             "query": ARM_STATUS_QUERY,
         }
         response_text = await self._execute(
@@ -709,6 +730,23 @@ class VerisureClient:
         )
         envelope = ArmStatusEnvelope.model_validate_json(response_text)
         arm_result = envelope.data.xSArmStatus
+
+        # Detect force-arm-eligible error BEFORE converting to OperationResult
+        if (
+            arm_result.res == "ERROR"
+            and arm_result.error is not None
+            and arm_result.error.type == "NON_BLOCKING"
+            and arm_result.error.allow_forcing
+            and arm_result.error.reference_id is not None
+        ):
+            suid = arm_result.error.suid or ""
+            exceptions = await self._get_exceptions(
+                installation, arm_result.error.reference_id, suid
+            )
+            raise ArmingExceptionError(
+                arm_result.error.reference_id, suid, exceptions
+            )
+
         # Return as OperationResult for the generic poll machinery
         return OperationResult(
             res=arm_result.res,
@@ -718,6 +756,54 @@ class VerisureClient:
             protomResponse=arm_result.protom_response,
             protomResponseDate=arm_result.protom_response_data,
         )
+
+    async def _get_exceptions(
+        self,
+        installation: Installation,
+        reference_id: str,
+        suid: str,
+    ) -> list[ZoneException]:
+        """Fetch arming exception details (open zones).
+
+        Polls xSGetExceptions until OK or timeout. Returns zone list.
+        """
+        counter = 1
+        max_polls = max(10, round(self._poll_timeout / max(1, self._poll_delay)))
+
+        while counter <= max_polls:
+            content: GraphQLContent = {
+                "operationName": "xSGetExceptions",
+                "variables": {
+                    "numinst": installation.number,
+                    "panel": installation.panel,
+                    "referenceId": reference_id,
+                    "counter": counter,
+                    "suid": suid,
+                },
+                "query": GET_EXCEPTIONS_QUERY,
+            }
+            response_text = await self._execute(
+                content, "xSGetExceptions", installation
+            )
+            envelope = GetExceptionsEnvelope.model_validate_json(response_text)
+            result = envelope.data.xSGetExceptions
+
+            if result.res == "OK":
+                return result.exceptions or []
+
+            if result.res != "WAIT":
+                _LOGGER.warning(
+                    "Unexpected xSGetExceptions result: %s", result.res
+                )
+                return []
+
+            await asyncio.sleep(self._poll_delay)
+            counter += 1
+
+        _LOGGER.warning(
+            "Failed to fetch exceptions after %d polls", max_polls
+        )
+        return []
 
     async def disarm(self, installation: Installation) -> DisarmResult:
         """Disarm the alarm completely. Polls until complete.

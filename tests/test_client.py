@@ -18,6 +18,7 @@ from verisure_api.client import API_URL, VerisureClient
 from verisure_api.exceptions import (
     APIConnectionError,
     APIResponseError,
+    ArmingExceptionError,
     AuthenticationError,
     OperationFailedError,
     OperationTimeoutError,
@@ -321,6 +322,53 @@ def _arm_status_complete(proto_code: str = "A") -> str:
                 "protomResponseDate": "2026-04-02T10:30:00",
                 "requestId": "req-123",
                 "error": None,
+            }
+        }
+    })
+
+
+def _arm_status_with_error(
+    error_type: str = "NON_BLOCKING",
+    allow_forcing: bool = True,
+    reference_id: str = "error-ref-123",
+    suid: str = "error-suid-456",
+) -> str:
+    return json.dumps({
+        "data": {
+            "xSArmStatus": {
+                "res": "ERROR",
+                "msg": "alarm-manager.exceptions",
+                "status": None,
+                "protomResponse": None,
+                "protomResponseDate": None,
+                "numinst": None,
+                "requestId": None,
+                "error": {
+                    "code": "EXCEPTIONS",
+                    "type": error_type,
+                    "allowForcing": allow_forcing,
+                    "exceptionsNumber": 1,
+                    "referenceId": reference_id,
+                    "suid": suid,
+                },
+            }
+        }
+    })
+
+
+def _get_exceptions_response(
+    exceptions: list[dict[str, str]] | None = None,
+) -> str:
+    if exceptions is None:
+        exceptions = [
+            {"status": "OPEN", "deviceType": "MAGNETIC", "alias": "finestracucina"}
+        ]
+    return json.dumps({
+        "data": {
+            "xSGetExceptions": {
+                "res": "OK",
+                "msg": None,
+                "exceptions": exceptions,
             }
         }
     })
@@ -900,3 +948,88 @@ class TestEnsureAuth:
 
         assert status.status == "B"
         assert client._capabilities[INSTALLATION.number] == cap_token
+
+
+# ---------------------------------------------------------------------------
+# Force arm tests
+# ---------------------------------------------------------------------------
+
+
+class TestForceArm:
+    async def test_arm_raises_arming_exception_on_open_zone(self, mock_api, client):
+        """Arm with open zone raises ArmingExceptionError with zone details."""
+        _authenticate(client)
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_with_error())
+        mock_api.post(API_URL, body=_get_exceptions_response())
+
+        target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
+        with pytest.raises(ArmingExceptionError) as exc_info:
+            await client.arm(INSTALLATION, target)
+
+        assert exc_info.value.reference_id == "error-ref-123"
+        assert exc_info.value.suid == "error-suid-456"
+        assert len(exc_info.value.exceptions) == 1
+        assert exc_info.value.exceptions[0].alias == "finestracucina"
+
+    async def test_force_arm_succeeds_with_remote_id(self, mock_api, client):
+        """Force arm with forceArmingRemoteId completes successfully."""
+        _authenticate(client)
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_complete("A"))
+
+        target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
+        result = await client.arm(
+            INSTALLATION, target, force_arming_remote_id="error-ref-123"
+        )
+
+        assert result.proto_code == ProtoCode.TOTAL_PERIMETER
+
+    async def test_arm_non_blocking_without_allow_forcing_raises_failed(
+        self, mock_api, client
+    ):
+        """NON_BLOCKING error without allowForcing raises OperationFailedError."""
+        _authenticate(client)
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_with_error(allow_forcing=False))
+
+        target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
+        with pytest.raises(OperationFailedError):
+            await client.arm(INSTALLATION, target)
+
+    async def test_get_exceptions_polls_through_wait(self, mock_api, client):
+        """_get_exceptions polls until OK, not just first response."""
+        _authenticate(client)
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_with_error())
+        # First exceptions poll returns WAIT
+        mock_api.post(API_URL, body=json.dumps({
+            "data": {"xSGetExceptions": {"res": "WAIT", "msg": None, "exceptions": None}}
+        }))
+        # Second returns OK with data
+        mock_api.post(API_URL, body=_get_exceptions_response())
+
+        target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
+        with pytest.raises(ArmingExceptionError) as exc_info:
+            await client.arm(INSTALLATION, target)
+
+        assert exc_info.value.exceptions[0].alias == "finestracucina"
+
+    async def test_arm_multiple_open_zones(self, mock_api, client):
+        """Multiple open zones reported in exception."""
+        _authenticate(client)
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_with_error())
+        mock_api.post(API_URL, body=_get_exceptions_response([
+            {"status": "OPEN", "deviceType": "MAGNETIC", "alias": "finestracucina"},
+            {"status": "OPEN", "deviceType": "MAGNETIC", "alias": "portaingresso"},
+        ]))
+
+        target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
+        with pytest.raises(ArmingExceptionError) as exc_info:
+            await client.arm(INSTALLATION, target)
+
+        assert len(exc_info.value.exceptions) == 2
+        aliases = [e.alias for e in exc_info.value.exceptions]
+        assert "finestracucina" in aliases
+        assert "portaingresso" in aliases

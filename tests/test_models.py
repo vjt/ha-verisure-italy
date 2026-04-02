@@ -9,10 +9,12 @@ from verisure_api.models import (
     STATE_TO_PROTO,
     AlarmState,
     ArmCommand,
+    GeneralStatus,
     InteriorMode,
     OperationResult,
     PerimeterMode,
     ProtoCode,
+    ZoneException,
     parse_proto_code,
 )
 
@@ -143,6 +145,54 @@ class TestOperationResultParsing:
         }
         with pytest.raises(ValidationError):
             OperationResult.model_validate(raw)
+
+
+class TestZoneException:
+    """Zone exception model parsing."""
+
+    def test_parse_from_api_json(self) -> None:
+        data = {"status": "OPEN", "deviceType": "MAGNETIC", "alias": "finestracucina"}
+        exc = ZoneException.model_validate(data)
+        assert exc.status == "OPEN"
+        assert exc.device_type == "MAGNETIC"
+        assert exc.alias == "finestracucina"
+
+    def test_missing_field_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            ZoneException.model_validate({"status": "OPEN", "alias": "test"})
+
+
+class TestGeneralStatusExceptions:
+    """GeneralStatus model with exceptions field."""
+
+    def test_parse_with_exceptions(self) -> None:
+        raw = {
+            "status": "B",
+            "timestampUpdate": "1775164624581",
+            "exceptions": [
+                {"status": "OPEN", "deviceType": "MAGNETIC", "alias": "finestracucina"}
+            ],
+        }
+        result = GeneralStatus.model_validate(raw)
+        assert result.status == "B"
+        assert result.exceptions is not None
+        assert len(result.exceptions) == 1
+        assert result.exceptions[0].alias == "finestracucina"
+
+    def test_parse_without_exceptions(self) -> None:
+        raw = {"status": "D", "timestampUpdate": "1775162828538"}
+        result = GeneralStatus.model_validate(raw)
+        assert result.exceptions is None
+
+    def test_parse_with_null_exceptions(self) -> None:
+        raw = {"status": "D", "timestampUpdate": "1775162828538", "exceptions": None}
+        result = GeneralStatus.model_validate(raw)
+        assert result.exceptions is None
+
+    def test_parse_with_empty_exceptions(self) -> None:
+        raw = {"status": "D", "timestampUpdate": "1775162828538", "exceptions": []}
+        result = GeneralStatus.model_validate(raw)
+        assert result.exceptions == []
 
 
 class TestArmCommands:

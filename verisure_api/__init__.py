@@ -4,6 +4,7 @@ from .client import VerisureClient, generate_device_id, generate_uuid
 from .exceptions import (
     APIConnectionError,
     APIResponseError,
+    ArmingExceptionError,
     AuthenticationError,
     OperationFailedError,
     OperationTimeoutError,
@@ -33,6 +34,7 @@ from .models import (
     PerimeterMode,
     ProtoCode,
     Service,
+    ZoneException,
     parse_proto_code,
 )
 
@@ -46,6 +48,7 @@ __all__ = [
     "ArmCommand",
     "ArmPanelResponse",
     "ArmResult",
+    "ArmingExceptionError",
     "AuthenticationError",
     "CheckAlarmResponse",
     "DisarmPanelResponse",
@@ -67,6 +70,7 @@ __all__ = [
     "VerisureClient",
     "VerisureError",
     "WAFBlockedError",
+    "ZoneException",
     "generate_device_id",
     "generate_uuid",
     "parse_proto_code",

@@ -197,6 +197,14 @@ class OperationResult(BaseModel):
         return self.res == "WAIT"
 
 
+class ZoneException(BaseModel):
+    """An open zone reported during arming (from xSGetExceptions)."""
+
+    status: str
+    device_type: str = Field(alias="deviceType")
+    alias: str
+
+
 class PanelError(BaseModel):
     """Error details from the panel (returned in arm/disarm status)."""
 
@@ -205,6 +213,7 @@ class PanelError(BaseModel):
     allow_forcing: bool | None = Field(None, alias="allowForcing")
     exceptions_number: int | None = Field(None, alias="exceptionsNumber")
     reference_id: str | None = Field(None, alias="referenceId")
+    suid: str | None = None
 
 
 class ArmResult(BaseModel):
@@ -265,6 +274,7 @@ class GeneralStatus(BaseModel):
 
     status: str
     timestamp_update: str = Field(alias="timestampUpdate")
+    exceptions: list[ZoneException] | None = None
 
 
 class CheckAlarmResponse(BaseModel):

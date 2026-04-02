@@ -5,6 +5,13 @@ No generic catch-alls. Callers handle specific errors or let them
 propagate to generate human-visible notifications.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .models import ZoneException
+
 
 class VerisureError(Exception):
     """Base exception for all Verisure API errors."""
@@ -90,3 +97,23 @@ class OperationFailedError(VerisureError):
         super().__init__(message)
         self.error_code = error_code
         self.error_type = error_type
+
+
+class ArmingExceptionError(VerisureError):
+    """Arming blocked by open zones (NON_BLOCKING with allowForcing).
+
+    Carries force-arm context so the caller can retry with
+    forceArmingRemoteId to override the exception.
+    """
+
+    def __init__(
+        self,
+        reference_id: str,
+        suid: str,
+        exceptions: list[ZoneException],
+    ) -> None:
+        details = ", ".join(e.alias for e in exceptions)
+        super().__init__(f"Arming blocked by open zones: {details}")
+        self.reference_id = reference_id
+        self.suid = suid
+        self.exceptions = exceptions

@@ -18,6 +18,7 @@ from .models import (
     OperationResult,
     OtpPhone,
     Service,
+    ZoneException,
 )
 
 # --- Nested wrappers that mirror the GraphQL response structure ---
@@ -162,6 +163,21 @@ class DisarmStatusEnvelope(BaseModel):
 
     class Data(BaseModel):
         xSDisarmStatus: DisarmResult  # noqa: N815
+
+    data: Data
+
+
+class _GetExceptionsResult(BaseModel):
+    res: str
+    msg: str | None
+    exceptions: list[ZoneException] | None = None
+
+
+class GetExceptionsEnvelope(BaseModel):
+    """Response from xSGetExceptions."""
+
+    class Data(BaseModel):
+        xSGetExceptions: _GetExceptionsResult  # noqa: N815
 
     data: Data
 

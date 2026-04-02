@@ -98,22 +98,37 @@ GENERAL_STATUS_QUERY = (
 ARM_PANEL_MUTATION = (
     "mutation xSArmPanel("
     "$numinst: String!, $request: ArmCodeRequest!, $panel: String!, "
-    "$currentStatus: String"
+    "$currentStatus: String, $suid: String, "
+    "$forceArmingRemoteId: String"
     ") { xSArmPanel("
     "numinst: $numinst, request: $request, panel: $panel, "
-    "currentStatus: $currentStatus"
+    "currentStatus: $currentStatus, suid: $suid, "
+    "forceArmingRemoteId: $forceArmingRemoteId"
     ") { res msg referenceId } }"
 )
 
 ARM_STATUS_QUERY = (
     "query ArmStatus("
     "$numinst: String!, $request: ArmCodeRequest, $panel: String!, "
-    "$referenceId: String!, $counter: Int!"
+    "$referenceId: String!, $counter: Int!, "
+    "$forceArmingRemoteId: String"
     ") { xSArmStatus("
     "numinst: $numinst, panel: $panel, referenceId: $referenceId, "
-    "counter: $counter, request: $request"
+    "counter: $counter, request: $request, "
+    "forceArmingRemoteId: $forceArmingRemoteId"
     ") { res msg status protomResponse protomResponseDate numinst requestId"
-    " error { code type allowForcing exceptionsNumber referenceId } } }"
+    " error { code type allowForcing exceptionsNumber referenceId suid } } }"
+)
+
+GET_EXCEPTIONS_QUERY = (
+    "query xSGetExceptions("
+    "$numinst: String!, $panel: String!, "
+    "$referenceId: String!, $counter: Int!, $suid: String"
+    ") { xSGetExceptions("
+    "numinst: $numinst, panel: $panel, "
+    "referenceId: $referenceId, counter: $counter, suid: $suid"
+    ") { res msg"
+    " exceptions { status deviceType alias } } }"
 )
 
 DISARM_PANEL_MUTATION = (
