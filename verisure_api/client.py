@@ -827,6 +827,12 @@ class VerisureClient:
                 await asyncio.sleep(self._poll_delay)
                 result = await poll_fn(installation, reference_id, counter)
                 if not result.is_pending:
+                    if result.res == "ERROR":
+                        raise OperationFailedError(
+                            f"Panel rejected operation: {result.msg}",
+                            error_code=None,
+                            error_type=None,
+                        )
                     self._last_proto = result.protom_response or ""
                     return result
                 counter += 1

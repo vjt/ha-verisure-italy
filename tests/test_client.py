@@ -737,6 +737,28 @@ class TestDisarm:
         with pytest.raises(OperationFailedError, match="Panel not responding"):
             await client.disarm(INSTALLATION)
 
+    async def test_panel_error_during_poll(self, mock_api, client):
+        """Panel accepts request but returns ERROR during poll (e.g. no permission)."""
+        _authenticate(client)
+
+        mock_api.post(API_URL, body=_disarm_panel_response())
+        mock_api.post(API_URL, body=json.dumps({
+            "data": {
+                "xSDisarmStatus": {
+                    "res": "ERROR",
+                    "msg": "alarm-manager.error_no_response_to_request",
+                    "numinst": None,
+                    "protomResponse": "",
+                    "protomResponseDate": "2026-04-02T20:30:59Z",
+                    "requestId": "",
+                    "error": None,
+                }
+            }
+        }))
+
+        with pytest.raises(OperationFailedError, match="Panel rejected operation"):
+            await client.disarm(INSTALLATION)
+
     async def test_updates_last_proto(self, mock_api, client):
         _authenticate(client)
         client._last_proto = "A"  # Was armed
