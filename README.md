@@ -7,8 +7,8 @@ replace the Verisure mobile app for alarm control and monitoring.
 
 ## Status
 
-**Work in progress.** API client is built and typed. HA integration
-layer coming next.
+**Work in progress.** API client is complete and E2E validated against
+live panel. Full arm/disarm cycle confirmed. HA integration layer next.
 
 ## Design Principles
 
@@ -43,7 +43,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest tests/ -x -q          # 43 tests
+pytest tests/ -x -q          # 88 tests
 pyright verisure_api/         # strict mode, 0 errors
 ruff check verisure_api/ tests/
 ```
