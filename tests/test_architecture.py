@@ -7,8 +7,9 @@ tells you exactly which file and line to fix.
 Rules enforced:
 1. No `Any` in type annotations (imports, signatures, variable annotations)
 2. No bare `dict` without type arguments in annotations
-3. No `# type: ignore` without a specific error code
-4. No `.get()` with a default on models (use direct access or explicit check)
+3. No `object` as a type annotation (too vague — use a protocol or concrete type)
+4. No `# type: ignore` without a specific error code
+5. No `.get()` with a default on models (use direct access or explicit check)
 """
 
 import ast
@@ -162,6 +163,58 @@ class TestNoBareDict:
         violations = self._find_bare_dict(tree, filepath)
         if violations:
             msg = f"Found bare `dict` in {filepath}:\n" + "\n".join(
+                f"  {v}" for v in violations
+            )
+            pytest.fail(msg)
+
+
+class TestNoObjectAnnotation:
+    """No `object` as a type annotation — too vague, use a protocol or concrete type."""
+
+    # Dunder methods where `object` is required by the Python type protocol
+    _OBJECT_ALLOWED_DUNDERS = frozenset({"__eq__", "__ne__"})
+
+    def _find_object_annotations(self, tree: ast.Module, filepath: Path) -> list[str]:
+        violations: list[str] = []
+
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                is_dunder_exempt = node.name in self._OBJECT_ALLOWED_DUNDERS
+                if node.returns and self._is_object(node.returns):
+                    violations.append(
+                        f"{filepath}:{node.lineno}: function `{node.name}` "
+                        f"return type is `object`"
+                    )
+                for arg in node.args.args + node.args.kwonlyargs:
+                    if arg.annotation and self._is_object(arg.annotation):
+                        if is_dunder_exempt and arg.arg != "self":
+                            continue  # __eq__/__ne__ require `object` per protocol
+                        violations.append(
+                            f"{filepath}:{arg.lineno}: argument `{arg.arg}` "
+                            f"in `{node.name}` annotated with `object`"
+                        )
+
+            if isinstance(node, ast.AnnAssign) and node.annotation and self._is_object(node.annotation):  # noqa: E501
+                    violations.append(
+                        f"{filepath}:{node.lineno}: variable annotation is `object`"
+                    )
+
+        return violations
+
+    def _is_object(self, node: ast.expr) -> bool:
+        """Check if an annotation is bare `object`."""
+        if isinstance(node, ast.Name) and node.id == "object":
+            return True
+        if isinstance(node, ast.BinOp):  # X | Y union syntax
+            return self._is_object(node.left) or self._is_object(node.right)
+        return False
+
+    @pytest.mark.parametrize("filepath", _collect_python_files(), ids=str)
+    def test_no_object_annotation(self, filepath: Path) -> None:
+        tree = _parse_file(filepath)
+        violations = self._find_object_annotations(tree, filepath)
+        if violations:
+            msg = f"Found `object` annotation in {filepath}:\n" + "\n".join(
                 f"  {v}" for v in violations
             )
             pytest.fail(msg)
