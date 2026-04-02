@@ -160,28 +160,35 @@ class OperationResult(BaseModel):
 
     This is the core response from any alarm state query. The protom_response
     field contains the ProtoCode that determines the alarm state.
+
+    During WAIT (pending), most fields are null — only access proto_code,
+    alarm_state, timestamp on completed results.
     """
 
     res: str
-    msg: str
+    msg: str | None
     status: str | None
-    numinst: str
-    protom_response: str = Field(alias="protomResponse")
-    protom_response_data: str = Field(alias="protomResponseDate")
+    numinst: str | None
+    protom_response: str | None = Field(alias="protomResponse")
+    protom_response_data: str | None = Field(alias="protomResponseDate")
 
     @property
     def proto_code(self) -> ProtoCode:
-        """Parse protom_response into a ProtoCode. Raises ValueError if unknown."""
+        """Parse protom_response into a ProtoCode. Raises ValueError if unknown or pending."""
+        if self.protom_response is None:
+            raise ValueError("No proto code — operation still pending")
         return parse_proto_code(self.protom_response)
 
     @property
     def alarm_state(self) -> AlarmState:
-        """Resolve to an AlarmState. Raises ValueError if proto code is unknown."""
+        """Resolve to an AlarmState. Raises ValueError if proto code is unknown or pending."""
         return PROTO_TO_STATE[self.proto_code]
 
     @property
     def timestamp(self) -> datetime:
-        """Parse the response timestamp. Raises ValueError on bad format."""
+        """Parse the response timestamp. Raises ValueError on bad format or pending."""
+        if self.protom_response_data is None:
+            raise ValueError("No timestamp — operation still pending")
         return datetime.fromisoformat(self.protom_response_data)
 
     @property
@@ -194,16 +201,18 @@ class ArmResult(BaseModel):
     """Result of an arm operation status poll."""
 
     res: str
-    msg: str
+    msg: str | None
     status: str | None
-    numinst: str
-    protom_response: str = Field(alias="protomResponse")
-    protom_response_data: str = Field(alias="protomResponseDate")
-    request_id: str = Field(alias="requestId")
+    numinst: str | None
+    protom_response: str | None = Field(alias="protomResponse")
+    protom_response_data: str | None = Field(alias="protomResponseDate")
+    request_id: str | None = Field(alias="requestId")
     error: dict[str, object] | None
 
     @property
     def proto_code(self) -> ProtoCode:
+        if self.protom_response is None:
+            raise ValueError("No proto code — operation still pending")
         return parse_proto_code(self.protom_response)
 
     @property
@@ -219,15 +228,17 @@ class DisarmResult(BaseModel):
     """Result of a disarm operation status poll."""
 
     res: str
-    msg: str
-    numinst: str
-    protom_response: str = Field(alias="protomResponse")
-    protom_response_data: str = Field(alias="protomResponseDate")
-    request_id: str = Field(alias="requestId")
+    msg: str | None
+    numinst: str | None
+    protom_response: str | None = Field(alias="protomResponse")
+    protom_response_data: str | None = Field(alias="protomResponseDate")
+    request_id: str | None = Field(alias="requestId")
     error: dict[str, object] | None
 
     @property
     def proto_code(self) -> ProtoCode:
+        if self.protom_response is None:
+            raise ValueError("No proto code — operation still pending")
         return parse_proto_code(self.protom_response)
 
     @property

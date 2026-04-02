@@ -676,14 +676,14 @@ class VerisureClient:
         # The poll already gave us an OperationResult; for arm we need
         # the richer ArmResult. But since poll returns OperationResult
         # and ArmResult has the same core fields, we use the proto.
-        self._last_proto = result.protom_response
+        self._last_proto = result.protom_response or ""
         return ArmResult(
             res=result.res,
             msg=result.msg,
             status=result.status,
             numinst=result.numinst,
-            protomResponse=result.protom_response,
-            protomResponseDate=result.protom_response_data,
+            protomResponse=result.protom_response or "",
+            protomResponseDate=result.protom_response_data or "",
             requestId="",
             error=None,
         )
@@ -759,13 +759,13 @@ class VerisureClient:
             installation, disarm_resp.reference_id, poll_fn
         )
 
-        self._last_proto = result.protom_response
+        self._last_proto = result.protom_response or ""
         return DisarmResult(
             res=result.res,
             msg=result.msg,
             numinst=result.numinst,
-            protomResponse=result.protom_response,
-            protomResponseDate=result.protom_response_data,
+            protomResponse=result.protom_response or "",
+            protomResponseDate=result.protom_response_data or "",
             requestId="",
             error=None,
         )
@@ -827,7 +827,7 @@ class VerisureClient:
                 await asyncio.sleep(self._poll_delay)
                 result = await poll_fn(installation, reference_id, counter)
                 if not result.is_pending:
-                    self._last_proto = result.protom_response
+                    self._last_proto = result.protom_response or ""
                     return result
                 counter += 1
 
