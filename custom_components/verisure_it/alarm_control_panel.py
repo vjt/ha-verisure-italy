@@ -8,6 +8,8 @@ from typing import Any
 
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
+)
+from homeassistant.components.alarm_control_panel.const import (
     AlarmControlPanelEntityFeature,
     AlarmControlPanelState,
 )
@@ -50,7 +52,6 @@ _STATE_MAP: dict[AlarmState, AlarmControlPanelState] = {
     _DISARMED: AlarmControlPanelState.DISARMED,
     _PARTIAL_PERIMETER: AlarmControlPanelState.ARMED_HOME,
     _TOTAL_PERIMETER: AlarmControlPanelState.ARMED_AWAY,
-    # Non-primary states — display as custom bypass
     PROTO_TO_STATE[ProtoCode.PERIMETER_ONLY]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
     PROTO_TO_STATE[ProtoCode.PARTIAL]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
     PROTO_TO_STATE[ProtoCode.TOTAL]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
@@ -69,7 +70,7 @@ async def async_setup_entry(
     async_add_entities([VerisureAlarmPanel(coordinator)])
 
 
-class VerisureAlarmPanel(
+class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
     CoordinatorEntity[VerisureCoordinator], AlarmControlPanelEntity
 ):
     """Alarm control panel for Verisure Italy."""
@@ -88,34 +89,31 @@ class VerisureAlarmPanel(
             f"{DOMAIN}_{coordinator.installation.number}"
         )
         self._force_context: dict[str, Any] | None = None
-        self._transitional_state: AlarmControlPanelState | None = None
+        self._update_alarm_state()
 
-    @property
-    def alarm_state(self) -> AlarmControlPanelState | None:
-        """Return the current alarm state."""
-        if self._transitional_state is not None:
-            return self._transitional_state
+    def _update_alarm_state(self) -> None:
+        """Update _attr_alarm_state from coordinator data."""
+        self._attr_alarm_state = _STATE_MAP.get(
+            self.coordinator.data.alarm_state
+        )
+        self._update_force_attributes()
 
-        if self.coordinator.data is None:
-            return None
-
-        return _STATE_MAP.get(self.coordinator.data.alarm_state)
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return force-arm context as extra attributes."""
-        attrs: dict[str, Any] = {}
+    def _update_force_attributes(self) -> None:
+        """Update extra state attributes from force context."""
         if self._force_context is not None:
-            attrs["force_arm_available"] = True
-            attrs["arm_exceptions"] = [
-                e.alias for e in self._force_context["exceptions"]
-            ]
-        return attrs
+            self._attr_extra_state_attributes = {
+                "force_arm_available": True,
+                "arm_exceptions": [
+                    e.alias for e in self._force_context["exceptions"]
+                ],
+            }
+        else:
+            self._attr_extra_state_attributes = {}
 
     def _handle_coordinator_update(self) -> None:
-        """Clear transitional state and force context on coordinator update."""
-        self._transitional_state = None
-        self._clear_force_context()
+        """Sync alarm state from coordinator and clear force context."""
+        self._force_context = None
+        self._update_alarm_state()
         super()._handle_coordinator_update()
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
@@ -128,7 +126,7 @@ class VerisureAlarmPanel(
 
     async def _async_arm(self, target: AlarmState, mode: str) -> None:
         """Execute arm operation with force-arm exception handling."""
-        self._transitional_state = AlarmControlPanelState.ARMING
+        self._attr_alarm_state = AlarmControlPanelState.ARMING
         self.async_write_ha_state()
 
         try:
@@ -136,14 +134,14 @@ class VerisureAlarmPanel(
                 self.coordinator.installation, target
             )
         except ArmingExceptionError as exc:
-            self._transitional_state = None
+            self._update_alarm_state()  # revert to previous
             self._set_force_context(exc, mode, target)
             self._notify_arm_exceptions(exc)
             self._fire_arming_exception_event(exc, mode)
             self.async_write_ha_state()
             return
         except (OperationFailedError, OperationTimeoutError) as exc:
-            self._transitional_state = None
+            self._update_alarm_state()  # revert to previous
             _LOGGER.error("Arm failed: %s", exc.message)
             self.async_write_ha_state()
             return
@@ -152,7 +150,7 @@ class VerisureAlarmPanel(
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         """Disarm the alarm."""
-        self._transitional_state = AlarmControlPanelState.DISARMING
+        self._attr_alarm_state = AlarmControlPanelState.DISARMING
         self.async_write_ha_state()
 
         try:
@@ -160,7 +158,7 @@ class VerisureAlarmPanel(
                 self.coordinator.installation
             )
         except (OperationFailedError, OperationTimeoutError) as exc:
-            self._transitional_state = None
+            self._update_alarm_state()  # revert to previous
             _LOGGER.error("Disarm failed: %s", exc.message)
             self.async_write_ha_state()
             return
@@ -170,10 +168,7 @@ class VerisureAlarmPanel(
     # --- Force arm ---
 
     async def async_force_arm(self) -> None:
-        """Force-arm using stored exception context.
-
-        Called by the verisure_it.force_arm service.
-        """
+        """Force-arm using stored exception context."""
         if self._force_context is None:
             _LOGGER.warning("force_arm called but no force context available")
             return
@@ -181,8 +176,9 @@ class VerisureAlarmPanel(
         target: AlarmState = self._force_context["target"]
         ref_id: str = self._force_context["reference_id"]
 
-        self._transitional_state = AlarmControlPanelState.ARMING
-        self._clear_force_context()
+        self._force_context = None
+        self._attr_alarm_state = AlarmControlPanelState.ARMING
+        self._update_force_attributes()
         self._dismiss_notification()
         self.async_write_ha_state()
 
@@ -193,7 +189,7 @@ class VerisureAlarmPanel(
                 force_arming_remote_id=ref_id,
             )
         except (OperationFailedError, OperationTimeoutError) as exc:
-            self._transitional_state = None
+            self._update_alarm_state()
             _LOGGER.error("Force arm failed: %s", exc.message)
             self.async_write_ha_state()
             return
@@ -203,13 +199,12 @@ class VerisureAlarmPanel(
     async def async_force_arm_cancel(self) -> None:
         """Cancel pending force-arm context."""
         if self._force_context is None:
-            _LOGGER.warning(
-                "force_arm_cancel called but no force context available"
-            )
+            _LOGGER.warning("force_arm_cancel called but no context")
             return
 
         _LOGGER.info("Force-arm cancelled by user")
-        self._clear_force_context()
+        self._force_context = None
+        self._update_force_attributes()
         self._dismiss_notification()
         self.async_write_ha_state()
 
@@ -228,27 +223,33 @@ class VerisureAlarmPanel(
             "exceptions": exc.exceptions,
             "created_at": datetime.datetime.now(),
         }
-
-    def _clear_force_context(self) -> None:
-        """Clear stored force-arm context."""
-        self._force_context = None
+        self._update_force_attributes()
 
     def _notification_id(self) -> str:
-        return f"{_NOTIFICATION_ID_PREFIX}_{self.coordinator.installation.number}"
+        return (
+            f"{_NOTIFICATION_ID_PREFIX}"
+            f"_{self.coordinator.installation.number}"
+        )
 
     def _notify_arm_exceptions(self, exc: ArmingExceptionError) -> None:
         """Create a persistent notification about open zones."""
         zone_list = ", ".join(e.alias for e in exc.exceptions)
-        self.hass.components.persistent_notification.async_create(
-            f"Arming blocked by open zones: {zone_list}",
-            title="Verisure Italy — Open Zones",
-            notification_id=self._notification_id(),
+        self.hass.services.call(
+            "persistent_notification",
+            "create",
+            {
+                "message": f"Arming blocked by open zones: {zone_list}",
+                "title": "Verisure Italy — Open Zones",
+                "notification_id": self._notification_id(),
+            },
         )
 
     def _dismiss_notification(self) -> None:
         """Dismiss the arming exception notification."""
-        self.hass.components.persistent_notification.async_dismiss(
-            self._notification_id()
+        self.hass.services.call(
+            "persistent_notification",
+            "dismiss",
+            {"notification_id": self._notification_id()},
         )
 
     def _fire_arming_exception_event(

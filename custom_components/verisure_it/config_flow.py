@@ -7,11 +7,9 @@ from typing import Any
 
 import voluptuous as vol
 from aiohttp import ClientSession
-
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 
 from verisure_api import (
     AuthenticationError,
@@ -76,7 +74,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Step 1: Username and password."""
         errors: dict[str, str] = {}
 
@@ -112,7 +110,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_2fa(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Step 2: Two-factor authentication."""
         errors: dict[str, str] = {}
 
@@ -149,7 +147,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_installation(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Step 3: Select installation."""
         client = await self._get_client()
 
@@ -184,7 +182,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             }),
         )
 
-    def _create_entry(self, installation: Installation) -> FlowResult:
+    def _create_entry(self, installation: Installation) -> ConfigFlowResult:
         """Create the config entry."""
         return self.async_create_entry(
             title=installation.alias,
@@ -213,7 +211,7 @@ class VerisureItOptionsFlow(OptionsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(data=user_input)

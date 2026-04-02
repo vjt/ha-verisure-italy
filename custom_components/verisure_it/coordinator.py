@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from aiohttp import ClientSession
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
