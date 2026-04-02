@@ -197,6 +197,16 @@ class OperationResult(BaseModel):
         return self.res == "WAIT"
 
 
+class PanelError(BaseModel):
+    """Error details from the panel (returned in arm/disarm status)."""
+
+    code: str | None = None
+    type: str | None = None
+    allow_forcing: bool | None = Field(None, alias="allowForcing")
+    exceptions_number: int | None = Field(None, alias="exceptionsNumber")
+    reference_id: str | None = Field(None, alias="referenceId")
+
+
 class ArmResult(BaseModel):
     """Result of an arm operation status poll."""
 
@@ -207,7 +217,7 @@ class ArmResult(BaseModel):
     protom_response: str | None = Field(alias="protomResponse")
     protom_response_data: str | None = Field(alias="protomResponseDate")
     request_id: str | None = Field(alias="requestId")
-    error: dict[str, object] | None
+    error: PanelError | None
 
     @property
     def proto_code(self) -> ProtoCode:
@@ -233,7 +243,7 @@ class DisarmResult(BaseModel):
     protom_response: str | None = Field(alias="protomResponse")
     protom_response_data: str | None = Field(alias="protomResponseDate")
     request_id: str | None = Field(alias="requestId")
-    error: dict[str, object] | None
+    error: PanelError | None
 
     @property
     def proto_code(self) -> ProtoCode:

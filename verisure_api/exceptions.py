@@ -30,18 +30,15 @@ class APIResponseError(VerisureError):
     """API returned an error in the GraphQL response.
 
     Attributes:
-        graphql_errors: raw error list from the API response.
         http_status: HTTP status code if available.
     """
 
     def __init__(
         self,
         message: str,
-        graphql_errors: list[dict[str, object]] | None,
         http_status: int | None,
     ) -> None:
         super().__init__(message)
-        self.graphql_errors: list[dict[str, object]] | None = graphql_errors
         self.http_status = http_status
 
 

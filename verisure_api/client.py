@@ -146,6 +146,7 @@ class VerisureClient:
         self._capabilities_exp: dict[str, datetime] = {}
         self._last_proto: str = ""
         self._apollo_operation_id: str = secrets.token_hex(64)
+        self._auth_lock = asyncio.Lock()
 
     # -------------------------------------------------------------------
     # HTTP transport — returns raw response text, never dicts
@@ -183,14 +184,12 @@ class VerisureClient:
                 )
             raise APIResponseError(
                 f"HTTP 403 from Verisure API ({operation})",
-                graphql_errors=None,
                 http_status=403,
             )
 
         if http_status >= 400:
             raise APIResponseError(
                 f"HTTP {http_status} from Verisure API ({operation})",
-                graphql_errors=None,
                 http_status=http_status,
             )
 
@@ -231,14 +230,12 @@ class VerisureClient:
         if first.data is not None and first.data.reason is not None:
             raise APIResponseError(
                 first.data.reason,
-                graphql_errors=None,
                 http_status=None,
             )
 
         if first.message:
             raise APIResponseError(
                 first.message,
-                graphql_errors=None,
                 http_status=None,
             )
 
@@ -330,18 +327,22 @@ class VerisureClient:
         return datetime.fromtimestamp(exp)
 
     async def _ensure_auth(self, installation: Installation) -> None:
-        """Ensure both auth and capabilities tokens are valid."""
-        token_expiring = (
-            datetime.now() + timedelta(minutes=1) > self._auth_token_exp
-        )
-        if self._auth_token is None or token_expiring:
-            await self.login()
+        """Ensure both auth and capabilities tokens are valid.
 
-        cap_exp = self._capabilities_exp.get(
-            installation.number, datetime.min
-        )
-        if datetime.now() + timedelta(minutes=1) > cap_exp:
-            await self.get_services(installation)
+        Uses a lock to prevent concurrent callers from racing on token refresh.
+        """
+        async with self._auth_lock:
+            token_expiring = (
+                datetime.now() + timedelta(minutes=1) > self._auth_token_exp
+            )
+            if self._auth_token is None or token_expiring:
+                await self.login()
+
+            cap_exp = self._capabilities_exp.get(
+                installation.number, datetime.min
+            )
+            if datetime.now() + timedelta(minutes=1) > cap_exp:
+                await self.get_services(installation)
 
     # -------------------------------------------------------------------
     # Authentication
@@ -439,15 +440,16 @@ class VerisureClient:
             self._otp_challenge = None
         except APIResponseError as err:
             self._otp_challenge = None
-            # Error may contain OTP challenge data
-            return self._try_extract_otp(err)
+            raise AuthenticationError(
+                f"Device validation failed: {err.message}"
+            ) from err
 
         # Check if response contains OTP challenge (Unauthorized with phones)
         try:
             error_resp = ErrorResponse.model_validate_json(response_text)
             for error in error_resp.errors:
-                if error.data and error.data.auth_otp_hash:
-                    phones = error.data.auth_phones or []
+                if error.data is not None and error.data.auth_otp_hash is not None:
+                    phones = error.data.auth_phones if error.data.auth_phones is not None else []
                     return (error.data.auth_otp_hash, phones)
         except ValidationError:
             pass  # Not an error response — continue to parse success
@@ -465,17 +467,6 @@ class VerisureClient:
                 self._refresh_token = result.refresh_token
 
         return (None, [])
-
-    def _try_extract_otp(
-        self, err: APIResponseError
-    ) -> tuple[str | None, list[OtpPhone]]:
-        """Try to extract OTP data from an error. Re-raises if not OTP."""
-        # The graphql_errors on our exception are already typed
-        # but we need to re-parse from the original response
-        # For now, just re-raise — OTP extraction needs the raw response
-        raise AuthenticationError(
-            f"Device validation failed: {err.message}"
-        ) from err
 
     async def send_otp(self, phone_id: int, otp_hash: str) -> bool:
         """Request an OTP SMS. Returns True on success."""
@@ -672,18 +663,23 @@ class VerisureClient:
             installation, arm_resp.reference_id, poll_fn
         )
 
-        # Re-parse as ArmResult (has extra fields vs OperationResult)
-        # The poll already gave us an OperationResult; for arm we need
-        # the richer ArmResult. But since poll returns OperationResult
-        # and ArmResult has the same core fields, we use the proto.
-        self._last_proto = result.protom_response or ""
+        # Poll completed successfully — proto fields must be present.
+        # If they're None after a non-WAIT, non-ERROR result, the API
+        # returned something unexpected and we crash loud.
+        if result.protom_response is None or result.protom_response_data is None:
+            raise APIResponseError(
+                "Arm completed but response missing proto fields",
+                http_status=None,
+            )
+
+        self._last_proto = result.protom_response
         return ArmResult(
             res=result.res,
             msg=result.msg,
             status=result.status,
             numinst=result.numinst,
-            protomResponse=result.protom_response or "",
-            protomResponseDate=result.protom_response_data or "",
+            protomResponse=result.protom_response,
+            protomResponseDate=result.protom_response_data,
             requestId="",
             error=None,
         )
@@ -759,13 +755,19 @@ class VerisureClient:
             installation, disarm_resp.reference_id, poll_fn
         )
 
-        self._last_proto = result.protom_response or ""
+        if result.protom_response is None or result.protom_response_data is None:
+            raise APIResponseError(
+                "Disarm completed but response missing proto fields",
+                http_status=None,
+            )
+
+        self._last_proto = result.protom_response
         return DisarmResult(
             res=result.res,
             msg=result.msg,
             numinst=result.numinst,
-            protomResponse=result.protom_response or "",
-            protomResponseDate=result.protom_response_data or "",
+            protomResponse=result.protom_response,
+            protomResponseDate=result.protom_response_data,
             requestId="",
             error=None,
         )
@@ -833,7 +835,8 @@ class VerisureClient:
                             error_code=None,
                             error_type=None,
                         )
-                    self._last_proto = result.protom_response or ""
+                    if result.protom_response is not None:
+                        self._last_proto = result.protom_response
                     return result
                 counter += 1
 
