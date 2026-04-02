@@ -1,0 +1,1 @@
+"""Verisure Italy API client."""
