@@ -246,7 +246,6 @@ class VerisureItOptionsFlow(OptionsFlow):
         current_interval = self.config_entry.options.get(
             "poll_interval", DEFAULT_POLL_INTERVAL
         )
-
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({

@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.0 — 2026-04-03
+
+Camera support for Verisure Italy panels.
+
+### Added
+- Camera entities: one per physical camera device (QR, YR, YP, QP types)
+- Camera device discovery via xSDeviceList (filters active camera types)
+- On-demand image capture via `verisure_italy.capture_cameras` service
+- Per-camera capture button entities for one-tap image refresh from UI
+- Camera name and timestamp overlay on captured images (Pillow)
+- Full-resolution image upgrade when panel supports it (get_photo_images)
+- Passive thumbnail refresh on startup from Verisure CDN (no panel ping)
+- GraphQL queries: xSDeviceList, xSRequestImages, xSRequestImagesStatus, xSGetThumbnail, xSGetPhotoImages
+- Pydantic models: CameraDevice, RawDevice, Thumbnail, PhotoImage, PhotoDevice, RequestImagesResult, RequestImagesStatusResult
+- `ImageCaptureError` exception for capture timeouts and invalid image data
+- 31 new tests for camera models, response envelopes, and client methods
+
+### Changed
+- Sequential camera capture (one at a time) to avoid overwhelming panel API
+- `capture_image` client method raises `ImageCaptureError` instead of returning None
+- Device type mapping uses direct dict lookup (crash on unknown type)
+- Non-numeric camera device codes skip with warning instead of silently defaulting to 0
+- Camera entities track availability via coordinator state
+
+### Removed
+- Periodic capture timer (thumbnails only change after active capture)
+- Camera capture interval from options flow (captures are on-demand only)
+
 ## 0.3.4 — 2026-04-03
 
 HA integration live on HACS. Published to PyPI as `verisure-italy`.

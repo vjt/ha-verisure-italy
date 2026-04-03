@@ -99,6 +99,10 @@ class OperationFailedError(VerisureError):
         self.error_type = error_type
 
 
+class ImageCaptureError(VerisureError):
+    """Image capture failed — timeout, invalid data, or no image returned."""
+
+
 class ArmingExceptionError(VerisureError):
     """Arming blocked by open zones (NON_BLOCKING with allowForcing).
 

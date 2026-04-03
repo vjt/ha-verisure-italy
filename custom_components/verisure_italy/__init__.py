@@ -13,7 +13,7 @@ from .coordinator import VerisureCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["alarm_control_panel"]
+PLATFORMS = ["alarm_control_panel", "button", "camera"]
 
 
 async def async_setup_entry(
@@ -50,6 +50,7 @@ async def async_unload_entry(
     if not hass.data.get(DOMAIN):
         hass.services.async_remove(DOMAIN, "force_arm")
         hass.services.async_remove(DOMAIN, "force_arm_cancel")
+        hass.services.async_remove(DOMAIN, "capture_cameras")
         hass.data.pop(DOMAIN, None)
 
     return unload_ok
@@ -98,4 +99,18 @@ def _register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN, "force_arm_cancel", async_force_arm_cancel,
         schema=service_schema,
+    )
+
+    async def async_capture_cameras(call: ServiceCall) -> None:
+        """Capture images from all cameras now."""
+        for entry_id, coordinator in hass.data[DOMAIN].items():
+            if isinstance(coordinator, VerisureCoordinator):
+                await coordinator.async_capture_all_cameras()
+                # Notify camera entities to refresh
+                from .camera import refresh_all_cameras
+
+                refresh_all_cameras(hass, entry_id)
+
+    hass.services.async_register(
+        DOMAIN, "capture_cameras", async_capture_cameras,
     )

@@ -149,3 +149,48 @@ DISARM_STATUS_QUERY = (
     ") { res msg status protomResponse protomResponseDate numinst requestId"
     " error { code type allowForcing exceptionsNumber referenceId } } }"
 )
+
+# --- Camera / Images ---
+
+DEVICE_LIST_QUERY = (
+    "query xSDeviceList($numinst: String!, $panel: String!) {"
+    " xSDeviceList(numinst: $numinst, panel: $panel) {"
+    " res devices { id code zoneId name type isActive serialNumber }"
+    " } }"
+)
+
+REQUEST_IMAGES_MUTATION = (
+    "mutation RequestImages($numinst: String!, $panel: String!,"
+    " $devices: [Int]!, $mediaType: Int, $resolution: Int,"
+    " $deviceType: Int) {"
+    " xSRequestImages(numinst: $numinst, panel: $panel,"
+    " devices: $devices, mediaType: $mediaType,"
+    " resolution: $resolution, deviceType: $deviceType) {"
+    " res msg referenceId } }"
+)
+
+REQUEST_IMAGES_STATUS_QUERY = (
+    "query RequestImagesStatus($numinst: String!, $panel: String!,"
+    " $devices: [Int!]!, $referenceId: String!, $counter: Int) {"
+    " xSRequestImagesStatus(numinst: $numinst, panel: $panel,"
+    " devices: $devices, referenceId: $referenceId,"
+    " counter: $counter) { res msg numinst status } }"
+)
+
+GET_THUMBNAIL_QUERY = (
+    "query mkGetThumbnail($numinst: String!, $panel: String!,"
+    " $device: String, $zoneId: String, $idSignal: String) {"
+    " xSGetThumbnail(numinst: $numinst, device: $device,"
+    " panel: $panel, zoneId: $zoneId, idSignal: $idSignal) {"
+    " idSignal deviceId deviceCode deviceAlias timestamp"
+    " signalType image type quality } }"
+)
+
+GET_PHOTO_IMAGES_QUERY = (
+    "query mkGetPhotoImages($numinst: String!, $idSignal: String!,"
+    " $signalType: String!, $panel: String!) {"
+    " xSGetPhotoImages(numinst: $numinst, idsignal: $idSignal,"
+    " signaltype: $signalType, panel: $panel) {"
+    " devices { id idSignal code name quality"
+    " images { id image type } } } }"
+)

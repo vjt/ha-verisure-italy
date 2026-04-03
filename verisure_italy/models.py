@@ -326,3 +326,106 @@ class Service(BaseModel):
     visible: bool
     request: str
     description: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Camera models
+# ---------------------------------------------------------------------------
+
+# Device types that represent cameras in xSDeviceList
+CAMERA_DEVICE_TYPES: frozenset[str] = frozenset({"QR", "YR", "YP", "QP"})
+
+# Maps camera device type to the deviceType parameter for xSRequestImages
+CAMERA_IMAGE_DEVICE_TYPE: dict[str, int] = {
+    "QR": 106,
+    "YR": 106,
+    "YP": 103,
+    "QP": 107,
+}
+
+# Resolution 0 = default/auto, Media type 1 = JPEG (from upstream API analysis)
+CAMERA_IMAGE_RESOLUTION = 0
+CAMERA_IMAGE_MEDIA_TYPE = 1
+
+
+class RawDevice(BaseModel):
+    """Raw device from xSDeviceList — parsed at boundary, filtered by client."""
+
+    model_config = {"populate_by_name": True}
+
+    id: str
+    code: str
+    zone_id: str | None = Field(None, alias="zoneId")
+    name: str
+    device_type: str = Field(alias="type")
+    is_active: bool = Field(alias="isActive")
+    serial_number: str | None = Field(None, alias="serialNumber")
+
+
+class CameraDevice(BaseModel):
+    """A camera device, filtered and cleaned from xSDeviceList."""
+
+    model_config = {"frozen": True}
+
+    id: str
+    code: int
+    zone_id: str
+    name: str
+    device_type: str
+    serial_number: str | None = None
+
+
+class Thumbnail(BaseModel):
+    """Response from xSGetThumbnail — latest captured image for a camera."""
+
+    model_config = {"populate_by_name": True}
+
+    id_signal: str | None = Field(None, alias="idSignal")
+    device_id: str | None = Field(None, alias="deviceId")
+    device_code: str | None = Field(None, alias="deviceCode")
+    device_alias: str | None = Field(None, alias="deviceAlias")
+    timestamp: str | None = None
+    signal_type: str | None = Field(None, alias="signalType")
+    image: str | None = None  # base64-encoded JPEG
+    type: str | None = None
+    quality: str | None = None
+
+
+class PhotoImage(BaseModel):
+    """A single image from xSGetPhotoImages."""
+
+    id: str
+    image: str  # base64-encoded
+    type: str  # "BINARY" for actual JPEG data
+
+
+class PhotoDevice(BaseModel):
+    """Device entry from xSGetPhotoImages response."""
+
+    model_config = {"populate_by_name": True}
+
+    id: str
+    id_signal: str = Field(alias="idSignal")
+    code: str
+    name: str
+    quality: str | None = None
+    images: list[PhotoImage]
+
+
+class RequestImagesResult(BaseModel):
+    """Response from xSRequestImages — initiates image capture."""
+
+    model_config = {"populate_by_name": True}
+
+    res: str
+    msg: str | None = None
+    reference_id: str = Field(alias="referenceId")
+
+
+class RequestImagesStatusResult(BaseModel):
+    """Response from xSRequestImagesStatus — capture progress."""
+
+    res: str
+    msg: str | None = None
+    numinst: str | None = None
+    status: str | None = None

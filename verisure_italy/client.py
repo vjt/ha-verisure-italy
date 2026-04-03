@@ -10,6 +10,7 @@ Takes an aiohttp ClientSession via constructor injection.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import secrets
@@ -26,6 +27,7 @@ from .exceptions import (
     APIResponseError,
     ArmingExceptionError,
     AuthenticationError,
+    ImageCaptureError,
     OperationFailedError,
     OperationTimeoutError,
     SessionExpiredError,
@@ -37,22 +39,32 @@ from .graphql import (
     ARM_STATUS_QUERY,
     CHECK_ALARM_QUERY,
     CHECK_ALARM_STATUS_QUERY,
+    DEVICE_LIST_QUERY,
     DISARM_PANEL_MUTATION,
     DISARM_STATUS_QUERY,
     GENERAL_STATUS_QUERY,
     GET_EXCEPTIONS_QUERY,
+    GET_PHOTO_IMAGES_QUERY,
+    GET_THUMBNAIL_QUERY,
     INSTALLATION_LIST_QUERY,
     LOGIN_TOKEN_MUTATION,
     LOGOUT_MUTATION,
+    REQUEST_IMAGES_MUTATION,
+    REQUEST_IMAGES_STATUS_QUERY,
     SEND_OTP_MUTATION,
     SERVICES_QUERY,
     VALIDATE_DEVICE_MUTATION,
 )
 from .models import (
+    CAMERA_DEVICE_TYPES,
+    CAMERA_IMAGE_DEVICE_TYPE,
+    CAMERA_IMAGE_MEDIA_TYPE,
+    CAMERA_IMAGE_RESOLUTION,
     STATE_TO_COMMAND,
     AlarmState,
     ArmCommand,
     ArmResult,
+    CameraDevice,
     DisarmResult,
     GeneralStatus,
     Installation,
@@ -60,6 +72,7 @@ from .models import (
     OperationResult,
     OtpPhone,
     Service,
+    Thumbnail,
     ZoneException,
 )
 from .responses import (
@@ -67,6 +80,7 @@ from .responses import (
     ArmStatusEnvelope,
     CheckAlarmEnvelope,
     CheckAlarmStatusEnvelope,
+    DeviceListEnvelope,
     DisarmPanelEnvelope,
     DisarmStatusEnvelope,
     ErrorResponse,
@@ -74,8 +88,12 @@ from .responses import (
     GetExceptionsEnvelope,
     InstallationListEnvelope,
     LoginEnvelope,
+    PhotoImagesEnvelope,
+    RequestImagesEnvelope,
+    RequestImagesStatusEnvelope,
     SendOtpEnvelope,
     ServicesEnvelope,
+    ThumbnailEnvelope,
     ValidateDeviceEnvelope,
 )
 
@@ -97,7 +115,7 @@ DEFAULT_POLL_TIMEOUT: float = 30.0
 
 # Type aliases
 PollFn = Callable[[Installation, str, int], Awaitable[OperationResult]]
-GraphQLVars = dict[str, str | int | bool]
+GraphQLVars = dict[str, str | int | bool | list[int]]
 GraphQLContent = dict[str, str | GraphQLVars]
 
 
@@ -891,6 +909,266 @@ class VerisureClient:
             protomResponse=disarm_result.protom_response,
             protomResponseDate=disarm_result.protom_response_data,
         )
+
+    # -------------------------------------------------------------------
+    # Camera / Images
+    # -------------------------------------------------------------------
+
+    async def list_camera_devices(
+        self, installation: Installation
+    ) -> list[CameraDevice]:
+        """List active camera devices. Filters xSDeviceList for camera types.
+
+        Returns CameraDevice list or raises on API failure.
+        """
+        await self._ensure_auth(installation)
+        content: GraphQLContent = {
+            "operationName": "xSDeviceList",
+            "variables": {
+                "numinst": installation.number,
+                "panel": installation.panel,
+            },
+            "query": DEVICE_LIST_QUERY,
+        }
+        response_text = await self._execute(
+            content, "xSDeviceList", installation
+        )
+        envelope = DeviceListEnvelope.model_validate_json(response_text)
+        raw_devices = envelope.data.xSDeviceList.devices
+
+        cameras: list[CameraDevice] = []
+        for raw in raw_devices:
+            if raw.device_type not in CAMERA_DEVICE_TYPES:
+                continue
+            if not raw.is_active:
+                continue
+
+            if not raw.code.isdigit():
+                _LOGGER.warning(
+                    "Camera %s has non-numeric code %r, skipping",
+                    raw.name, raw.code,
+                )
+                continue
+            code = int(raw.code)
+            zone_id = raw.zone_id or f"{raw.device_type}{code:02d}"
+
+            cameras.append(
+                CameraDevice(
+                    id=raw.id,
+                    code=code,
+                    zone_id=zone_id,
+                    name=raw.name,
+                    device_type=raw.device_type,
+                    serial_number=raw.serial_number,
+                )
+            )
+
+        _LOGGER.info("Found %d camera devices", len(cameras))
+        return cameras
+
+    async def request_images(
+        self,
+        installation: Installation,
+        camera: CameraDevice,
+    ) -> str:
+        """Request the panel to capture a new image. Returns reference ID.
+
+        Raises OperationFailedError if the panel rejects the request.
+        """
+        await self._ensure_auth(installation)
+        device_type_id = CAMERA_IMAGE_DEVICE_TYPE[camera.device_type]
+        content: GraphQLContent = {
+            "operationName": "RequestImages",
+            "variables": {
+                "numinst": installation.number,
+                "panel": installation.panel,
+                "devices": [camera.code],
+                "resolution": CAMERA_IMAGE_RESOLUTION,
+                "mediaType": CAMERA_IMAGE_MEDIA_TYPE,
+                "deviceType": device_type_id,
+            },
+            "query": REQUEST_IMAGES_MUTATION,
+        }
+        response_text = await self._execute(
+            content, "RequestImages", installation
+        )
+        envelope = RequestImagesEnvelope.model_validate_json(response_text)
+        result = envelope.data.xSRequestImages
+
+        if result.res != "OK":
+            raise OperationFailedError(
+                f"Image request rejected: {result.msg}",
+                error_code=None,
+                error_type=None,
+            )
+        return result.reference_id
+
+    async def check_request_images_status(
+        self,
+        installation: Installation,
+        camera: CameraDevice,
+        reference_id: str,
+        counter: int,
+    ) -> bool:
+        """Check status of image request. Returns True when complete."""
+        content: GraphQLContent = {
+            "operationName": "RequestImagesStatus",
+            "variables": {
+                "numinst": installation.number,
+                "panel": installation.panel,
+                "devices": [camera.code],
+                "referenceId": reference_id,
+                "counter": counter,
+            },
+            "query": REQUEST_IMAGES_STATUS_QUERY,
+        }
+        response_text = await self._execute(
+            content, "RequestImagesStatus", installation
+        )
+        envelope = RequestImagesStatusEnvelope.model_validate_json(
+            response_text
+        )
+        result = envelope.data.xSRequestImagesStatus
+        msg = result.msg or ""
+        return "processing" not in msg and result.res != "WAIT"
+
+    async def get_thumbnail(
+        self,
+        installation: Installation,
+        camera: CameraDevice,
+    ) -> Thumbnail:
+        """Fetch the latest thumbnail image for a camera device."""
+        await self._ensure_auth(installation)
+        content: GraphQLContent = {
+            "operationName": "mkGetThumbnail",
+            "variables": {
+                "numinst": installation.number,
+                "panel": installation.panel,
+                "device": camera.device_type,
+                "zoneId": camera.zone_id,
+            },
+            "query": GET_THUMBNAIL_QUERY,
+        }
+        response_text = await self._execute(
+            content, "mkGetThumbnail", installation
+        )
+        envelope = ThumbnailEnvelope.model_validate_json(response_text)
+        return envelope.data.xSGetThumbnail
+
+    async def get_photo_images(
+        self,
+        installation: Installation,
+        id_signal: str,
+        signal_type: str,
+    ) -> bytes | None:
+        """Fetch full-resolution image. Returns decoded JPEG bytes or None.
+
+        Picks the largest BINARY image from the response and validates
+        it starts with JPEG magic bytes (0xFFD8).
+        """
+        await self._ensure_auth(installation)
+        content: GraphQLContent = {
+            "operationName": "mkGetPhotoImages",
+            "variables": {
+                "numinst": installation.number,
+                "idSignal": id_signal,
+                "signalType": signal_type,
+                "panel": installation.panel,
+            },
+            "query": GET_PHOTO_IMAGES_QUERY,
+        }
+        response_text = await self._execute(
+            content, "mkGetPhotoImages", installation
+        )
+        envelope = PhotoImagesEnvelope.model_validate_json(response_text)
+        devices = envelope.data.xSGetPhotoImages.devices
+        if not devices:
+            return None
+
+        binary_images = [
+            img
+            for dev in devices
+            for img in dev.images
+            if img.type == "BINARY" and img.image
+        ]
+        if not binary_images:
+            return None
+
+        best = max(binary_images, key=lambda img: len(img.image))
+        decoded = base64.b64decode(best.image)
+
+        # Validate JPEG magic bytes
+        if len(decoded) < 2 or decoded[0] != 0xFF or decoded[1] != 0xD8:
+            _LOGGER.warning("Full image is not valid JPEG")
+            return None
+
+        return decoded
+
+    async def capture_image(
+        self,
+        installation: Installation,
+        camera: CameraDevice,
+    ) -> bytes:
+        """Request capture, wait for completion, return thumbnail JPEG bytes.
+
+        Full flow: request → poll status → poll thumbnail until updated.
+        Returns decoded JPEG bytes.
+        Raises ImageCaptureError on timeout or invalid image data.
+        Raises OperationFailedError if the panel rejects the capture request.
+        """
+        # Get baseline thumbnail to detect when new one arrives
+        baseline = await self.get_thumbnail(installation, camera)
+        baseline_id = baseline.id_signal
+        baseline_image = baseline.image
+
+        # Request capture — let OperationFailedError propagate
+        reference_id = await self.request_images(installation, camera)
+
+        async def _poll_capture() -> Thumbnail:
+            # Wait for capture to complete
+            counter = 1
+            while True:
+                await asyncio.sleep(self._poll_delay)
+                done = await self.check_request_images_status(
+                    installation, camera, reference_id, counter
+                )
+                if done:
+                    break
+                counter += 1
+
+            # Wait for thumbnail to update (CDN propagation)
+            while True:
+                await asyncio.sleep(max(5, self._poll_delay))
+                thumb = await self.get_thumbnail(installation, camera)
+                # Detect update: idSignal changed, or for PIR cameras
+                # (idSignal=None), image content changed
+                if thumb.id_signal != baseline_id:
+                    return thumb
+                if baseline_id is None and thumb.image != baseline_image:
+                    return thumb
+
+        try:
+            thumbnail = await asyncio.wait_for(
+                _poll_capture(), timeout=self._poll_timeout
+            )
+        except TimeoutError:
+            raise ImageCaptureError(
+                f"Image capture timed out for {camera.name} "
+                f"after {self._poll_timeout}s"
+            ) from None
+
+        if not thumbnail.image:
+            raise ImageCaptureError(
+                f"Capture completed but no image data for {camera.name}"
+            )
+
+        decoded = base64.b64decode(thumbnail.image)
+        if len(decoded) < 2 or decoded[0] != 0xFF or decoded[1] != 0xD8:
+            raise ImageCaptureError(
+                f"Captured image is not valid JPEG for {camera.name}"
+            )
+
+        return decoded
 
     # -------------------------------------------------------------------
     # Generic polling — typed, bounded, no Any

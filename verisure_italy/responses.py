@@ -17,7 +17,12 @@ from .models import (
     LoginResponse,
     OperationResult,
     OtpPhone,
+    PhotoDevice,
+    RawDevice,
+    RequestImagesResult,
+    RequestImagesStatusResult,
     Service,
+    Thumbnail,
     ZoneException,
 )
 
@@ -178,6 +183,63 @@ class GetExceptionsEnvelope(BaseModel):
 
     class Data(BaseModel):
         xSGetExceptions: _GetExceptionsResult  # noqa: N815
+
+    data: Data
+
+
+# --- Camera response envelopes ---
+
+
+class _DeviceListResult(BaseModel):
+    res: str
+    devices: list[RawDevice]
+
+
+class DeviceListEnvelope(BaseModel):
+    """Response from xSDeviceList."""
+
+    class Data(BaseModel):
+        xSDeviceList: _DeviceListResult  # noqa: N815
+
+    data: Data
+
+
+class RequestImagesEnvelope(BaseModel):
+    """Response from RequestImages."""
+
+    class Data(BaseModel):
+        xSRequestImages: RequestImagesResult  # noqa: N815
+
+    data: Data
+
+
+class RequestImagesStatusEnvelope(BaseModel):
+    """Response from RequestImagesStatus."""
+
+    class Data(BaseModel):
+        xSRequestImagesStatus: RequestImagesStatusResult  # noqa: N815
+
+    data: Data
+
+
+class ThumbnailEnvelope(BaseModel):
+    """Response from mkGetThumbnail."""
+
+    class Data(BaseModel):
+        xSGetThumbnail: Thumbnail  # noqa: N815
+
+    data: Data
+
+
+class _PhotoImagesResult(BaseModel):
+    devices: list[PhotoDevice] | None = None
+
+
+class PhotoImagesEnvelope(BaseModel):
+    """Response from mkGetPhotoImages."""
+
+    class Data(BaseModel):
+        xSGetPhotoImages: _PhotoImagesResult  # noqa: N815
 
     data: Data
 

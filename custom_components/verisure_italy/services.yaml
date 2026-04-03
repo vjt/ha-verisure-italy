@@ -23,3 +23,7 @@ force_arm_cancel:
         entity:
           integration: verisure_italy
           domain: alarm_control_panel
+
+capture_cameras:
+  name: Capture All Cameras
+  description: Capture fresh images from all cameras now (sequential, one at a time).
