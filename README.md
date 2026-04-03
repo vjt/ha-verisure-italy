@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="custom_components/verisure_italy/brand/icon@2x.png" alt="Verisure Italy" width="128">
+</p>
+
 # Verisure Italy for Home Assistant
 
 Home Assistant custom component for **Verisure Italy** alarm systems.
