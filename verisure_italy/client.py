@@ -659,13 +659,14 @@ class VerisureClient:
         installation: Installation,
         target_state: AlarmState,
         force_arming_remote_id: str | None = None,
+        suid: str | None = None,
     ) -> ArmResult:
         """Arm the alarm. Polls until complete.
 
         Returns ArmResult or raises OperationTimeoutError/OperationFailedError.
         Raises ArmingExceptionError if open zones detected (NON_BLOCKING with
-        allowForcing). Caller can retry with force_arming_remote_id from the
-        exception to override.
+        allowForcing). Caller can retry with force_arming_remote_id + suid
+        from the exception to override.
         """
         command = STATE_TO_COMMAND[target_state]
         await self._ensure_auth(installation)
@@ -678,6 +679,8 @@ class VerisureClient:
         }
         if force_arming_remote_id is not None:
             variables["forceArmingRemoteId"] = force_arming_remote_id
+        if suid is not None:
+            variables["suid"] = suid
 
         content: GraphQLContent = {
             "operationName": "xSArmPanel",
