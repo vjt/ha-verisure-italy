@@ -1,6 +1,6 @@
 [project]
 name = "verisure-italy"
-version = "0.4.2"
+version = "0.5.0"
 description = "Async Python client for the Verisure Italy alarm API"
 requires-python = ">=3.12"
 license = "MIT"
@@ -80,3 +80,4 @@ select = [
 # think all type annotations are type-checking-only. They're not — HomeAssistant,
 # ConfigEntry, etc. are runtime function parameters.
 "custom_components/**/*.py" = ["TCH002"]
+"scripts/**/*.py" = ["T201"]

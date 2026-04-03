@@ -88,15 +88,12 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
     def __init__(self, coordinator: VerisureCoordinator) -> None:
         super().__init__(coordinator)
         inst = coordinator.installation
-        self._attr_unique_id = (
-            f"{DOMAIN}_{inst.number}"
-        )
+        self._attr_unique_id = f"{DOMAIN}_{inst.number}_alarm"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, inst.number)},
-            name=inst.alias,
+            name="Verisure",
             manufacturer="Verisure Italy",
-            model=inst.panel,
-            sw_version="0.3.2",
+            model=f"{inst.panel} — {inst.alias}",
         )
         self._force_context: dict[str, Any] | None = None
         self._update_alarm_state()

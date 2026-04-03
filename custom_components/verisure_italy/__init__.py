@@ -41,6 +41,13 @@ async def async_setup_entry(
 
     _register_services(hass)
 
+    # Create/update dashboard after entities are registered
+    from .dashboard import async_setup_dashboard
+
+    hass.async_create_task(
+        async_setup_dashboard(hass, entry.entry_id)
+    )
+
     return True
 
 

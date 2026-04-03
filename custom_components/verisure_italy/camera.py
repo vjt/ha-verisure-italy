@@ -71,10 +71,10 @@ class VerisureCamera(Camera):  # type: ignore[reportIncompatibleVariableOverride
 
         inst = coordinator.installation
         self._attr_unique_id = f"{DOMAIN}_{inst.number}_camera_{camera.zone_id}"
-        self._attr_name = "Camera"
+        self._attr_name = None
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{inst.number}_camera_{camera.zone_id}")},
-            name=camera.name,
+            name=f"Verisure {camera.name}",
             manufacturer="Verisure Italy",
             model=camera.device_type,
             serial_number=camera.serial_number,
