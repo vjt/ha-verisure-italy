@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 — 2026-04-03
+
+### Fixed
+- Image overlay runs in executor to avoid blocking the HA event loop (Pillow font loading does scandir)
+
 ## 0.4.0 — 2026-04-03
 
 Camera support for Verisure Italy panels.

@@ -271,8 +271,8 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
 
         now = datetime.now()
         self.camera_timestamps[camera.zone_id] = now.isoformat()
-        self.camera_images[camera.zone_id] = _overlay_text(
-            image_bytes, camera.name, now
+        self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
+            _overlay_text, image_bytes, camera.name, now
         )
         _LOGGER.info(
             "Captured %s: %d bytes", camera.name, len(image_bytes)
@@ -364,8 +364,8 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             ts = datetime.now()
             self.camera_timestamps[camera.zone_id] = ts.isoformat()
 
-        self.camera_images[camera.zone_id] = _overlay_text(
-            decoded, camera.name, ts
+        self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
+            _overlay_text, decoded, camera.name, ts
         )
         _LOGGER.info(
             "Loaded cached thumbnail for %s: %d bytes", camera.name, len(decoded)
