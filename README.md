@@ -1,40 +1,43 @@
-# ha-verisure
+# Verisure Italy for Home Assistant
 
 Home Assistant custom component for **Verisure Italy** alarm systems.
 
-Talks directly to `customers.verisure.it/owa-api/graphql`. Goal: fully
-replace the Verisure mobile app for alarm control and monitoring.
+Talks directly to `customers.verisure.it/owa-api/graphql`. Fully
+replaces the Verisure mobile app for alarm control and monitoring.
 
-## Status
+> **Not affiliated with Verisure Group or Securitas Direct.**
 
-**Work in progress.** API client is complete and E2E validated against
-live panel. Full arm/disarm cycle confirmed. HA integration layer next.
+## Installation (HACS)
 
-## Design Principles
+1. Open **HACS** in Home Assistant
+2. Click **...** (top right) → **Custom repositories**
+3. Add `https://github.com/vjt/ha-verisure` as **Integration**
+4. Search for "Verisure Italy" and install
+5. Restart Home Assistant
+6. Go to **Settings → Devices & Services → Add Integration → Verisure Italy**
 
-This is security software. Wrong behavior = disarmed alarm = thief gets in.
+The API client (`verisure-italy`) is installed automatically from
+[PyPI](https://pypi.org/project/verisure-italy/).
 
-- **Fail-secure.** Unknown state = ERROR, not "probably disarmed"
-- **Strong types.** Pydantic models, no `Any`, no dict soup. AST tests enforce it
-- **Crash loud.** Unknown proto codes, missing fields, unexpected responses all raise
-- **Parse at the boundary.** JSON → Pydantic model in one step. Inside: types guarantee correctness
-- **No "smart" behavior.** Pedantic correctness over convenience
+## Features
 
-## Alarm State Model
+- **Passive polling** via xSStatus — no panel ping, no timeline spam
+- **Arm/disarm** — partial+perimeter (home), total+perimeter (away)
+- **Force arm** — open zone detection with `verisure_italy_arming_exception`
+  event and `verisure_italy.force_arm` service
+- **Config flow** with 2FA/OTP support
+- **Configurable poll interval** (default 5 seconds)
 
-Two-axis: **interior mode** × **perimeter**.
+## Alarm State Mapping
 
-| State | Interior | Perimeter | Proto Code | Primary |
-|-------|----------|-----------|------------|---------|
-| Disarmed | OFF | OFF | `D` | yes |
-| Perimeter only | OFF | ON | `E` | |
-| Partial | PARTIAL | OFF | `P` | |
-| Partial + Perimeter | PARTIAL | ON | `B` | yes |
-| Total | TOTAL | OFF | `T` | |
-| Total + Perimeter | TOTAL | ON | `A` | yes |
-
-Three primary modes (disarmed, partial+perimeter, total+perimeter).
-Six protocol states recognized. Unknown codes crash loud.
+| Panel State | Proto | HA State | Action |
+|---|---|---|---|
+| Disarmed | `D` | Disarmed | disarm |
+| Partial + Perimeter | `B` | Armed Home | arm_home |
+| Total + Perimeter | `A` | Armed Away | arm_away |
+| Perimeter only | `E` | Armed Custom Bypass | display only |
+| Partial (no peri) | `P` | Armed Custom Bypass | display only |
+| Total (no peri) | `T` | Armed Custom Bypass | display only |
 
 ## Development
 
@@ -43,11 +46,11 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest tests/ -x -q                            # 118 tests
-pyright verisure_api/ custom_components/        # strict mode, 0 errors
-ruff check verisure_api/ tests/ custom_components/
+pytest tests/ -x -q                                # 118 tests
+pyright verisure_italy/ custom_components/          # strict mode, 0 errors
+ruff check verisure_italy/ tests/ custom_components/
 ```
 
 ## License
 
-Private. Not for distribution.
+MIT. See [LICENSE](LICENSE).
