@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from verisure_api import (
+from verisure_italy import (
     AlarmState,
     AuthenticationError,
     GeneralStatus,
@@ -24,8 +24,8 @@ from verisure_api import (
     WAFBlockedError,
     parse_proto_code,
 )
-from verisure_api.exceptions import APIConnectionError, UnexpectedStateError
-from verisure_api.models import PROTO_TO_STATE, ZoneException
+from verisure_italy.exceptions import APIConnectionError, UnexpectedStateError
+from verisure_italy.models import PROTO_TO_STATE, ZoneException
 
 from .const import (
     CONF_DEVICE_ID,

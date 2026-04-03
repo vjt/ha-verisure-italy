@@ -4,7 +4,7 @@ Tests the pure mapping function in isolation — no homeassistant dependency.
 Uses string values matching AlarmControlPanelState enum.
 """
 
-from verisure_api.models import (
+from verisure_italy.models import (
     PROTO_TO_STATE,
     AlarmState,
     InteriorMode,

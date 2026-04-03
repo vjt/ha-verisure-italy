@@ -1,6 +1,6 @@
 """Constants for the Verisure Italy integration."""
 
-DOMAIN = "verisure_it"
+DOMAIN = "verisure_italy"
 
 CONF_INSTALLATION_NUMBER = "installation_number"
 CONF_INSTALLATION_PANEL = "installation_panel"

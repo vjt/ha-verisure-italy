@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 
-from verisure_api import (
+from verisure_italy import (
     AuthenticationError,
     Installation,
     OtpPhone,

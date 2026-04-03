@@ -14,8 +14,8 @@ import pytest
 from aiohttp import ClientConnectorError, ClientSession
 from aioresponses import aioresponses
 
-from verisure_api.client import API_URL, VerisureClient
-from verisure_api.exceptions import (
+from verisure_italy.client import API_URL, VerisureClient
+from verisure_italy.exceptions import (
     APIConnectionError,
     APIResponseError,
     ArmingExceptionError,
@@ -26,7 +26,7 @@ from verisure_api.exceptions import (
     TwoFactorRequiredError,
     WAFBlockedError,
 )
-from verisure_api.models import (
+from verisure_italy.models import (
     AlarmState,
     Installation,
     InteriorMode,

@@ -1,11 +1,11 @@
 {
-  "domain": "verisure_it",
+  "domain": "verisure_italy",
   "name": "Verisure Italy",
   "codeowners": ["@vjt"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/vjt/ha-verisure",
   "iot_class": "cloud_polling",
-  "requirements": ["aiohttp>=3.9", "pydantic>=2.0", "pyjwt>=2.8"],
+  "requirements": ["verisure-italy>=0.3.0"],
   "version": "0.3.0"
 }

@@ -18,12 +18,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from verisure_api import (
+from verisure_italy import (
     OperationFailedError,
     OperationTimeoutError,
 )
-from verisure_api.exceptions import ArmingExceptionError
-from verisure_api.models import (
+from verisure_italy.exceptions import ArmingExceptionError
+from verisure_italy.models import (
     PROTO_TO_STATE,
     AlarmState,
     InteriorMode,

@@ -19,19 +19,19 @@ import pytest
 
 # Source directories to check
 SOURCE_DIRS = [
-    Path("verisure_api"),
-    Path("custom_components/verisure_it"),
+    Path("verisure_italy"),
+    Path("custom_components/verisure_italy"),
 ]
 
 # Files explicitly allowed to use Any (the absolute minimum boundary)
 # This list should ideally be EMPTY. Every entry needs justification.
 ANY_ALLOWLIST: dict[str, str] = {
-    # "verisure_api/client.py": "JSON boundary — json.loads returns Any",
+    # "verisure_italy/client.py": "JSON boundary — json.loads returns Any",
 }
 
 # HA integration files are exempt from the Any ban because Home Assistant's
 # base classes (ConfigFlow, AlarmControlPanelEntity, etc.) mandate dict[str, Any]
-# in their method signatures. We enforce Any discipline on OUR code (verisure_api/).
+# in their method signatures. We enforce Any discipline on OUR code (verisure_italy/).
 _HA_INTEGRATION_PREFIX = "custom_components/"
 
 

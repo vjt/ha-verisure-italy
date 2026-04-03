@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from verisure_api.models import (
+from verisure_italy.models import (
     PROTO_TO_STATE,
     STATE_TO_COMMAND,
     STATE_TO_PROTO,
