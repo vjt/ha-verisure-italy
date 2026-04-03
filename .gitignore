@@ -12,3 +12,4 @@ build/
 .pytest_cache/
 .env
 e2e_*.py
+*.jpg
