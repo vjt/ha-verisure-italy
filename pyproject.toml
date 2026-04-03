@@ -1,13 +1,13 @@
 [project]
 name = "verisure-italy"
-version = "0.3.1"
+version = "0.3.2"
 description = "Async Python client for the Verisure Italy alarm API"
 requires-python = ">=3.12"
 license = "MIT"
 authors = [
     {name = "Marcello Barnaba", email = "vjt@openssl.it"},
 ]
-readme = "README.md"
+readme = "PKG_README.md"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -24,9 +24,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/vjt/ha-verisure"
-Repository = "https://github.com/vjt/ha-verisure"
-Issues = "https://github.com/vjt/ha-verisure/issues"
+Homepage = "https://github.com/vjt/ha-verisure-italy"
+Repository = "https://github.com/vjt/ha-verisure-italy"
+Issues = "https://github.com/vjt/ha-verisure-italy/issues"
 
 [project.optional-dependencies]
 dev = [

@@ -11,7 +11,7 @@ replaces the Verisure mobile app for alarm control and monitoring.
 
 1. Open **HACS** in Home Assistant
 2. Click **...** (top right) → **Custom repositories**
-3. Add `https://github.com/vjt/ha-verisure` as **Integration**
+3. Add `https://github.com/vjt/ha-verisure-italy` as **Integration**
 4. Search for "Verisure Italy" and install
 5. Restart Home Assistant
 6. Go to **Settings → Devices & Services → Add Integration → Verisure Italy**
