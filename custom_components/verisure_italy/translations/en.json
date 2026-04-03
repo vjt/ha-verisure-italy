@@ -29,7 +29,32 @@
         "data": {
           "installation": "Installation"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Credentials",
+        "description": "Enter new Verisure Italy credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "reconfigure_2fa_phone": {
+        "title": "Select Phone",
+        "description": "Choose which phone should receive the SMS code.",
+        "data": {
+          "phone": "Phone"
+        }
+      },
+      "reconfigure_2fa_code": {
+        "title": "Two-Factor Authentication",
+        "description": "SMS code sent to {phone}. Enter it below.",
+        "data": {
+          "code": "SMS Code"
+        }
       }
+    },
+    "abort": {
+      "reconfigure_successful": "Credentials updated successfully."
     },
     "error": {
       "invalid_auth": "Invalid username or password.",
