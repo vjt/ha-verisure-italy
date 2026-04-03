@@ -7,5 +7,5 @@
   "documentation": "https://github.com/vjt/ha-verisure-italy",
   "iot_class": "cloud_polling",
   "requirements": ["verisure-italy>=0.5.0"],
-  "version": "0.5.0"
+  "version": "0.5.1"
 }
