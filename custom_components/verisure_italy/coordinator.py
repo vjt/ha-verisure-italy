@@ -8,6 +8,7 @@ import io
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
 from aiohttp import ClientSession
 from homeassistant.config_entries import ConfigEntry
@@ -150,6 +151,12 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         self.camera_timestamps: dict[str, str] = {}  # zone_id → timestamp
         self.camera_capturing: set[str] = set()  # zone_ids currently capturing
         self._capture_lock = asyncio.Lock()  # one capture at a time
+
+        # Force-arm context — shared between alarm entity and force-arm buttons
+        self.force_context: dict[str, Any] | None = None
+
+        # Set by VerisureAlarmPanel.__init__ — used by force-arm buttons
+        self.alarm_entity: Any = None
 
     async def async_shutdown(self) -> None:
         """Close the HTTP session."""

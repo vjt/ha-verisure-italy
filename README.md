@@ -18,7 +18,7 @@ replaces the Verisure mobile app for alarm control and camera monitoring.
 ## Features
 
 - **Alarm control** — arm home (partial+perimeter), arm away (total+perimeter), disarm
-- **Force arm** — open zone detection with `verisure_italy_arming_exception` event and force-arm service
+- **Force arm** — open zone detection with one-tap force-arm and cancel buttons on the dashboard
 - **Cameras** — auto-discovered, on-demand capture with per-camera and capture-all buttons
 - **Auto-managed dashboard** — Lovelace dashboard auto-populated with alarm panel, camera grid, and capture buttons
 - **Passive polling** via xSStatus — no panel ping, no timeline spam
@@ -95,6 +95,60 @@ is unloaded.
 | Camera | `camera.verisure_fotocucina` |
 | Capture button | `button.verisure_fotocucina_capture` |
 | Capture all | `button.verisure_capture_all_cameras` |
+| Force arm | `button.verisure_force_arm` |
+| Cancel force arm | `button.verisure_cancel_force_arm` |
+
+## Force Arm
+
+When arming fails because a zone is open (e.g. a window), the
+integration detects the exception and:
+
+1. Shows a persistent notification listing the open zones
+2. Fires a `verisure_italy_arming_exception` event (for automations)
+3. Makes the **Force Arm** and **Cancel Force Arm** buttons available
+   on the dashboard
+
+Tap **Force Arm** to arm anyway, bypassing the open zones. Tap
+**Cancel** to abort and revert to disarmed. The buttons disappear
+automatically once used or after 2 minutes.
+
+The force arm button exposes `open_zones` and `mode` as state
+attributes, usable in automations and templates.
+
+> **Note:** Force arm requires an **administrator** API user.
+> A restricted user will arm regardless of open zones without
+> raising exceptions — and sensors will trip.
+
+## Smoke Test
+
+After a Home Assistant update, run the smoke test to verify
+everything still works:
+
+```bash
+./scripts/smoke_test.sh
+```
+
+Checks all entities, services, and the dashboard panel are
+registered and responding. Takes about 3 seconds, does not
+arm or disarm.
+
+## Stability
+
+The integration uses stable HA public APIs for entities
+(`CoordinatorEntity`, `ButtonEntity`, `AlarmControlPanelEntity`)
+and is expected to survive HA updates without changes.
+
+The **auto-managed dashboard** uses `LovelaceStorage` internals
+and `frontend.async_register_built_in_panel`. If a HA update
+breaks the dashboard, the alarm, cameras, and buttons still work
+— you just won't get the auto-generated sidebar panel. Build a
+manual dashboard as a fallback.
+
+The **Verisure API** (`customers.verisure.it`) is the real risk
+factor — GraphQL schema or auth flow changes are outside our
+control. The API client is a separate package
+([verisure-italy](https://pypi.org/project/verisure-italy/))
+to isolate those changes.
 
 ## Development
 

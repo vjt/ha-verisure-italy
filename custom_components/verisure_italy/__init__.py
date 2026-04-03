@@ -106,31 +106,24 @@ def _register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, "force_arm"):
         return  # Already registered
 
-    async def _get_entity(call: ServiceCall):
-        """Find the VerisureAlarmPanel entity from a service call."""
-        from .alarm_control_panel import VerisureAlarmPanel
-
-        entity_id = call.data["entity_id"]
-        component = hass.data.get("entity_components", {}).get(
-            "alarm_control_panel"
-        )
-        if component is not None:
-            entity = component.get_entity(entity_id)
-            if isinstance(entity, VerisureAlarmPanel):
-                return entity
-
-        _LOGGER.error("Could not find VerisureAlarmPanel for %s", entity_id)
+    def _get_alarm_entity(call: ServiceCall):
+        """Find the alarm entity via coordinator."""
+        for coordinator in hass.data[DOMAIN].values():
+            if isinstance(coordinator, VerisureCoordinator):
+                if coordinator.alarm_entity is not None:
+                    return coordinator.alarm_entity
+        _LOGGER.error("No VerisureAlarmPanel entity found")
         return None
 
     async def async_force_arm(call: ServiceCall) -> None:
         """Handle force_arm service call."""
-        entity = await _get_entity(call)
+        entity = _get_alarm_entity(call)
         if entity is not None:
             await entity.async_force_arm()
 
     async def async_force_arm_cancel(call: ServiceCall) -> None:
         """Handle force_arm_cancel service call."""
-        entity = await _get_entity(call)
+        entity = _get_alarm_entity(call)
         if entity is not None:
             await entity.async_force_arm_cancel()
 

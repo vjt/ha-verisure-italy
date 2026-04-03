@@ -38,6 +38,8 @@ class DashboardEntities:
 
     alarm_entity: str | None = None
     capture_all_entity: str | None = None
+    force_arm_entity: str | None = None
+    force_arm_cancel_entity: str | None = None
     cameras: dict[str, CameraGroup] = field(
         default_factory=lambda: dict[str, CameraGroup]()
     )
@@ -127,6 +129,10 @@ def _discover_entities(
         elif entry.domain == "button":
             if "capture_all" in entry.unique_id:
                 result.capture_all_entity = entry.entity_id
+            elif "force_arm_cancel" in entry.unique_id:
+                result.force_arm_cancel_entity = entry.entity_id
+            elif "force_arm" in entry.unique_id:
+                result.force_arm_entity = entry.entity_id
             else:
                 device_id = entry.device_id or ""
                 result.cameras.setdefault(
@@ -180,6 +186,47 @@ def _build_config(entities: DashboardEntities) -> dict[str, Any]:
             "states": ["arm_home", "arm_away"],
         },
     ]
+
+    # Force-arm buttons — hidden when unavailable (no open zones)
+    if entities.force_arm_entity is not None:
+        left_cards.append({
+            "type": "conditional",
+            "conditions": [{
+                "condition": "state",
+                "entity": entities.force_arm_entity,
+                "state_not": "unavailable",
+            }],
+            "card": {
+                "type": "tile",
+                "entity": entities.force_arm_entity,
+                "name": "Force Arm",
+                "icon": "mdi:shield-alert",
+                "color": "orange",
+                "vertical": False,
+                "hide_state": True,
+                "tap_action": {"action": "toggle"},
+            },
+        })
+    if entities.force_arm_cancel_entity is not None:
+        left_cards.append({
+            "type": "conditional",
+            "conditions": [{
+                "condition": "state",
+                "entity": entities.force_arm_cancel_entity,
+                "state_not": "unavailable",
+            }],
+            "card": {
+                "type": "tile",
+                "entity": entities.force_arm_cancel_entity,
+                "name": "Cancel",
+                "icon": "mdi:shield-off-outline",
+                "color": "red",
+                "vertical": False,
+                "hide_state": True,
+                "tap_action": {"action": "toggle"},
+            },
+        })
+
     if entities.capture_all_entity is not None:
         left_cards.append({
             "type": "tile",

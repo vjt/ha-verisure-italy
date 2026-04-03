@@ -1,22 +1,22 @@
-"""Button entities for Verisure Italy — on-demand camera capture."""
+"""Button entities for Verisure Italy — camera capture + force-arm."""
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+from .coordinator import VerisureCoordinator
 
 if TYPE_CHECKING:
     from verisure_italy import CameraDevice
-
-    from .coordinator import VerisureCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,16 +29,20 @@ async def async_setup_entry(
     """Set up button entities from config entry."""
     coordinator: VerisureCoordinator = hass.data[DOMAIN][config_entry.entry_id]
 
-    if not coordinator.camera_devices:
-        return
-
     entities: list[ButtonEntity] = [
-        VerisureCaptureAllButton(coordinator, config_entry.entry_id),
+        VerisureForceArmButton(coordinator),
+        VerisureForceArmCancelButton(coordinator),
     ]
-    entities.extend(
-        VerisureCaptureButton(coordinator, camera, config_entry.entry_id)
-        for camera in coordinator.camera_devices
-    )
+
+    if coordinator.camera_devices:
+        entities.append(
+            VerisureCaptureAllButton(coordinator, config_entry.entry_id),
+        )
+        entities.extend(
+            VerisureCaptureButton(coordinator, camera, config_entry.entry_id)
+            for camera in coordinator.camera_devices
+        )
+
     async_add_entities(entities)
 
 
@@ -137,3 +141,92 @@ class VerisureCaptureButton(ButtonEntity):  # type: ignore[reportIncompatibleVar
             self._capturing = False
             self.async_write_ha_state()
         refresh_all_cameras(self.hass, self._entry_id)
+
+
+# --- Force-arm buttons ---
+
+
+class VerisureForceArmButton(  # type: ignore[reportIncompatibleVariableOverride]
+    CoordinatorEntity[VerisureCoordinator], ButtonEntity
+):
+    """Button to force-arm, bypassing open zones."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:shield-alert"
+    _attr_name = "Force Arm"
+
+    def __init__(self, coordinator: VerisureCoordinator) -> None:
+        super().__init__(coordinator)
+        inst = coordinator.installation
+        self._attr_unique_id = f"{DOMAIN}_{inst.number}_force_arm"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, inst.number)},
+        )
+        self._pressing = False
+
+    @property
+    def available(self) -> bool:  # type: ignore[override]
+        """Available only when force context is set."""
+        if self._pressing:
+            return False
+        return self.coordinator.force_context is not None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Show which zones are being bypassed."""
+        ctx = self.coordinator.force_context
+        if ctx is not None:
+            return {
+                "open_zones": [e.alias for e in ctx["exceptions"]],
+                "mode": ctx["mode"],
+            }
+        return {}
+
+    async def async_press(self) -> None:
+        """Execute force-arm via the alarm entity."""
+        alarm = self.coordinator.alarm_entity
+        if alarm is None:
+            _LOGGER.error("Force arm pressed but alarm entity not registered")
+            return
+
+        _LOGGER.info("Force arm button pressed")
+        self._pressing = True
+        self.async_write_ha_state()
+        try:
+            await alarm.async_force_arm()
+        finally:
+            self._pressing = False
+            self.async_write_ha_state()
+
+
+class VerisureForceArmCancelButton(  # type: ignore[reportIncompatibleVariableOverride]
+    CoordinatorEntity[VerisureCoordinator], ButtonEntity
+):
+    """Button to cancel a pending force-arm."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:shield-off-outline"
+    _attr_name = "Cancel Force Arm"
+
+    def __init__(self, coordinator: VerisureCoordinator) -> None:
+        super().__init__(coordinator)
+        inst = coordinator.installation
+        self._attr_unique_id = f"{DOMAIN}_{inst.number}_force_arm_cancel"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, inst.number)},
+        )
+
+    @property
+    def available(self) -> bool:  # type: ignore[override]
+        """Available only when force context is set."""
+        return self.coordinator.force_context is not None
+
+    async def async_press(self) -> None:
+        """Cancel force-arm via the alarm entity."""
+        alarm = self.coordinator.alarm_entity
+        if alarm is None:
+            _LOGGER.error("Cancel pressed but alarm entity not registered")
+            return
+
+        _LOGGER.info("Force arm cancel button pressed")
+        await alarm.async_force_arm_cancel()

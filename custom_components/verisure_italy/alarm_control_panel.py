@@ -95,7 +95,8 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             manufacturer="Verisure Italy",
             model=f"{inst.panel} — {inst.alias}",
         )
-        self._force_context: dict[str, Any] | None = None
+        coordinator.alarm_entity = self
+        self._arm_in_progress = False
         self._update_alarm_state()
 
     def _update_alarm_state(self) -> None:
@@ -107,11 +108,12 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
     def _update_force_attributes(self) -> None:
         """Update extra state attributes from force context."""
-        if self._force_context is not None:
+        ctx = self.coordinator.force_context
+        if ctx is not None:
             self._attr_extra_state_attributes = {
                 "force_arm_available": True,
                 "arm_exceptions": [
-                    e.alias for e in self._force_context["exceptions"]
+                    e.alias for e in ctx["exceptions"]
                 ],
             }
         else:
@@ -119,16 +121,21 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
     def _handle_coordinator_update(self) -> None:
         """Sync alarm state from coordinator."""
-        if self._force_context is not None:
+        if self._arm_in_progress:
+            # Arm/disarm API call running — state already set explicitly,
+            # don't write it again (avoids spurious state_changed events).
+            return
+
+        ctx = self.coordinator.force_context
+        if ctx is not None:
             # Don't update alarm state while force context is active —
             # the panel reports DISARMED but we're waiting for force-arm.
-            # Updating would cause a spurious disarmed→arming transition.
             elapsed = (
-                datetime.datetime.now() - self._force_context["created_at"]
+                datetime.datetime.now() - ctx["created_at"]
             ).total_seconds()
             if elapsed > 120:
                 _LOGGER.info("Force context expired after 2 minutes")
-                self._force_context = None
+                self.coordinator.force_context = None
                 self._update_force_attributes()
                 self._update_alarm_state()
         else:
@@ -147,6 +154,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
     async def _async_arm(self, target: AlarmState, mode: str) -> None:
         """Execute arm operation with force-arm exception handling."""
         _LOGGER.info("Arming %s (target: %s)", mode, target)
+        self._arm_in_progress = True
         self._attr_alarm_state = AlarmControlPanelState.ARMING
         self.async_write_ha_state()
 
@@ -160,27 +168,28 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 "Arming blocked by %d open zone(s): %s",
                 len(exc.exceptions), zones,
             )
-            # Keep state as ARMING (not reverting to DISARMED) to avoid
-            # spurious state change notifications. The coordinator update
-            # will restore the real state when the force context expires.
             self._set_force_context(exc, mode, target)
             await self._notify_arm_exceptions(exc)
             self._fire_arming_exception_event(exc, mode)
             self.async_write_ha_state()
             return
         except (OperationFailedError, OperationTimeoutError) as exc:
-            self._update_alarm_state()  # revert to previous
+            self._update_alarm_state()
             _LOGGER.error("Arm failed: %s", exc.message)
             await self._notify_operation_failed("Arm", exc.message)
             self.async_write_ha_state()
             return
+        finally:
+            self._arm_in_progress = False
 
         _LOGGER.info("Armed %s successfully", mode)
+        self._expire_force_context()
         await self.coordinator.async_request_refresh()
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         """Disarm the alarm."""
         _LOGGER.info("Disarming alarm")
+        self._arm_in_progress = True
         self._attr_alarm_state = AlarmControlPanelState.DISARMING
         self.async_write_ha_state()
 
@@ -189,37 +198,38 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self.coordinator.installation
             )
         except (OperationFailedError, OperationTimeoutError) as exc:
-            self._update_alarm_state()  # revert to previous
+            self._update_alarm_state()
             _LOGGER.error("Disarm failed: %s", exc.message)
             await self._notify_operation_failed("Disarm", exc.message)
             self.async_write_ha_state()
             return
+        finally:
+            self._arm_in_progress = False
 
         _LOGGER.info("Disarmed successfully")
+        self._expire_force_context()
         await self.coordinator.async_request_refresh()
 
     # --- Force arm ---
 
     async def async_force_arm(self) -> None:
         """Force-arm using stored exception context."""
-        if self._force_context is None:
+        ctx = self.coordinator.force_context
+        if ctx is None:
             _LOGGER.warning("force_arm called but no force context available")
             return
 
-        target: AlarmState = self._force_context["target"]
-        ref_id: str = self._force_context["reference_id"]
-        suid: str = self._force_context["suid"]
-        zones = ", ".join(
-            e.alias for e in self._force_context["exceptions"]
-        )
+        target: AlarmState = ctx["target"]
+        ref_id: str = ctx["reference_id"]
+        suid: str = ctx["suid"]
+        zones = ", ".join(e.alias for e in ctx["exceptions"])
 
         _LOGGER.info(
             "Force-arming with %d bypassed zone(s): %s",
-            len(self._force_context["exceptions"]), zones,
+            len(ctx["exceptions"]), zones,
         )
 
-        # Keep force_context alive during the API call so coordinator
-        # updates don't revert state to DISARMED while we're arming.
+        self._arm_in_progress = True
         await self._dismiss_notification()
         self.async_write_ha_state()
 
@@ -231,27 +241,27 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 suid=suid,
             )
         except (OperationFailedError, OperationTimeoutError) as exc:
-            self._force_context = None
-            self._update_force_attributes()
+            self._clear_force_context()
             self._update_alarm_state()
             _LOGGER.error("Force arm failed: %s", exc.message)
             self.async_write_ha_state()
             return
+        finally:
+            self._arm_in_progress = False
 
-        self._force_context = None
-        self._update_force_attributes()
         _LOGGER.info("Force-armed successfully, bypassed: %s", zones)
+        self._expire_force_context()
         await self.coordinator.async_request_refresh()
 
     async def async_force_arm_cancel(self) -> None:
         """Cancel pending force-arm context."""
-        if self._force_context is None:
+        if self.coordinator.force_context is None:
             _LOGGER.warning("force_arm_cancel called but no context")
             return
 
         _LOGGER.info("Force-arm cancelled by user")
-        self._force_context = None
-        self._update_force_attributes()
+        self._clear_force_context()
+        self._update_alarm_state()
         await self._dismiss_notification()
         self.async_write_ha_state()
 
@@ -262,7 +272,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         target: AlarmState,
     ) -> None:
         """Store force-arm context from an arming exception."""
-        self._force_context = {
+        self.coordinator.force_context = {
             "reference_id": exc.reference_id,
             "suid": exc.suid,
             "mode": mode,
@@ -270,6 +280,30 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             "exceptions": exc.exceptions,
             "created_at": datetime.datetime.now(),
         }
+        self._update_force_attributes()
+        self.coordinator.async_update_listeners()
+
+    def _clear_force_context(self) -> None:
+        """Clear force context and notify all entities immediately.
+
+        Use in cancel/error paths where we want buttons to disappear NOW.
+        """
+        if self.coordinator.force_context is None:
+            return
+        self.coordinator.force_context = None
+        self._update_force_attributes()
+        self.coordinator.async_update_listeners()
+
+    def _expire_force_context(self) -> None:
+        """Clear force context silently — no listener notification.
+
+        Use in success paths where async_request_refresh() will notify
+        all entities with fresh data (avoids spurious state transitions
+        from stale coordinator data).
+        """
+        if self.coordinator.force_context is None:
+            return
+        self.coordinator.force_context = None
         self._update_force_attributes()
 
     def _notification_id(self) -> str:
