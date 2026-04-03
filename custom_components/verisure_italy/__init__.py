@@ -41,9 +41,10 @@ async def async_setup_entry(
 
     _register_services(hass)
 
-    # Create/update dashboard after entities are registered
-    from .dashboard import async_setup_dashboard
+    # Register dashboard panel and populate it
+    from .dashboard import async_register_dashboard, async_setup_dashboard
 
+    async_register_dashboard(hass)
     hass.async_create_task(
         async_setup_dashboard(hass, entry.entry_id)
     )
@@ -86,12 +87,16 @@ async def async_unload_entry(
         )
         await coordinator.async_shutdown()
 
-    # Remove services if no more entries
+    # Remove services and dashboard if no more entries
     if not hass.data.get(DOMAIN):
         hass.services.async_remove(DOMAIN, "force_arm")
         hass.services.async_remove(DOMAIN, "force_arm_cancel")
         hass.services.async_remove(DOMAIN, "capture_cameras")
         hass.data.pop(DOMAIN, None)
+
+        from .dashboard import async_unregister_dashboard
+
+        async_unregister_dashboard(hass)
 
     return unload_ok
 

@@ -1,9 +1,8 @@
-"""Lovelace dashboard for Verisure Italy.
+"""Auto-managed Lovelace dashboard for Verisure Italy.
 
-Auto-updates the 'verisure-italy' dashboard config on integration setup.
-The dashboard itself must be created once — either from the HA UI
-(Settings → Dashboards → Add, URL path: verisure-italy) or via the
-setup_dashboard.py script.
+Registers a Lovelace panel in the sidebar on integration setup.
+The panel is removed when the integration is unloaded.
+Dashboard config is rebuilt from discovered entities on every load.
 """
 
 from __future__ import annotations
@@ -12,6 +11,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from homeassistant.components import frontend
 from homeassistant.components.lovelace.dashboard import LovelaceStorage
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -19,6 +19,9 @@ from homeassistant.helpers import entity_registry as er
 _LOGGER = logging.getLogger(__name__)
 
 DASHBOARD_URL = "verisure-italy"
+DASHBOARD_TITLE = "Verisure"
+DASHBOARD_ICON = "mdi:shield-home"
+LOVELACE_DATA = "lovelace"
 
 
 @dataclass
@@ -40,25 +43,54 @@ class DashboardEntities:
     )
 
 
+def async_register_dashboard(hass: HomeAssistant) -> None:
+    """Register the Verisure panel in the sidebar."""
+    frontend.async_register_built_in_panel(
+        hass,
+        component_name="lovelace",
+        sidebar_title=DASHBOARD_TITLE,
+        sidebar_icon=DASHBOARD_ICON,
+        frontend_url_path=DASHBOARD_URL,
+        config={"mode": "storage"},
+        require_admin=False,
+        update=True,
+    )
+    _LOGGER.debug("Registered panel '%s'", DASHBOARD_URL)
+
+
+def async_unregister_dashboard(hass: HomeAssistant) -> None:
+    """Remove the Verisure panel from the sidebar."""
+    frontend.async_remove_panel(hass, DASHBOARD_URL)
+    lovelace_data = hass.data.get(LOVELACE_DATA)
+    if lovelace_data is not None:
+        lovelace_data.dashboards.pop(DASHBOARD_URL, None)
+    _LOGGER.debug("Unregistered panel '%s'", DASHBOARD_URL)
+
+
 async def async_setup_dashboard(
     hass: HomeAssistant,
     config_entry_id: str,
 ) -> None:
-    """Update the Verisure dashboard if it exists."""
-    lovelace_data = hass.data.get("lovelace")
+    """Create and populate the Verisure dashboard.
+
+    Creates a LovelaceStorage instance for the dashboard if it doesn't
+    exist, then writes the card config based on discovered entities.
+    """
+    lovelace_data = hass.data.get(LOVELACE_DATA)
     if lovelace_data is None:
+        _LOGGER.debug("Lovelace not loaded, skipping dashboard setup")
         return
 
+    # Create the storage-backed dashboard if it doesn't exist
     lovelace_config = lovelace_data.dashboards.get(DASHBOARD_URL)
     if not isinstance(lovelace_config, LovelaceStorage):
-        _LOGGER.info(
-            "No '%s' dashboard found. Create one from Settings → Dashboards "
-            "→ Add Dashboard (URL path: %s) and reload the integration",
-            DASHBOARD_URL,
-            DASHBOARD_URL,
+        lovelace_config = LovelaceStorage(
+            hass, {"id": DASHBOARD_URL, "url_path": DASHBOARD_URL}
         )
-        return
+        lovelace_data.dashboards[DASHBOARD_URL] = lovelace_config
+        _LOGGER.info("Created dashboard storage for '%s'", DASHBOARD_URL)
 
+    # Discover entities and write config
     entities = _discover_entities(hass, config_entry_id)
     if entities.alarm_entity is None:
         return
@@ -172,9 +204,9 @@ def _build_config(entities: DashboardEntities) -> dict[str, Any]:
     return {
         "views": [
             {
-                "title": "Verisure",
+                "title": DASHBOARD_TITLE,
                 "path": "default",
-                "icon": "mdi:shield-home",
+                "icon": DASHBOARD_ICON,
                 "type": "sections",
                 "max_columns": 4,
                 "sections": sections,
