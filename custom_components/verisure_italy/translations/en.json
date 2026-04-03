@@ -41,7 +41,9 @@
       "init": {
         "title": "Verisure Italy Options",
         "data": {
-          "poll_interval": "Poll interval (seconds)"
+          "poll_interval": "Status poll interval (seconds)",
+          "poll_timeout": "Operation timeout (seconds)",
+          "poll_delay": "Operation poll delay (seconds)"
         }
       }
     }

@@ -26,8 +26,13 @@ from .const import (
     CONF_INSTALLATION_ALIAS,
     CONF_INSTALLATION_NUMBER,
     CONF_INSTALLATION_PANEL,
+    CONF_POLL_DELAY,
+    CONF_POLL_INTERVAL,
+    CONF_POLL_TIMEOUT,
     CONF_UUID,
+    DEFAULT_POLL_DELAY,
     DEFAULT_POLL_INTERVAL,
+    DEFAULT_POLL_TIMEOUT,
     DOMAIN,
 )
 
@@ -243,14 +248,21 @@ class VerisureItOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
-        current_interval = self.config_entry.options.get(
-            "poll_interval", DEFAULT_POLL_INTERVAL
-        )
+        opts = self.config_entry.options
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required(
-                    "poll_interval", default=current_interval
+                    CONF_POLL_INTERVAL,
+                    default=opts.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
                 ): vol.All(int, vol.Range(min=3, max=300)),
+                vol.Required(
+                    CONF_POLL_TIMEOUT,
+                    default=opts.get(CONF_POLL_TIMEOUT, DEFAULT_POLL_TIMEOUT),
+                ): vol.All(int, vol.Range(min=15, max=120)),
+                vol.Required(
+                    CONF_POLL_DELAY,
+                    default=opts.get(CONF_POLL_DELAY, DEFAULT_POLL_DELAY),
+                ): vol.All(int, vol.Range(min=1, max=10)),
             }),
         )

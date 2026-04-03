@@ -111,7 +111,7 @@ DEVICE_VERSION = "10.102.0"
 
 ALARM_STATUS_SERVICE_ID = "11"
 DEFAULT_POLL_DELAY: float = 2.0
-DEFAULT_POLL_TIMEOUT: float = 30.0
+DEFAULT_POLL_TIMEOUT: float = 60.0
 
 # Type aliases
 PollFn = Callable[[Installation, str, int], Awaitable[OperationResult]]
@@ -169,6 +169,15 @@ class VerisureClient:
         self._last_proto: str = ""
         self._apollo_operation_id: str = secrets.token_hex(64)
         self._auth_lock = asyncio.Lock()
+
+    def set_poll_params(
+        self, *, timeout: float | None = None, delay: float | None = None
+    ) -> None:
+        """Update poll parameters at runtime."""
+        if timeout is not None:
+            self._poll_timeout = timeout
+        if delay is not None:
+            self._poll_delay = delay
 
     # -------------------------------------------------------------------
     # HTTP transport — returns raw response text, never dicts

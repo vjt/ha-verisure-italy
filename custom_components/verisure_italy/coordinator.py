@@ -43,8 +43,13 @@ from .const import (
     CONF_INSTALLATION_ALIAS,
     CONF_INSTALLATION_NUMBER,
     CONF_INSTALLATION_PANEL,
+    CONF_POLL_DELAY,
+    CONF_POLL_INTERVAL,
+    CONF_POLL_TIMEOUT,
     CONF_UUID,
+    DEFAULT_POLL_DELAY,
     DEFAULT_POLL_INTERVAL,
+    DEFAULT_POLL_TIMEOUT,
     DOMAIN,
 )
 
@@ -99,9 +104,11 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
     config_entry: ConfigEntry
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-        poll_interval = config_entry.options.get(
-            "poll_interval", DEFAULT_POLL_INTERVAL
-        )
+        opts = config_entry.options
+        poll_interval = opts.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
+        poll_timeout = opts.get(CONF_POLL_TIMEOUT, DEFAULT_POLL_TIMEOUT)
+        poll_delay = opts.get(CONF_POLL_DELAY, DEFAULT_POLL_DELAY)
+
         super().__init__(
             hass,
             _LOGGER,
@@ -118,6 +125,8 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             device_id=config_entry.data[CONF_DEVICE_ID],
             uuid=config_entry.data[CONF_UUID],
             id_device_indigitall="",
+            poll_timeout=float(poll_timeout),
+            poll_delay=float(poll_delay),
         )
         self.installation = Installation(
             numinst=config_entry.data[CONF_INSTALLATION_NUMBER],

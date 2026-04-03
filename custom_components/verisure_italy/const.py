@@ -8,4 +8,10 @@ CONF_INSTALLATION_ALIAS = "installation_alias"
 CONF_DEVICE_ID = "device_id"
 CONF_UUID = "uuid"
 
+CONF_POLL_INTERVAL = "poll_interval"
+CONF_POLL_TIMEOUT = "poll_timeout"
+CONF_POLL_DELAY = "poll_delay"
+
 DEFAULT_POLL_INTERVAL = 5
+DEFAULT_POLL_TIMEOUT = 60
+DEFAULT_POLL_DELAY = 2
