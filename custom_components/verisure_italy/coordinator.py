@@ -24,7 +24,7 @@ from verisure_italy import (
     WAFBlockedError,
     parse_proto_code,
 )
-from verisure_italy.exceptions import APIConnectionError, UnexpectedStateError
+from verisure_italy.exceptions import APIConnectionError, APIResponseError, UnexpectedStateError
 from verisure_italy.models import PROTO_TO_STATE, ZoneException
 
 from .const import (
@@ -115,7 +115,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                 ) from err
         except AuthenticationError as err:
             raise ConfigEntryAuthFailed(err.message) from err
-        except (APIConnectionError, WAFBlockedError) as err:
+        except (APIConnectionError, APIResponseError, WAFBlockedError) as err:
             raise UpdateFailed(err.message) from err
         except UnexpectedStateError as err:
             _LOGGER.error("Unexpected alarm state: %s", err.proto_code)
