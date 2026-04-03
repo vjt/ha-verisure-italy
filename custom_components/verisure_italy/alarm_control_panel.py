@@ -15,6 +15,7 @@ from homeassistant.components.alarm_control_panel.const import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -76,7 +77,8 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
     """Alarm control panel for Verisure Italy."""
 
     _attr_has_entity_name = True
-    _attr_name = None  # Use device name
+    _attr_icon = "mdi:shield-home"
+    _attr_name = "Alarm"
     _attr_supported_features = (
         AlarmControlPanelEntityFeature.ARM_HOME
         | AlarmControlPanelEntityFeature.ARM_AWAY
@@ -85,8 +87,16 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
     def __init__(self, coordinator: VerisureCoordinator) -> None:
         super().__init__(coordinator)
+        inst = coordinator.installation
         self._attr_unique_id = (
-            f"{DOMAIN}_{coordinator.installation.number}"
+            f"{DOMAIN}_{inst.number}"
+        )
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, inst.number)},
+            name=inst.alias,
+            manufacturer="Verisure Italy",
+            model=inst.panel,
+            sw_version="0.3.2",
         )
         self._force_context: dict[str, Any] | None = None
         self._update_alarm_state()
