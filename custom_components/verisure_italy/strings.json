@@ -9,7 +9,14 @@
           "password": "Password"
         }
       },
-      "2fa": {
+      "2fa_phone": {
+        "title": "Select Phone",
+        "description": "Choose which phone should receive the SMS code.",
+        "data": {
+          "phone": "Phone"
+        }
+      },
+      "2fa_code": {
         "title": "Two-Factor Authentication",
         "description": "SMS code sent to {phone}. Enter it below.",
         "data": {

@@ -48,6 +48,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
         self._password: str = ""
         self._otp_hash: str = ""
         self._otp_phones: list[OtpPhone] = []
+        self._selected_phone: OtpPhone | None = None
         self._installations: list[Installation] = []
 
     async def _get_client(self) -> VerisureClient:
@@ -92,7 +93,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 if otp_hash is not None:
                     self._otp_hash = otp_hash
                     self._otp_phones = phones
-                return await self.async_step_2fa()
+                return await self.async_step_2fa_phone()
             except AuthenticationError as err:
                 _LOGGER.error("Authentication failed: %s", err.message)
                 errors["base"] = "invalid_auth"
@@ -108,10 +109,43 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_2fa(
+    async def async_step_2fa_phone(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Step 2: Two-factor authentication."""
+        """Step 2a: Select phone for OTP."""
+        # Auto-skip if only one phone
+        if len(self._otp_phones) == 1:
+            client = await self._get_client()
+            await client.send_otp(
+                self._otp_phones[0].id, self._otp_hash
+            )
+            self._selected_phone = self._otp_phones[0]
+            return await self.async_step_2fa_code()
+
+        if user_input is not None:
+            phone_id = int(user_input["phone"])
+            self._selected_phone = next(
+                p for p in self._otp_phones if p.id == phone_id
+            )
+            client = await self._get_client()
+            await client.send_otp(phone_id, self._otp_hash)
+            return await self.async_step_2fa_code()
+
+        phone_options = {
+            str(p.id): p.phone for p in self._otp_phones
+        }
+
+        return self.async_show_form(
+            step_id="2fa_phone",
+            data_schema=vol.Schema({
+                vol.Required("phone"): vol.In(phone_options),
+            }),
+        )
+
+    async def async_step_2fa_code(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step 2b: Enter SMS code."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -127,22 +161,15 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("2FA failed: %s", err.message)
                 errors["base"] = "invalid_code"
 
-        # Auto-send OTP to first phone on initial display
-        if user_input is None and len(self._otp_phones) >= 1:
-            client = await self._get_client()
-            await client.send_otp(
-                self._otp_phones[0].id, self._otp_hash
-            )
+        phone_display = self._selected_phone.phone if self._selected_phone else "unknown"
 
         return self.async_show_form(
-            step_id="2fa",
+            step_id="2fa_code",
             data_schema=vol.Schema({
                 vol.Required("code"): str,
             }),
             errors=errors,
-            description_placeholders={
-                "phone": self._otp_phones[0].phone if self._otp_phones else "unknown",
-            },
+            description_placeholders={"phone": phone_display},
         )
 
     async def async_step_installation(

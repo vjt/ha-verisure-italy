@@ -136,13 +136,14 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         except ArmingExceptionError as exc:
             self._update_alarm_state()  # revert to previous
             self._set_force_context(exc, mode, target)
-            self._notify_arm_exceptions(exc)
+            await self._notify_arm_exceptions(exc)
             self._fire_arming_exception_event(exc, mode)
             self.async_write_ha_state()
             return
         except (OperationFailedError, OperationTimeoutError) as exc:
             self._update_alarm_state()  # revert to previous
             _LOGGER.error("Arm failed: %s", exc.message)
+            await self._notify_operation_failed("Arm", exc.message)
             self.async_write_ha_state()
             return
 
@@ -160,6 +161,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         except (OperationFailedError, OperationTimeoutError) as exc:
             self._update_alarm_state()  # revert to previous
             _LOGGER.error("Disarm failed: %s", exc.message)
+            await self._notify_operation_failed("Disarm", exc.message)
             self.async_write_ha_state()
             return
 
@@ -179,7 +181,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         self._force_context = None
         self._attr_alarm_state = AlarmControlPanelState.ARMING
         self._update_force_attributes()
-        self._dismiss_notification()
+        await self._dismiss_notification()
         self.async_write_ha_state()
 
         try:
@@ -205,7 +207,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         _LOGGER.info("Force-arm cancelled by user")
         self._force_context = None
         self._update_force_attributes()
-        self._dismiss_notification()
+        await self._dismiss_notification()
         self.async_write_ha_state()
 
     def _set_force_context(
@@ -231,10 +233,10 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             f"_{self.coordinator.installation.number}"
         )
 
-    def _notify_arm_exceptions(self, exc: ArmingExceptionError) -> None:
+    async def _notify_arm_exceptions(self, exc: ArmingExceptionError) -> None:
         """Create a persistent notification about open zones."""
         zone_list = ", ".join(e.alias for e in exc.exceptions)
-        self.hass.services.call(
+        await self.hass.services.async_call(
             "persistent_notification",
             "create",
             {
@@ -244,12 +246,24 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             },
         )
 
-    def _dismiss_notification(self) -> None:
+    async def _dismiss_notification(self) -> None:
         """Dismiss the arming exception notification."""
-        self.hass.services.call(
+        await self.hass.services.async_call(
             "persistent_notification",
             "dismiss",
             {"notification_id": self._notification_id()},
+        )
+
+    async def _notify_operation_failed(self, operation: str, message: str) -> None:
+        """Create a persistent notification about a failed operation."""
+        await self.hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "message": f"{operation} failed: {message}",
+                "title": f"Verisure Italy — {operation} Failed",
+                "notification_id": f"{DOMAIN}.operation_failed",
+            },
         )
 
     def _fire_arming_exception_event(
