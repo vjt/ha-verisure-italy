@@ -84,9 +84,14 @@ async def async_setup_dashboard(
     # Create the storage-backed dashboard if it doesn't exist
     lovelace_config = lovelace_data.dashboards.get(DASHBOARD_URL)
     if not isinstance(lovelace_config, LovelaceStorage):
-        lovelace_config = LovelaceStorage(
-            hass, {"id": DASHBOARD_URL, "url_path": DASHBOARD_URL}
-        )
+        lovelace_config = LovelaceStorage(hass, {
+            "id": DASHBOARD_URL,
+            "url_path": DASHBOARD_URL,
+            "title": DASHBOARD_TITLE,
+            "icon": DASHBOARD_ICON,
+            "show_in_sidebar": True,
+            "require_admin": False,
+        })
         lovelace_data.dashboards[DASHBOARD_URL] = lovelace_config
         _LOGGER.info("Created dashboard storage for '%s'", DASHBOARD_URL)
 
