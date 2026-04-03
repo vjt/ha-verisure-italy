@@ -70,14 +70,11 @@ The API client (`verisure-italy`) is installed automatically from
 
 ## Dashboard
 
-The integration auto-populates a `verisure-italy` Lovelace dashboard on every reload. To set it up:
-
-1. Create the dashboard once (either method):
-   - **UI**: Settings → Dashboards → Add Dashboard, set URL path to `verisure-italy`
-   - **Script**: `source .env && python scripts/setup_dashboard.py`
-2. Reload the integration — the dashboard is populated automatically
-
-The dashboard includes the alarm panel with arm/disarm controls, a "Capture All" button, and a grid of all cameras with per-camera capture buttons.
+The integration automatically creates a **Verisure** dashboard in the
+sidebar on setup. It's populated with the alarm panel, camera grid, and
+capture buttons based on discovered entities. The dashboard updates
+itself on every integration reload and is removed when the integration
+is unloaded.
 
 ## Alarm State Mapping
 
