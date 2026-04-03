@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.4 — 2026-04-03
+
+HA integration live on HACS. Published to PyPI as `verisure-italy`.
+
+### Added
+- Home Assistant integration (`custom_components/verisure_italy/`)
+- AlarmControlPanelEntity: arm home (B), arm away (A), disarm (D)
+- Three non-primary states displayed as ARMED_CUSTOM_BYPASS (E, P, T)
+- Config flow with 2FA phone picker and installation selection
+- DataUpdateCoordinator polling xSStatus every 5s (passive, no timeline spam)
+- Force-arm flow: ArmingExceptionError, xSGetExceptions, forceArmingRemoteId
+- `verisure_italy.force_arm` / `force_arm_cancel` services
+- Persistent notifications for arm failures and open zones
+- `verisure_italy_arming_exception` event for automation
+- Device info with installation alias and panel model
+- Italian shield flag brand icon (HA 2026.3+)
+- services.yaml for service definitions
+- HACS support (hacs.json)
+- MIT license with Verisure non-affiliation disclaimer
+
+### Changed
+- Renamed `verisure_api` → `verisure_italy` (import name matches PyPI)
+- Renamed `custom_components/verisure_it` → `custom_components/verisure_italy`
+- Package published as `verisure-italy` on PyPI
+- ARM_PANEL_MUTATION and ARM_STATUS_QUERY updated with forceArmingRemoteId
+- `GeneralStatus` model now parses `exceptions` field from xSStatus
+
+### Fixed
+- Async service calls (sync `services.call` in async context caused deadlock)
+- `APIResponseError` caught in coordinator (no more unavailable blips)
+- `PanelError` model: added `suid` field
+
 ## 0.2.0 — 2026-04-02
 
 E2E validated API client against live Verisure IT panel.
