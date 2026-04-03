@@ -42,7 +42,6 @@ Six protocol states recognized. Unknown codes crash loud.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-pip install --no-deps homeassistant  # type stubs only, no C deps
 
 pytest tests/ -x -q                            # 118 tests
 pyright verisure_api/ custom_components/        # strict mode, 0 errors
