@@ -17,7 +17,11 @@ dev = [
     "aioresponses>=0.7",
     "pyright>=1.1",
     "ruff>=0.4",
+    "voluptuous>=0.15",
 ]
+# homeassistant is NOT listed here because `lru-dict` requires C compilation
+# which fails on aarch64/RPi. Install it separately for type checking:
+#   pip install --no-deps homeassistant>=2026.2
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
