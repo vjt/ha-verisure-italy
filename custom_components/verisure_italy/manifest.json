@@ -6,6 +6,6 @@
   "dependencies": [],
   "documentation": "https://github.com/vjt/ha-verisure",
   "iot_class": "cloud_polling",
-  "requirements": ["verisure-italy>=0.3.0"],
-  "version": "0.3.0"
+  "requirements": ["verisure-italy>=0.3.1"],
+  "version": "0.3.1"
 }
