@@ -375,20 +375,21 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             )
             return False
 
-        now = datetime.now()  # local time — displayed on camera overlay
-        self.camera_timestamps[camera.zone_id] = now.isoformat()
-        self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
-            _overlay_text, image_bytes, camera.name, now
-        )
-        _LOGGER.info(
-            "Captured %s: %d bytes", camera.name, len(image_bytes)
-        )
+        try:
+            now = datetime.now()  # local time — displayed on camera overlay
+            self.camera_timestamps[camera.zone_id] = now.isoformat()
+            self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
+                _overlay_text, image_bytes, camera.name, now
+            )
+            _LOGGER.info(
+                "Captured %s: %d bytes", camera.name, len(image_bytes)
+            )
 
-        # Try to upgrade to full-resolution image (some panels have higher-res)
-        await self._try_full_image(camera, now)
-
-        self.camera_capturing.discard(camera.zone_id)
-        return True
+            # Try to upgrade to full-resolution image (some panels have higher-res)
+            await self._try_full_image(camera, now)
+            return True
+        finally:
+            self.camera_capturing.discard(camera.zone_id)
 
     async def _try_full_image(
         self, camera: CameraDevice, timestamp: datetime
