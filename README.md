@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="custom_components/verisure_italy/brand/icon@2x.png" alt="Verisure Italy" width="128">
+  <img src="https://raw.githubusercontent.com/vjt/ha-verisure-italy/master/custom_components/verisure_italy/brand/icon@2x.png" alt="Verisure Italy" width="128">
 </p>
 
 # Verisure Italy for Home Assistant
@@ -12,7 +12,7 @@ replaces the Verisure mobile app for alarm control and camera monitoring.
 > **Not affiliated with Verisure Group or Securitas Direct.**
 
 <p align="center">
-  <img src="docs/screenshots/06-dashboard.png" alt="Verisure Dashboard" width="600">
+  <img src="https://raw.githubusercontent.com/vjt/ha-verisure-italy/master/docs/screenshots/06-dashboard.png" alt="Verisure Dashboard" width="600">
 </p>
 
 ## Features
@@ -44,27 +44,27 @@ The API client (`verisure-italy`) is installed automatically from
 
 ### 1. Find the integration
 
-<img src="docs/screenshots/01-setup-search.png" alt="Search for Verisure Italy" width="400">
+<img src="https://raw.githubusercontent.com/vjt/ha-verisure-italy/master/docs/screenshots/01-setup-search.png" alt="Search for Verisure Italy" width="400">
 
 ### 2. Enter credentials
 
-<img src="docs/screenshots/02-setup-login.png" alt="Login" width="400">
+<img src="https://raw.githubusercontent.com/vjt/ha-verisure-italy/master/docs/screenshots/02-setup-login.png" alt="Login" width="400">
 
 ### 3. Select phone for 2FA
 
-<img src="docs/screenshots/03-setup-2fa-phone.png" alt="Phone selection" width="400">
+<img src="https://raw.githubusercontent.com/vjt/ha-verisure-italy/master/docs/screenshots/03-setup-2fa-phone.png" alt="Phone selection" width="400">
 
 ### 4. Enter SMS code
 
-<img src="docs/screenshots/04-setup-2fa-code.png" alt="SMS code" width="400">
+<img src="https://raw.githubusercontent.com/vjt/ha-verisure-italy/master/docs/screenshots/04-setup-2fa-code.png" alt="SMS code" width="400">
 
 ### 5. Devices are created
 
-<img src="docs/screenshots/05-setup-devices.png" alt="Devices created" width="400">
+<img src="https://raw.githubusercontent.com/vjt/ha-verisure-italy/master/docs/screenshots/05-setup-devices.png" alt="Devices created" width="400">
 
 ### 6. Integration page
 
-<img src="docs/screenshots/07-integration-page.png" alt="Integration page" width="400">
+<img src="https://raw.githubusercontent.com/vjt/ha-verisure-italy/master/docs/screenshots/07-integration-page.png" alt="Integration page" width="400">
 
 </details>
 
