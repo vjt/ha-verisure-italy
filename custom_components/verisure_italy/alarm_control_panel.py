@@ -133,14 +133,10 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             # don't write it again (avoids spurious state_changed events).
             return
 
-        if self.coordinator.force_context is not None:
-            # Don't update alarm state while force context is active —
-            # the panel reports DISARMED but we're waiting for force-arm.
-            # Expiry is handled by the timer set in _set_force_context.
-            pass
-        else:
-            self._update_alarm_state()
-
+        # Always show the real panel state — even during force-arm.
+        # The force-arm pending status is communicated through
+        # extra_state_attributes, buttons, and notifications.
+        self._update_alarm_state()
         super()._handle_coordinator_update()
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
@@ -170,6 +166,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                     "Arming blocked by %d open zone(s): %s",
                     len(exc.exceptions), zones,
                 )
+                # Revert to real panel state — the alarm is still disarmed.
+                # Force-arm status communicated via attributes + dashboard.
+                self._update_alarm_state()
                 self._set_force_context(exc, mode, target)
                 await self._notify_arm_exceptions(exc)
                 self._fire_arming_exception_event(exc, mode)

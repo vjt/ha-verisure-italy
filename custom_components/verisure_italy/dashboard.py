@@ -212,14 +212,32 @@ def _build_config(entities: DashboardEntities) -> dict[str, Any]:
             "cards": stack,
         })
 
-    left_cards: list[dict[str, Any]] = [
-        {
-            "type": "alarm-panel",
-            "entity": entities.alarm_entity,
-            "name": "Alarm",
-            "states": ["arm_home", "arm_away"],
-        },
-    ]
+    left_cards: list[dict[str, Any]] = []
+
+    # Alert banner — appears only when arming was blocked by open zones
+    if entities.force_arm_entity is not None:
+        left_cards.append({
+            "type": "conditional",
+            "conditions": [{
+                "condition": "state",
+                "entity": entities.force_arm_entity,
+                "state_not": "unavailable",
+            }],
+            "card": {
+                "type": "markdown",
+                "content": (
+                    "## ⚠️ Arming blocked\n"
+                    "Open zones detected. **Force Arm** to bypass or **Cancel**."
+                ),
+            },
+        })
+
+    left_cards.append({
+        "type": "alarm-panel",
+        "entity": entities.alarm_entity,
+        "name": "Alarm",
+        "states": ["arm_home", "arm_away"],
+    })
 
     # Force-arm buttons — hidden when unavailable (no open zones)
     if entities.force_arm_entity is not None:
