@@ -1,28 +1,10 @@
 force_arm:
   name: Force Arm
   description: Force-arm the alarm despite open zones.
-  fields:
-    entity_id:
-      name: Entity
-      description: The alarm control panel entity to force-arm.
-      required: true
-      selector:
-        entity:
-          integration: verisure_italy
-          domain: alarm_control_panel
 
 force_arm_cancel:
   name: Cancel Force Arm
   description: Cancel a pending force-arm operation.
-  fields:
-    entity_id:
-      name: Entity
-      description: The alarm control panel entity to cancel force-arm for.
-      required: true
-      selector:
-        entity:
-          integration: verisure_italy
-          domain: alarm_control_panel
 
 capture_cameras:
   name: Capture All Cameras
