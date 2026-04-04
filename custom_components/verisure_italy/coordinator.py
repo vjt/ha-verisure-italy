@@ -122,6 +122,12 @@ class ForceArmable(Protocol):
     async def async_force_arm_cancel(self) -> None: ...
 
 
+class CameraRefreshable(Protocol):
+    """Protocol for camera entities that refresh from coordinator data."""
+
+    def refresh_from_coordinator(self) -> None: ...
+
+
 class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
     """Coordinator that polls xSStatus for passive alarm state."""
 
@@ -181,7 +187,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         self.alarm_entity: ForceArmable | None = None
 
         # Camera entity references — set by camera.async_setup_entry
-        self.camera_entities: list[object] = []
+        self.camera_entities: list[CameraRefreshable] = []
 
     async def async_shutdown(self) -> None:
         """Clean up entity references. Session managed by HA."""
@@ -192,8 +198,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
     def notify_camera_entities(self) -> None:
         """Notify camera entities that images have been updated."""
         for entity in self.camera_entities:
-            if hasattr(entity, "refresh_from_coordinator"):
-                entity.refresh_from_coordinator()  # type: ignore[union-attr]
+            entity.refresh_from_coordinator()
 
     async def _async_update_data(self) -> VerisureStatusData:
         """Poll xSStatus for current alarm state."""
