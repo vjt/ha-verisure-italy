@@ -155,6 +155,7 @@ to isolate those changes.
 - [Client library architecture](docs/architecture-client.md) — API client internals, auth flow, state model, exception hierarchy
 - [Integration architecture](docs/architecture-integration.md) — HA entities, coordinator, force-arm state machine, security model
 - [Hacking guide](docs/hacking.md) — dev setup, deploy workflow, engineering rules, API gotchas, releasing
+- [Example automations](docs/automations.md) — force-arm on leave, night arm, morning disarm, notifications
 
 ## Development
 
