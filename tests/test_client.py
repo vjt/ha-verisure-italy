@@ -6,7 +6,7 @@ detection, polling, state management.
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import jwt as pyjwt
@@ -41,7 +41,7 @@ from verisure_italy.models import (
 
 def _make_jwt(exp_minutes: int = 60) -> str:
     """Create a JWT with an exp claim."""
-    exp = (datetime.now() + timedelta(minutes=exp_minutes)).timestamp()
+    exp = (datetime.now(tz=UTC) + timedelta(minutes=exp_minutes)).timestamp()
     return pyjwt.encode(
         {"exp": exp},
         "test-secret-key-that-is-long-enough-for-hs256",
@@ -95,12 +95,12 @@ def _authenticate(client: VerisureClient) -> None:
     """Pre-populate auth state so operation tests skip the login flow."""
     token = _make_jwt(60)
     client._auth_token = token
-    client._auth_token_exp = datetime.now() + timedelta(hours=1)
+    client._auth_token_exp = datetime.now(tz=UTC) + timedelta(hours=1)
     client._login_timestamp = int(datetime.now().timestamp() * 1000)
 
     cap_token = _make_jwt(60)
     client._capabilities[INSTALLATION.number] = cap_token
-    client._capabilities_exp[INSTALLATION.number] = datetime.now() + timedelta(hours=1)
+    client._capabilities_exp[INSTALLATION.number] = datetime.now(tz=UTC) + timedelta(hours=1)
 
 
 # ---------------------------------------------------------------------------
@@ -500,8 +500,8 @@ class TestLogin:
 
         await client.login()
 
-        assert client._auth_token_exp > datetime.now()
-        assert client._auth_token_exp < datetime.now() + timedelta(minutes=31)
+        assert client._auth_token_exp > datetime.now(tz=UTC)
+        assert client._auth_token_exp < datetime.now(tz=UTC) + timedelta(minutes=31)
 
     async def test_2fa_required(self, mock_api, client):
         mock_api.post(API_URL, body=_login_2fa_required())
@@ -530,7 +530,7 @@ class TestLogout:
         await client.logout()
 
         assert client._auth_token is None
-        assert client._auth_token_exp == datetime.min
+        assert client._auth_token_exp == datetime.min.replace(tzinfo=UTC)
         assert client._login_timestamp == 0
         assert client._refresh_token == ""
 
@@ -595,7 +595,7 @@ class TestGetServices:
 
         assert client._capabilities[INSTALLATION.number] == cap_token
         assert INSTALLATION.number in client._capabilities_exp
-        assert client._capabilities_exp[INSTALLATION.number] > datetime.now()
+        assert client._capabilities_exp[INSTALLATION.number] > datetime.now(tz=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -919,7 +919,7 @@ class TestEnsureAuth:
     async def test_auto_login_when_token_expired(self, mock_api, client):
         """Client with expired token re-authenticates automatically."""
         client._auth_token = "expired-token"
-        client._auth_token_exp = datetime.min  # Already expired
+        client._auth_token_exp = datetime.min.replace(tzinfo=UTC)  # Already expired
 
         new_token = _make_jwt()
         mock_api.post(API_URL, body=_login_ok(new_token))
@@ -935,10 +935,10 @@ class TestEnsureAuth:
         """Expired capabilities token triggers get_services refresh."""
         token = _make_jwt()
         client._auth_token = token
-        client._auth_token_exp = datetime.now() + timedelta(hours=1)
+        client._auth_token_exp = datetime.now(tz=UTC) + timedelta(hours=1)
         client._login_timestamp = int(datetime.now().timestamp() * 1000)
         # Capabilities expired
-        client._capabilities_exp[INSTALLATION.number] = datetime.min
+        client._capabilities_exp[INSTALLATION.number] = datetime.min.replace(tzinfo=UTC)
 
         cap_token = _make_jwt()
         mock_api.post(API_URL, body=_services_response(cap_token))

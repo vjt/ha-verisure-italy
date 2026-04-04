@@ -2,7 +2,7 @@
 
 import base64
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import jwt as pyjwt
 import pytest
@@ -41,7 +41,7 @@ _JPEG_BASE64 = base64.b64encode(_JPEG_BYTES).decode()
 
 
 def _make_jwt(exp_minutes: int = 60) -> str:
-    exp = (datetime.now() + timedelta(minutes=exp_minutes)).timestamp()
+    exp = (datetime.now(tz=UTC) + timedelta(minutes=exp_minutes)).timestamp()
     return pyjwt.encode(
         {"exp": exp},
         "test-secret-key-that-is-long-enough-for-hs256",
@@ -91,9 +91,9 @@ async def client(http_session: ClientSession) -> VerisureClient:
     )
     # Pre-set auth to skip login
     c._auth_token = _make_jwt()
-    c._auth_token_exp = datetime.now() + timedelta(hours=1)
+    c._auth_token_exp = datetime.now(tz=UTC) + timedelta(hours=1)
     c._capabilities[INSTALLATION.number] = _make_jwt()
-    c._capabilities_exp[INSTALLATION.number] = datetime.now() + timedelta(hours=1)
+    c._capabilities_exp[INSTALLATION.number] = datetime.now(tz=UTC) + timedelta(hours=1)
     return c
 
 

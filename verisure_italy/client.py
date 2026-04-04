@@ -15,7 +15,7 @@ import json
 import logging
 import secrets
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from functools import partial
 
 import jwt
@@ -159,7 +159,7 @@ class VerisureClient:
         self._poll_timeout = poll_timeout
 
         self._auth_token: str | None = None
-        self._auth_token_exp: datetime = datetime.min
+        self._auth_token_exp: datetime = datetime.min.replace(tzinfo=UTC)
         self._login_timestamp: int = 0
         self._refresh_token: str = ""
         self._otp_challenge: tuple[str, str] | None = None
@@ -270,6 +270,12 @@ class VerisureClient:
                 http_status=None,
             )
 
+        # Catch-all: errors list is non-empty but no branch handled it
+        raise APIResponseError(
+            f"Unknown GraphQL error during {operation}: {first}",
+            http_status=None,
+        )
+
     def _build_headers(
         self,
         operation: str,
@@ -355,7 +361,7 @@ class VerisureClient:
         exp = decoded.get("exp")
         if not isinstance(exp, (int, float)):
             raise AuthenticationError("JWT missing exp claim")
-        return datetime.fromtimestamp(exp)
+        return datetime.fromtimestamp(exp, tz=UTC)
 
     async def _ensure_auth(self, installation: Installation) -> None:
         """Ensure both auth and capabilities tokens are valid.
@@ -364,15 +370,15 @@ class VerisureClient:
         """
         async with self._auth_lock:
             token_expiring = (
-                datetime.now() + timedelta(minutes=1) > self._auth_token_exp
+                datetime.now(tz=UTC) + timedelta(minutes=1) > self._auth_token_exp
             )
             if self._auth_token is None or token_expiring:
                 await self.login()
 
             cap_exp = self._capabilities_exp.get(
-                installation.number, datetime.min
+                installation.number, datetime.min.replace(tzinfo=UTC)
             )
-            if datetime.now() + timedelta(minutes=1) > cap_exp:
+            if datetime.now(tz=UTC) + timedelta(minutes=1) > cap_exp:
                 await self.get_services(installation)
 
     # -------------------------------------------------------------------
@@ -522,7 +528,7 @@ class VerisureClient:
             await self._execute(content, "Logout", None)
         finally:
             self._auth_token = None
-            self._auth_token_exp = datetime.min
+            self._auth_token_exp = datetime.min.replace(tzinfo=UTC)
             self._login_timestamp = 0
             self._refresh_token = ""
 
@@ -823,7 +829,8 @@ class VerisureClient:
 
             if result.res != "WAIT":
                 _LOGGER.warning(
-                    "Unexpected xSGetExceptions result: %s", result.res
+                    "Unexpected xSGetExceptions result: %s (msg=%s)",
+                    result.res, result.msg,
                 )
                 return []
 
@@ -831,7 +838,8 @@ class VerisureClient:
             counter += 1
 
         _LOGGER.warning(
-            "Failed to fetch exceptions after %d polls", max_polls
+            "xSGetExceptions timed out after %d polls — zone details unavailable",
+            max_polls,
         )
         return []
 
@@ -1041,6 +1049,14 @@ class VerisureClient:
             response_text
         )
         result = envelope.data.xSRequestImagesStatus
+
+        if result.res == "ERROR":
+            raise OperationFailedError(
+                f"Image capture error: {result.msg}",
+                error_code=None,
+                error_type=None,
+            )
+
         msg = result.msg or ""
         return "processing" not in msg and result.res != "WAIT"
 
