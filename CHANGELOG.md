@@ -1,15 +1,54 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 — 2026-04-04
 
-### Fixed
-- Config flow skips 2FA when device is already validated (was stuck on empty phone list)
-- `asyncio.Lock` guards concurrent arm/disarm/force-arm (was boolean flag — race condition on conflicting commands)
-- `ValidationError` and `TwoFactorRequiredError` caught in coordinator polling (was unhandled traceback)
-- Use HA's shared `ClientSession` instead of standalone sessions (session leak on abandoned config flows)
-- Dashboard setup wrapped in try/except with persistent notification on failure (Lovelace internals breakage no longer crashes integration)
-- Disarm status poll preserves error codes from panel (was discarded during `OperationResult` conversion)
-- Camera overlay timestamps use local time, not UTC (display values should be human-readable)
+Full codebase review (8 parallel agents, 43 findings). All HIGH and MEDIUM items resolved. Clean pyright (0 errors, 14 seconds). 165 tests.
+
+### Security & Correctness
+- **Session recovery in arm/disarm** — `SessionExpiredError` during arm/disarm now triggers re-login + retry instead of failing with "unexpected error" while the panel may have actually armed
+- **Honest state during force-arm** — entity shows DISARMED (the truth) instead of lying with ARMING for up to 120s. Force-arm status communicated via dashboard alert banner, buttons, and notifications
+- **Deterministic force-arm expiry** — 120s timer via `async_call_later` instead of checking at poll boundaries (was up to 420s with long poll intervals)
+- **Unknown state persistent notification** — unknown proto codes now create a persistent notification + fire `verisure_italy_unknown_state` event, not just a log entry
+- **Duplicate installation guard** — config flow aborts if the same installation is already configured
+- **Arm error details preserved** — non-force-arm errors now surface panel error code and type (was discarded by generic poll machinery)
+- **`_last_proto` synced from polls** — first arm/disarm after startup sends real proto code, not empty string
+- **PanelError.code and .type required** — malformed error responses crash at parse boundary instead of silently accepting null diagnostics
+- **Undeclared GraphQL variables removed** — stopped sending `currentStatus` in queries that don't declare it
+
+### Architecture
+- **Arm/disarm moved to coordinator** — entity no longer calls `coordinator.client.*` directly. Session recovery lives in one place
+- **`ConfigEntry.runtime_data`** — replaced `hass.data[DOMAIN]` dict pattern with typed `VerisureConfigEntry` for type-safe coordinator access
+- **`CameraRefreshable` Protocol** — replaced `list[object]` + `hasattr` duck typing with proper Protocol
+- **`_execute_raw` / `_execute` split** — `validate_device` OTP flow no longer re-parses response. One parse pass, no side channels
+- **Entry-scoped background tasks** — dashboard setup and thumbnail refresh use `async_create_background_task` for auto-cancellation on unload
+- **Thread-safe force context expiry** — timer callback dispatches state writes via `async_create_task`
+
+### UI & UX
+- **Buttons hidden from auto-generated dashboard** — all buttons marked as `EntityCategory.DIAGNOSTIC` with `entity_registry_visible_default=False`
+- **Dashboard "Arming blocked" banner** — conditional alert card appears when force-arm is pending
+- **Reauth strings** — reauth flow steps now have proper labels instead of raw field names
+- **services.yaml cleaned** — removed phantom `entity_id` field that handlers ignored
+- **CameraGroup sentinel fix** — empty-string sentinel replaced with `None` + explicit check
+- **Reauth/reconfigure `.get()` removed** — direct subscript on required config data
+
+### Tests & Tooling
+- **7 new tests** — `validate_device` OTP flow, unknown proto code propagation, state map sync cross-check
+- **`scripts/check.sh`** — chains pyright + pytest + ruff in one command
+- **pyright runs in 14 seconds** — `include` config limits analysis to project sources only
+
+### Docs
+- **Example automations expanded** — 8 battle-tested recipes with prerequisites (presence sensors, binary sensor templates)
+- **Force-arm screenshot** — dashboard with "Arming blocked" banner
+- **Events reference** — `verisure_italy_arming_exception` and `verisure_italy_unknown_state`
+
+### v0.7.0 post-release fixes (included)
+- Config flow skips 2FA when device is already validated
+- `asyncio.Lock` guards concurrent arm/disarm/force-arm
+- `ValidationError` and `TwoFactorRequiredError` caught in coordinator polling
+- Use HA's shared `ClientSession` instead of standalone sessions
+- Dashboard setup wrapped in try/except with persistent notification on failure
+- Disarm status poll preserves error codes from panel
+- Camera overlay timestamps use local time, not UTC
 
 ## 0.7.0 — 2026-04-04
 
