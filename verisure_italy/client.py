@@ -783,6 +783,15 @@ class VerisureClient:
                 arm_result.error.reference_id, suid, exceptions
             )
 
+        # Surface non-force-arm errors with full diagnostic info
+        # (mirrors the disarm path in _check_disarm_status_once)
+        if arm_result.res == "ERROR" and arm_result.error is not None:
+            raise OperationFailedError(
+                f"Arm rejected: {arm_result.msg}",
+                error_code=arm_result.error.code,
+                error_type=arm_result.error.type,
+            )
+
         # Return as OperationResult for the generic poll machinery
         return OperationResult(
             res=arm_result.res,
