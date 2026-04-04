@@ -19,7 +19,7 @@ replaces the Verisure mobile app for alarm control and camera monitoring.
 
 - **Alarm control** — arm home (partial+perimeter), arm away (total+perimeter), disarm
 - **Force arm** — open zone detection with one-tap force-arm and cancel buttons on the dashboard
-- **Cameras** — auto-discovered, on-demand capture with per-camera and capture-all buttons
+- **Cameras** — auto-discovered, parallel on-demand capture with per-camera and capture-all buttons
 - **Auto-managed dashboard** — Lovelace dashboard auto-populated with alarm panel, camera grid, and capture buttons
 - **Passive polling** via xSStatus — no panel ping, no timeline spam
 - **Configurable** — poll interval, operation timeout, and poll delay tunable from the UI
@@ -149,6 +149,12 @@ factor — GraphQL schema or auth flow changes are outside our
 control. The API client is a separate package
 ([verisure-italy](https://pypi.org/project/verisure-italy/))
 to isolate those changes.
+
+## Architecture
+
+- [Client library architecture](docs/architecture-client.md) — API client internals, auth flow, state model, exception hierarchy
+- [Integration architecture](docs/architecture-integration.md) — HA entities, coordinator, force-arm state machine, security model
+- [Hacking guide](docs/hacking.md) — dev setup, deploy workflow, engineering rules, API gotchas, releasing
 
 ## Development
 

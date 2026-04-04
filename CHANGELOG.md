@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.6.0 — 2026-04-04
+
+Force-arm UX, reconfigure flow, state management overhaul.
+
+### Added
+- **Force Arm / Cancel Force Arm button entities** — appear on the dashboard when arming is blocked by open zones. One tap to bypass, one tap to cancel. Auto-hide after use or 2-minute expiry
+- Force Arm button exposes `open_zones` and `mode` as state attributes for automation use
+- **Reconfigure flow** — change API credentials without removing the integration, with full 2FA support
+- Conditional dashboard cards for force-arm buttons (hidden when unavailable)
+- Smoke test script (`scripts/smoke_test.sh`) for post-HA-update verification
+- INFO/WARNING logging for all arm, disarm, force-arm, and exception flows
+
+### Changed
+- Force context moved from alarm entity to coordinator (shared state between alarm and button entities)
+- Alarm entity reference stored on coordinator (replaces fragile `entity_components` internal lookup)
+- `_arm_in_progress` flag suppresses coordinator state updates during API calls
+- Split `_clear_force_context` (immediate, for cancel/error) and `_expire_force_context` (silent, for success paths) to avoid stale-data state flicker
+- Stale force context cleared on successful arm/disarm (not just on expiry)
+
+### Fixed
+- Force-arm `suid` parameter — Verisure API requires both `forceArmingRemoteId` and `suid`
+- Spurious DISARMED→ARMING state transitions during arm operations (caused "Already running" on automations)
+- Alarm state no longer flashes to DISARMED between ARMING and force context set
+
+## 0.5.1 — 2026-04-03
+
+### Changed
+- Default poll timeout from 30s to 60s
+- Auto-managed dashboard title to "Verisure" (was "Verisure Italy")
+- Dashboard set as non-editable via frontend panel API
+
+## 0.5.0 — 2026-04-03
+
+Auto-managed dashboard, configurable poll parameters, entity ID cleanup.
+
+### Added
+- Auto-managed Lovelace dashboard in the sidebar (self-registering via `frontend.async_register_built_in_panel`)
+- "Capture All Cameras" button entity on the alarm device
+- Configurable poll interval (3–300s), poll timeout (15–120s), and poll delay (1–10s) from options UI — live-applied without restart
+- Sections layout dashboard: alarm panel + capture-all on the left, camera grid on the right
+
+### Changed
+- Entity IDs cleaned up: `camera.verisure_{name}`, `button.verisure_{name}_capture`, `button.verisure_capture_all_cameras`
+- Device names prefixed with "Verisure" for clear identification
+- Dashboard entities grouped by `device_id` from entity registry (not string matching)
+- Capture buttons become unavailable during capture (visual feedback)
+
 ## 0.4.1 — 2026-04-03
 
 ### Fixed

@@ -48,6 +48,19 @@ async with aiohttp.ClientSession() as session:
     target = AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON)
     result = await client.arm(inst, target)
 
+    # Force-arm (bypassing open zones — admin users only)
+    from verisure_italy.exceptions import ArmingExceptionError
+
+    try:
+        await client.arm(inst, target)
+    except ArmingExceptionError as exc:
+        print(f"Open zones: {[e.alias for e in exc.exceptions]}")
+        await client.arm(
+            inst, target,
+            force_arming_remote_id=exc.reference_id,
+            suid=exc.suid,
+        )
+
     await client.disarm(inst)
     await client.logout()
 ```
