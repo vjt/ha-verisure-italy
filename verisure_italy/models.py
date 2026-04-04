@@ -211,10 +211,15 @@ class ZoneException(BaseModel):
 
 
 class PanelError(BaseModel):
-    """Error details from the panel (returned in arm/disarm status)."""
+    """Error details from the panel (returned in arm/disarm status).
 
-    code: str | None = None
-    type: str | None = None
+    code and type are always present on panel errors. The remaining
+    fields are only populated for NON_BLOCKING (force-arm-eligible)
+    errors.
+    """
+
+    code: str
+    type: str
     allow_forcing: bool | None = Field(None, alias="allowForcing")
     exceptions_number: int | None = Field(None, alias="exceptionsNumber")
     reference_id: str | None = Field(None, alias="referenceId")
