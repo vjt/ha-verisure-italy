@@ -231,7 +231,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
         self, entry_data: dict[str, str]
     ) -> ConfigFlowResult:
         """Handle reauth triggered by ConfigEntryAuthFailed."""
-        self._username = entry_data.get(CONF_USERNAME, "")
+        self._username = entry_data[CONF_USERNAME]
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
@@ -404,7 +404,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(
                     CONF_USERNAME,
-                    default=entry.data.get(CONF_USERNAME, ""),
+                    default=entry.data[CONF_USERNAME],
                 ): str,
                 vol.Required(CONF_PASSWORD): str,
             }),
