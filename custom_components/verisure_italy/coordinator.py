@@ -6,7 +6,7 @@ import asyncio
 import base64
 import io
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Protocol, runtime_checkable
 
 from aiohttp import ClientSession
@@ -15,7 +15,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from verisure_italy import (
     AlarmState,
@@ -25,6 +25,7 @@ from verisure_italy import (
     Installation,
     ProtoCode,
     SessionExpiredError,
+    TwoFactorRequiredError,
     VerisureClient,
     WAFBlockedError,
     parse_proto_code,
@@ -209,17 +210,21 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                 status = await self.client.get_general_status(
                     self.installation
                 )
-            except AuthenticationError as err:
+            except (AuthenticationError, TwoFactorRequiredError) as err:
                 raise ConfigEntryAuthFailed(
                     f"Re-authentication failed: {err.message}"
                 ) from err
-        except AuthenticationError as err:
+        except (AuthenticationError, TwoFactorRequiredError) as err:
             raise ConfigEntryAuthFailed(err.message) from err
         except (APIConnectionError, APIResponseError, WAFBlockedError) as err:
             raise UpdateFailed(err.message) from err
         except UnexpectedStateError as err:
             _LOGGER.error("Unexpected alarm state: %s", err.proto_code)
             raise UpdateFailed(err.message) from err
+        except ValidationError as err:
+            raise UpdateFailed(
+                f"API response format changed: {err}"
+            ) from err
 
         # Discover camera devices on first successful refresh
         if not self._cameras_discovered:
@@ -343,7 +348,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             )
             return False
 
-        now = datetime.now()
+        now = datetime.now(tz=UTC)
         self.camera_timestamps[camera.zone_id] = now.isoformat()
         self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
             _overlay_text, image_bytes, camera.name, now
@@ -432,10 +437,10 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             try:
                 ts = datetime.fromisoformat(thumbnail.timestamp)
             except ValueError:
-                ts = datetime.now()
+                ts = datetime.now(tz=UTC)
             self.camera_timestamps[camera.zone_id] = thumbnail.timestamp
         else:
-            ts = datetime.now()
+            ts = datetime.now(tz=UTC)
             self.camera_timestamps[camera.zone_id] = ts.isoformat()
 
         self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
