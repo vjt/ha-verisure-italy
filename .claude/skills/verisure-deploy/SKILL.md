@@ -10,7 +10,7 @@ Run the full deployment pipeline. Abort on any failure — never continue past a
 1. **Test suite**: `pytest tests/ -x -q` — abort if any test fails.
 2. **Type check**: `pyright verisure_italy/ custom_components/` — abort if any new errors.
 3. **Lint**: `ruff check verisure_italy/ tests/ custom_components/` — abort on errors.
-4. **Deploy files**: push all `custom_components/verisure_italy/*.py` to HAOS via SSH pipe:
+4. **Deploy integration files**: push all `custom_components/verisure_italy/*.py` to HAOS via SSH pipe:
    ```bash
    for f in custom_components/verisure_italy/*.py; do
      ssh root@homeassistant -p 22222 \
@@ -18,10 +18,22 @@ Run the full deployment pipeline. Abort on any failure — never continue past a
        < "$f"
    done
    ```
-5. **Restart HA**: `ssh root@homeassistant -p 22222 "ha core restart"`
-6. **Wait**: 30 seconds for HA to fully start.
-7. **Smoke test**: `./scripts/smoke_test.sh` — abort if any entity/service missing.
-8. **Log check**: `ssh root@homeassistant -p 22222 "docker logs homeassistant 2>&1 | grep -i verisure_italy | tail -20"` — look for ERROR/WARNING.
+5. **Deploy client library**: the `verisure_italy/` package is pip-installed inside the HA
+   Docker container. Must deploy it separately — the integration imports it at runtime:
+   ```bash
+   for f in verisure_italy/*.py; do
+     ssh root@homeassistant -p 22222 \
+       "docker exec -i homeassistant sh -c 'cat > /usr/local/lib/python3.14/site-packages/verisure_italy/$(basename $f)'" \
+       < "$f"
+   done
+   ```
+   **Note**: The Python version path (3.14) may change with HA updates. If deploy fails
+   with "No such file or directory", check the actual path with:
+   `ssh root@homeassistant -p 22222 "docker exec homeassistant python3 -c \"import verisure_italy; print(verisure_italy.__file__)\""`
+6. **Restart HA**: `ssh root@homeassistant -p 22222 "ha core restart"`
+7. **Wait**: 30 seconds for HA to fully start.
+8. **Smoke test**: `./scripts/smoke_test.sh` — abort if any entity/service missing.
+9. **Log check**: `ssh root@homeassistant -p 22222 "docker logs homeassistant 2>&1 | grep -i verisure_italy | tail -20"` — look for ERROR/WARNING.
 
 On failure at any step: stop, show full error, do NOT proceed or auto-fix.
 On success: report all gates passed.
