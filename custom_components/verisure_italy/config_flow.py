@@ -98,7 +98,9 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 if otp_hash is not None:
                     self._otp_hash = otp_hash
                     self._otp_phones = phones
-                return await self.async_step_2fa_phone()
+                    return await self.async_step_2fa_phone()
+                # Device already validated — proceed without 2FA
+                return await self.async_step_installation()
             except AuthenticationError as err:
                 _LOGGER.error("Authentication failed: %s", err.message)
                 errors["base"] = "invalid_auth"
@@ -257,7 +259,19 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 if otp_hash is not None:
                     self._otp_hash = otp_hash
                     self._otp_phones = phones
-                return await self.async_step_reauth_2fa_phone()
+                    return await self.async_step_reauth_2fa_phone()
+                # Device already validated — proceed without 2FA
+                await self._cleanup_session()
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data={
+                        **entry.data,
+                        CONF_USERNAME: self._username,
+                        CONF_PASSWORD: self._password,
+                        CONF_DEVICE_ID: self._device_id,
+                        CONF_UUID: self._uuid,
+                    },
+                )
             except AuthenticationError as err:
                 _LOGGER.error("Reauth failed: %s", err.message)
                 errors["base"] = "invalid_auth"
@@ -378,7 +392,10 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 if otp_hash is not None:
                     self._otp_hash = otp_hash
                     self._otp_phones = phones
-                return await self.async_step_reconfigure_2fa_phone()
+                    return await self.async_step_reconfigure_2fa_phone()
+                # Device already validated — proceed without 2FA
+                await self._cleanup_session()
+                return self._update_entry(entry)
             except AuthenticationError as err:
                 _LOGGER.error("Reconfigure auth failed: %s", err.message)
                 errors["base"] = "invalid_auth"
