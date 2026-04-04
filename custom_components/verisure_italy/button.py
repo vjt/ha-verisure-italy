@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -52,6 +53,7 @@ class VerisureCaptureAllButton(  # type: ignore[reportIncompatibleVariableOverri
     """Button to capture all cameras at once."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:camera-burst"
     _attr_name = "Capture All Cameras"
 
@@ -94,6 +96,7 @@ class VerisureCaptureButton(  # type: ignore[reportIncompatibleVariableOverride]
     """Button to trigger an on-demand camera capture."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:camera"
 
     def __init__(
@@ -148,6 +151,7 @@ class VerisureForceArmButton(  # type: ignore[reportIncompatibleVariableOverride
     """Button to force-arm, bypassing open zones."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:shield-alert"
     _attr_name = "Force Arm"
 
@@ -201,6 +205,7 @@ class VerisureForceArmCancelButton(  # type: ignore[reportIncompatibleVariableOv
     """Button to cancel a pending force-arm."""
 
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:shield-off-outline"
     _attr_name = "Cancel Force Arm"
 
