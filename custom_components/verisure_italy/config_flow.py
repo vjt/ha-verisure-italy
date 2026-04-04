@@ -229,6 +229,134 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             },
         )
 
+    # --- Reauth: HA-initiated credential refresh on ConfigEntryAuthFailed ---
+
+    async def async_step_reauth(
+        self, entry_data: dict[str, str]
+    ) -> ConfigFlowResult:
+        """Handle reauth triggered by ConfigEntryAuthFailed."""
+        self._username = entry_data.get(CONF_USERNAME, "")
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm new credentials for reauth."""
+        errors: dict[str, str] = {}
+        entry = self._get_reauth_entry()
+
+        if user_input is not None:
+            self._username = user_input[CONF_USERNAME]
+            self._password = user_input[CONF_PASSWORD]
+
+            client = await self._get_client()
+            try:
+                await client.login()
+            except TwoFactorRequiredError:
+                otp_hash, phones = await client.validate_device(None, None)
+                if otp_hash is not None:
+                    self._otp_hash = otp_hash
+                    self._otp_phones = phones
+                return await self.async_step_reauth_2fa_phone()
+            except AuthenticationError as err:
+                _LOGGER.error("Reauth failed: %s", err.message)
+                errors["base"] = "invalid_auth"
+                await self._cleanup_session()
+                self._client = None
+            else:
+                await self._cleanup_session()
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data={
+                        **entry.data,
+                        CONF_USERNAME: self._username,
+                        CONF_PASSWORD: self._password,
+                        CONF_DEVICE_ID: self._device_id,
+                        CONF_UUID: self._uuid,
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({
+                vol.Required(
+                    CONF_USERNAME,
+                    default=self._username,
+                ): str,
+                vol.Required(CONF_PASSWORD): str,
+            }),
+            errors=errors,
+        )
+
+    async def async_step_reauth_2fa_phone(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Reauth: select phone for OTP."""
+        if len(self._otp_phones) == 1:
+            client = await self._get_client()
+            await client.send_otp(
+                self._otp_phones[0].id, self._otp_hash
+            )
+            self._selected_phone = self._otp_phones[0]
+            return await self.async_step_reauth_2fa_code()
+
+        if user_input is not None:
+            phone_id = int(user_input["phone"])
+            self._selected_phone = next(
+                p for p in self._otp_phones if p.id == phone_id
+            )
+            client = await self._get_client()
+            await client.send_otp(phone_id, self._otp_hash)
+            return await self.async_step_reauth_2fa_code()
+
+        phone_options = {
+            str(p.id): p.phone for p in self._otp_phones
+        }
+        return self.async_show_form(
+            step_id="reauth_2fa_phone",
+            data_schema=vol.Schema({
+                vol.Required("phone"): vol.In(phone_options),
+            }),
+        )
+
+    async def async_step_reauth_2fa_code(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Reauth: enter SMS code."""
+        errors: dict[str, str] = {}
+        entry = self._get_reauth_entry()
+
+        if user_input is not None:
+            client = await self._get_client()
+            try:
+                await client.validate_device(self._otp_hash, user_input["code"])
+                await client.login()
+            except AuthenticationError as err:
+                _LOGGER.error("Reauth 2FA failed: %s", err.message)
+                errors["base"] = "invalid_code"
+            else:
+                await self._cleanup_session()
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data={
+                        **entry.data,
+                        CONF_USERNAME: self._username,
+                        CONF_PASSWORD: self._password,
+                        CONF_DEVICE_ID: self._device_id,
+                        CONF_UUID: self._uuid,
+                    },
+                )
+
+        phone_display = self._selected_phone.phone if self._selected_phone else "unknown"
+        return self.async_show_form(
+            step_id="reauth_2fa_code",
+            data_schema=vol.Schema({
+                vol.Required("code"): str,
+            }),
+            errors=errors,
+            description_placeholders={"phone": phone_display},
+        )
+
     # --- Reconfigure: change credentials without removing the integration ---
 
     async def async_step_reconfigure(
