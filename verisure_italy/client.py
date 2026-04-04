@@ -757,7 +757,6 @@ class VerisureClient:
             "request": command.value,
             "numinst": installation.number,
             "panel": installation.panel,
-            "currentStatus": self._last_proto,
             "referenceId": reference_id,
             "counter": counter,
         }
@@ -874,7 +873,6 @@ class VerisureClient:
                 "request": command.value,
                 "numinst": installation.number,
                 "panel": installation.panel,
-                "currentStatus": self._last_proto,
             },
             "query": DISARM_PANEL_MUTATION,
         }
@@ -927,7 +925,6 @@ class VerisureClient:
                 "request": command.value,
                 "numinst": installation.number,
                 "panel": installation.panel,
-                "currentStatus": self._last_proto,
                 "referenceId": reference_id,
                 "counter": counter,
             },
