@@ -41,6 +41,10 @@ convenience.
 - **Audit trail.** Every arm/disarm action logged with timestamp,
   source, command sent, proto response received, resulting state.
 - **No "smart" behavior.** Pedantic correctness over convenience.
+- **No HA-level disarm PIN.** By design — HA is authenticated, runs
+  in an encrypted VM behind the home network perimeter. The Verisure
+  API itself requires credentials. Adding a PIN would break
+  automations (auto-disarm). Patches welcome for optional PIN support.
 
 ### Type System
 - **Pydantic models only.** No `@dataclass`. All structured types
