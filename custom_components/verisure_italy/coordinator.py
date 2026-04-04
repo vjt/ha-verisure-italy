@@ -9,11 +9,11 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, runtime_checkable
 
-from aiohttp import ClientSession
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -141,11 +141,10 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             config_entry=config_entry,
         )
 
-        self._session = ClientSession()
         self.client = VerisureClient(
             username=config_entry.data[CONF_USERNAME],
             password=config_entry.data[CONF_PASSWORD],
-            http_session=self._session,
+            http_session=async_get_clientsession(hass),
             device_id=config_entry.data[CONF_DEVICE_ID],
             uuid=config_entry.data[CONF_UUID],
             id_device_indigitall="",
@@ -185,11 +184,10 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         self.camera_entities: list[object] = []
 
     async def async_shutdown(self) -> None:
-        """Close the HTTP session and clean up references."""
+        """Clean up entity references. Session managed by HA."""
         self.camera_entities.clear()
         self.alarm_entity = None
         await super().async_shutdown()
-        await self._session.close()
 
     def notify_camera_entities(self) -> None:
         """Notify camera entities that images have been updated."""

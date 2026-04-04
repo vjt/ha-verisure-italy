@@ -6,10 +6,10 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-from aiohttp import ClientSession
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from verisure_italy import (
     AuthenticationError,
@@ -46,7 +46,6 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._client: VerisureClient | None = None
-        self._session: ClientSession | None = None
         self._device_id: str = ""
         self._uuid: str = ""
         self._username: str = ""
@@ -57,26 +56,19 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
         self._installations: list[Installation] = []
 
     async def _get_client(self) -> VerisureClient:
-        """Get or create the API client."""
+        """Get or create the API client. Uses HA's shared session."""
         if self._client is None:
             self._device_id = generate_device_id()
             self._uuid = generate_uuid()
-            self._session = ClientSession()
             self._client = VerisureClient(
                 username=self._username,
                 password=self._password,
-                http_session=self._session,
+                http_session=async_get_clientsession(self.hass),
                 device_id=self._device_id,
                 uuid=self._uuid,
                 id_device_indigitall="",
             )
         return self._client
-
-    async def _cleanup_session(self) -> None:
-        """Close the temporary session."""
-        if self._session is not None:
-            await self._session.close()
-            self._session = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -104,7 +96,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             except AuthenticationError as err:
                 _LOGGER.error("Authentication failed: %s", err.message)
                 errors["base"] = "invalid_auth"
-                await self._cleanup_session()
+
                 self._client = None
 
         return self.async_show_form(
@@ -192,7 +184,6 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
         if len(self._installations) == 1:
             inst = self._installations[0]
             await client.get_services(inst)
-            await self._cleanup_session()
             return self._create_entry(inst)
 
         if user_input is not None:
@@ -201,7 +192,6 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 i for i in self._installations if i.number == number
             )
             await client.get_services(inst)
-            await self._cleanup_session()
             return self._create_entry(inst)
 
         options = {
@@ -261,7 +251,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._otp_phones = phones
                     return await self.async_step_reauth_2fa_phone()
                 # Device already validated — proceed without 2FA
-                await self._cleanup_session()
+
                 return self.async_update_reload_and_abort(
                     entry,
                     data={
@@ -275,10 +265,10 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             except AuthenticationError as err:
                 _LOGGER.error("Reauth failed: %s", err.message)
                 errors["base"] = "invalid_auth"
-                await self._cleanup_session()
+
                 self._client = None
             else:
-                await self._cleanup_session()
+
                 return self.async_update_reload_and_abort(
                     entry,
                     data={
@@ -349,7 +339,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Reauth 2FA failed: %s", err.message)
                 errors["base"] = "invalid_code"
             else:
-                await self._cleanup_session()
+
                 return self.async_update_reload_and_abort(
                     entry,
                     data={
@@ -394,15 +384,15 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._otp_phones = phones
                     return await self.async_step_reconfigure_2fa_phone()
                 # Device already validated — proceed without 2FA
-                await self._cleanup_session()
+
                 return self._update_entry(entry)
             except AuthenticationError as err:
                 _LOGGER.error("Reconfigure auth failed: %s", err.message)
                 errors["base"] = "invalid_auth"
-                await self._cleanup_session()
+
                 self._client = None
             else:
-                await self._cleanup_session()
+
                 return self._update_entry(entry)
 
         return self.async_show_form(
@@ -464,7 +454,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Reconfigure 2FA failed: %s", err.message)
                 errors["base"] = "invalid_code"
             else:
-                await self._cleanup_session()
+
                 return self._update_entry(entry)
 
         phone_display = self._selected_phone.phone if self._selected_phone else "unknown"
