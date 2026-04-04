@@ -4,6 +4,9 @@
 
 # Verisure Italy for Home Assistant
 
+> Leggi il [post sul blog](https://sindro.me/posts/2026-04-04-verisure-italy-home-assistant/)
+> per la storia completa: perché l'ho costruito, come funziona e come installarlo.
+
 Home Assistant custom component for **Verisure Italy** alarm systems.
 
 Talks directly to `customers.verisure.it/owa-api/graphql`. Fully
