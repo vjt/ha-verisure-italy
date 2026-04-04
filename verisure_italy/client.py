@@ -191,7 +191,7 @@ class VerisureClient:
     # HTTP transport — returns raw response text, never dicts
     # -------------------------------------------------------------------
 
-    async def _execute(
+    async def _execute_raw(
         self,
         content: GraphQLContent,
         operation: str,
@@ -199,8 +199,8 @@ class VerisureClient:
     ) -> str:
         """Send a GraphQL request. Returns raw JSON response text.
 
-        Raises APIConnectionError, WAFBlockedError, or APIResponseError.
-        Callers parse the text into typed Pydantic envelopes.
+        Handles HTTP-level errors only. Does NOT check for GraphQL errors.
+        Use _execute for the common path that also checks GraphQL errors.
         """
         headers = self._build_headers(operation, installation)
         _LOGGER.debug("[%s] Executing request", operation)
@@ -232,24 +232,38 @@ class VerisureClient:
                 http_status=http_status,
             )
 
-        # Check for GraphQL errors before returning
-        self._check_graphql_errors(response_text, operation)
-
         return response_text
 
-    def _check_graphql_errors(self, response_text: str, operation: str) -> None:
+    async def _execute(
+        self,
+        content: GraphQLContent,
+        operation: str,
+        installation: Installation | None,
+    ) -> str:
+        """Send a GraphQL request with error checking. Returns response text.
+
+        Raises on HTTP errors, GraphQL errors, session expiry, and 2FA.
+        """
+        response_text = await self._execute_raw(content, operation, installation)
+        self._check_graphql_errors(response_text, operation)
+        return response_text
+
+    def _check_graphql_errors(
+        self, response_text: str, operation: str
+    ) -> tuple[str, list[OtpPhone]] | None:
         """Parse error responses and raise specific exceptions.
 
-        Only called when we need to check for errors. If parsing as
-        ErrorResponse fails, the response is not an error — move on.
+        Returns (otp_hash, phones) if the response is an OTP challenge.
+        Returns None if the response is not an error.
+        Raises on all other error types.
         """
         try:
             error_resp = ErrorResponse.model_validate_json(response_text)
         except ValidationError:
-            return  # Not an error response shape
+            return None  # Not an error response shape
 
         if not error_resp.errors:
-            return
+            return None
 
         first = error_resp.errors[0]
 
@@ -261,9 +275,10 @@ class VerisureClient:
         if first.data is not None and first.data.need_device_authorization:
             raise TwoFactorRequiredError("2FA authentication required")
 
-        # Check for OTP data (don't raise — caller extracts it)
+        # OTP challenge — return data instead of raising
         if first.data is not None and first.data.auth_otp_hash is not None:
-            return  # Caller will parse OTP data from the response
+            phones = first.data.auth_phones or []
+            return (first.data.auth_otp_hash, phones)
 
         # Old-style error with reason
         if first.data is not None and first.data.reason is not None:
@@ -479,7 +494,7 @@ class VerisureClient:
             self._otp_challenge = (otp_hash, sms_code)
 
         try:
-            response_text = await self._execute(
+            response_text = await self._execute_raw(
                 content, "mkValidateDevice", None
             )
             self._otp_challenge = None
@@ -489,15 +504,16 @@ class VerisureClient:
                 f"Device validation failed: {err.message}"
             ) from err
 
-        # Check if response contains OTP challenge (Unauthorized with phones)
+        # Check for GraphQL errors — OTP challenges return data instead
+        # of raising, so we handle them here in one parse pass.
         try:
-            error_resp = ErrorResponse.model_validate_json(response_text)
-            for error in error_resp.errors:
-                if error.data is not None and error.data.auth_otp_hash is not None:
-                    phones = error.data.auth_phones if error.data.auth_phones is not None else []
-                    return (error.data.auth_otp_hash, phones)
-        except ValidationError:
-            pass  # Not an error response — continue to parse success
+            otp = self._check_graphql_errors(response_text, "mkValidateDevice")
+        except APIResponseError as err:
+            raise AuthenticationError(
+                f"Device validation failed: {err.message}"
+            ) from err
+        if otp is not None:
+            return otp
 
         envelope = ValidateDeviceEnvelope.model_validate_json(response_text)
         result = envelope.data.xSValidateDevice
