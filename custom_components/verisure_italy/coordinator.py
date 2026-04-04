@@ -215,10 +215,11 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         )
 
     async def async_capture_all_cameras(self) -> None:
-        """Capture images from all cameras sequentially.
+        """Capture all cameras concurrently, staggered 0.5s apart.
 
         Uses a lock so only one capture round runs at a time.
-        Each camera is captured one at a time to avoid overwhelming the panel.
+        Cameras launch 0.5s apart to be polite to the API, but all
+        run concurrently. Individual failures retry with backoff.
         """
         if not self.camera_devices:
             return
@@ -229,17 +230,22 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
 
         async with self._capture_lock:
             _LOGGER.info(
-                "Starting active capture for %d cameras (will ping panel)",
+                "Starting capture for %d cameras (2s stagger)",
                 len(self.camera_devices),
             )
-            ok = 0
-            fail = 0
-            for camera in self.camera_devices:
-                success = await self.capture_single_camera(camera)
-                if success:
-                    ok += 1
-                else:
-                    fail += 1
+
+            async def _launch(camera: CameraDevice, delay: float) -> bool:
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                return await self.capture_single_camera(camera)
+
+            results = await asyncio.gather(*(
+                _launch(camera, i * 2.0)
+                for i, camera in enumerate(self.camera_devices)
+            ), return_exceptions=True)
+
+            ok = sum(1 for r in results if r is True)
+            fail = len(results) - ok
             _LOGGER.info("Capture round complete: %d ok, %d failed", ok, fail)
 
     async def async_refresh_all_thumbnails(self) -> None:
@@ -259,11 +265,14 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             for camera in self.camera_devices:
                 await self._fetch_thumbnail(camera)
 
-    async def capture_single_camera(self, camera: CameraDevice) -> bool:
+    async def capture_single_camera(
+        self, camera: CameraDevice, _retries_left: int = 2
+    ) -> bool:
         """Capture a single camera image. Returns True on success.
 
         Uses capture_image for the thumbnail, then tries get_photo_images
         for a full-resolution version. Stores whichever is best.
+        Retries with exponential backoff on failure.
         """
         self.camera_capturing.add(camera.zone_id)
         try:
@@ -279,10 +288,21 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             OperationTimeoutError,
             ImageCaptureError,
         ) as err:
-            _LOGGER.warning(
-                "Capture failed for %s: %s", camera.name, err.message
-            )
             self.camera_capturing.discard(camera.zone_id)
+            if _retries_left > 0:
+                backoff = 3 * (3 - _retries_left)  # 3s, 6s
+                _LOGGER.info(
+                    "Capture failed for %s: %s — retrying in %ds (%d left)",
+                    camera.name, err.message, backoff, _retries_left,
+                )
+                await asyncio.sleep(backoff)
+                return await self.capture_single_camera(
+                    camera, _retries_left=_retries_left - 1
+                )
+            _LOGGER.warning(
+                "Capture failed for %s: %s (no more retries)",
+                camera.name, err.message,
+            )
             return False
 
         now = datetime.now()
