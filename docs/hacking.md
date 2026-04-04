@@ -6,7 +6,18 @@ Development notes for working on `ha-verisure-italy`.
 
 - Python 3.12+
 - A Verisure Italy account with an **admin** API user
-- Access to a Home Assistant instance (HAOS recommended)
+- A Home Assistant OS (HAOS) instance with:
+  - **Host-level SSH access** on port 22222 (`ssh root@homeassistant -p 22222`).
+    Enable via the Terminal & SSH add-on with "Protection mode" disabled,
+    or via the HAOS debug console.
+  - A DNS alias or `/etc/hosts` entry so `homeassistant` resolves to
+    your HA instance's IP address.
+  - A long-lived access token stored in `.env` as `HA_TOKEN` (create
+    one from your HA profile page → Long-lived access tokens).
+
+The deploy and investigate skills assume this setup. Without host-level
+SSH, you can still develop — just deploy files manually via the
+Samba or File Editor add-ons.
 
 ## Setup
 
