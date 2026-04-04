@@ -24,6 +24,7 @@ from verisure_italy.exceptions import (
     OperationTimeoutError,
     SessionExpiredError,
     TwoFactorRequiredError,
+    UnexpectedStateError,
     WAFBlockedError,
 )
 from verisure_italy.models import (
@@ -1033,3 +1034,141 @@ class TestForceArm:
         aliases = [e.alias for e in exc_info.value.exceptions]
         assert "finestracucina" in aliases
         assert "portaingresso" in aliases
+
+
+# ---------------------------------------------------------------------------
+# Unknown proto code propagation (M20)
+# ---------------------------------------------------------------------------
+
+
+class TestUnknownProtoCode:
+    """Verify that unknown proto codes propagate as UnexpectedStateError
+    when the result is accessed — the client returns raw proto strings,
+    the error fires on .proto_code / .alarm_state access."""
+
+    async def test_unknown_proto_in_arm_result(self, mock_api, client):
+        """arm() result with unknown proto raises on .alarm_state access."""
+        _authenticate(client)
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_complete("Z"))
+
+        target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
+        result = await client.arm(INSTALLATION, target)
+
+        # The client stores the raw proto — error fires on property access
+        with pytest.raises(UnexpectedStateError) as exc_info:
+            _ = result.alarm_state
+        assert exc_info.value.proto_code == "Z"
+
+    async def test_unknown_proto_in_disarm_result(self, mock_api, client):
+        """disarm() result with unknown proto raises on .proto_code access."""
+        _authenticate(client)
+        mock_api.post(API_URL, body=_disarm_panel_response())
+        mock_api.post(API_URL, body=json.dumps({
+            "data": {
+                "xSDisarmStatus": {
+                    "res": "OK",
+                    "msg": "disarmed",
+                    "status": "0",
+                    "numinst": INSTALLATION.number,
+                    "protomResponse": "Z",
+                    "protomResponseDate": "2026-04-02T10:30:00",
+                    "requestId": "req-123",
+                    "error": None,
+                }
+            }
+        }))
+
+        result = await client.disarm(INSTALLATION)
+        with pytest.raises(UnexpectedStateError) as exc_info:
+            _ = result.proto_code
+        assert exc_info.value.proto_code == "Z"
+
+
+# ---------------------------------------------------------------------------
+# validate_device / OTP flow (M19)
+# ---------------------------------------------------------------------------
+
+
+def _validate_device_otp_challenge() -> str:
+    """Response when device needs OTP — returns error with auth hash + phones."""
+    return json.dumps({
+        "errors": [{
+            "message": "Unauthorized",
+            "data": {
+                "status": 401,
+                "auth-otp-hash": "otp-hash-abc",
+                "auth-phones": [
+                    {"id": 1, "phone": "+39333***1234"},
+                    {"id": 2, "phone": "+39333***5678"},
+                ],
+            },
+        }]
+    })
+
+
+def _validate_device_success() -> str:
+    """Response when device validation succeeds (Verisure IT: hash=null)."""
+    return json.dumps({
+        "data": {
+            "xSValidateDevice": {
+                "res": "OK",
+                "msg": "Device validated",
+                "hash": None,
+                "refreshToken": None,
+            }
+        }
+    })
+
+
+def _validate_device_success_with_token() -> str:
+    """Response when device validation returns a new auth token."""
+    return json.dumps({
+        "data": {
+            "xSValidateDevice": {
+                "res": "OK",
+                "msg": "Device validated",
+                "hash": _make_jwt(),
+                "refreshToken": "refresh-new",
+            }
+        }
+    })
+
+
+class TestValidateDevice:
+    async def test_otp_challenge_returns_hash_and_phones(self, mock_api, client):
+        """First call returns OTP hash + phone list for user selection."""
+        mock_api.post(API_URL, body=_validate_device_otp_challenge())
+
+        otp_hash, phones = await client.validate_device(None, None)
+
+        assert otp_hash == "otp-hash-abc"
+        assert len(phones) == 2
+        assert phones[0].id == 1
+        assert phones[1].phone == "+39333***5678"
+
+    async def test_successful_validation_returns_none_hash(self, mock_api, client):
+        """Successful validation with hash=null (Verisure IT flow)."""
+        mock_api.post(API_URL, body=_validate_device_success())
+
+        otp_hash, phones = await client.validate_device("otp-hash", "123456")
+
+        assert otp_hash is None
+        assert phones == []
+
+    async def test_successful_validation_stores_token(self, mock_api, client):
+        """Successful validation with a token updates auth state."""
+        mock_api.post(API_URL, body=_validate_device_success_with_token())
+
+        await client.validate_device("otp-hash", "123456")
+
+        assert client._auth_token is not None
+
+    async def test_api_error_raises_authentication_error(self, mock_api, client):
+        """API error during validation becomes AuthenticationError."""
+        mock_api.post(API_URL, body=_error_generic("Validation failed"), status=200)
+
+        with pytest.raises(AuthenticationError):
+            await client.validate_device("otp-hash", "wrong-code")
+
+

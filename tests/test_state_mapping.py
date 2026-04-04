@@ -4,6 +4,8 @@ Tests the pure mapping function in isolation — no homeassistant dependency.
 Uses string values matching AlarmControlPanelState enum.
 """
 
+import pytest
+
 from verisure_italy.models import (
     PROTO_TO_STATE,
     AlarmState,
@@ -64,3 +66,17 @@ class TestStateMapping:
             assert result in {
                 "disarmed", "armed_home", "armed_away", "armed_custom_bypass"
             }, f"Proto {code} mapped to unexpected {result}"
+
+    def test_sync_with_production_state_map(self) -> None:
+        """Verify test mapping matches production _STATE_MAP (when HA is installed)."""
+        try:
+            from custom_components.verisure_italy.alarm_control_panel import _STATE_MAP
+        except ImportError:
+            pytest.skip("homeassistant not installed — cannot cross-check")
+
+        for alarm_state, ha_state in _STATE_MAP.items():
+            test_result = map_alarm_state(alarm_state)
+            assert test_result == ha_state.value, (
+                f"Mapping drift: {alarm_state} → test says {test_result!r}, "
+                f"production says {ha_state.value!r}"
+            )
