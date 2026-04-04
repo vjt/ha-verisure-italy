@@ -921,10 +921,19 @@ class VerisureClient:
         )
         envelope = DisarmStatusEnvelope.model_validate_json(response_text)
         disarm_result = envelope.data.xSDisarmStatus
+
+        # Surface disarm errors with full diagnostic info
+        if disarm_result.res == "ERROR" and disarm_result.error is not None:
+            raise OperationFailedError(
+                f"Disarm rejected: {disarm_result.msg}",
+                error_code=disarm_result.error.code,
+                error_type=disarm_result.error.type,
+            )
+
         return OperationResult(
             res=disarm_result.res,
             msg=disarm_result.msg,
-            status=None,
+            status=disarm_result.status,
             numinst=disarm_result.numinst,
             protomResponse=disarm_result.protom_response,
             protomResponseDate=disarm_result.protom_response_data,
