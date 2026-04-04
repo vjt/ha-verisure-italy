@@ -54,6 +54,7 @@ class VerisureCaptureAllButton(  # type: ignore[reportIncompatibleVariableOverri
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_visible_default = False
     _attr_icon = "mdi:camera-burst"
     _attr_name = "Capture All Cameras"
 
@@ -97,6 +98,7 @@ class VerisureCaptureButton(  # type: ignore[reportIncompatibleVariableOverride]
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_visible_default = False
     _attr_icon = "mdi:camera"
 
     def __init__(
@@ -152,6 +154,7 @@ class VerisureForceArmButton(  # type: ignore[reportIncompatibleVariableOverride
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_visible_default = False
     _attr_icon = "mdi:shield-alert"
     _attr_name = "Force Arm"
 
@@ -212,6 +215,7 @@ class VerisureForceArmCancelButton(  # type: ignore[reportIncompatibleVariableOv
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_visible_default = False
     _attr_icon = "mdi:shield-off-outline"
     _attr_name = "Cancel Force Arm"
 
