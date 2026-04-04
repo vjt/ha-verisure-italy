@@ -183,6 +183,8 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
         # Auto-select if only one
         if len(self._installations) == 1:
             inst = self._installations[0]
+            await self.async_set_unique_id(inst.number)
+            self._abort_if_unique_id_configured()
             await client.get_services(inst)
             return self._create_entry(inst)
 
@@ -191,6 +193,8 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             inst = next(
                 i for i in self._installations if i.number == number
             )
+            await self.async_set_unique_id(inst.number)
+            self._abort_if_unique_id_configured()
             await client.get_services(inst)
             return self._create_entry(inst)
 
