@@ -14,15 +14,17 @@ from homeassistant.components.alarm_control_panel.const import (
     AlarmControlPanelState,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from pydantic import ValidationError
 
 from verisure_italy import (
     OperationFailedError,
     OperationTimeoutError,
+    SessionExpiredError,
     VerisureError,
 )
 from verisure_italy.exceptions import ArmingExceptionError
@@ -105,6 +107,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         )
         coordinator.alarm_entity = self
         self._arm_lock = asyncio.Lock()
+        self._force_context_timer: CALLBACK_TYPE | None = None
         self._update_alarm_state()
 
     def _update_alarm_state(self) -> None:
@@ -130,18 +133,11 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             # don't write it again (avoids spurious state_changed events).
             return
 
-        ctx = self.coordinator.force_context
-        if ctx is not None:
+        if self.coordinator.force_context is not None:
             # Don't update alarm state while force context is active —
             # the panel reports DISARMED but we're waiting for force-arm.
-            elapsed = (
-                datetime.datetime.now(datetime.UTC) - ctx.created_at
-            ).total_seconds()
-            if elapsed > 120:
-                _LOGGER.info("Force context expired after 2 minutes")
-                self.coordinator.force_context = None
-                self._update_force_attributes()
-                self._update_alarm_state()
+            # Expiry is handled by the timer set in _set_force_context.
+            pass
         else:
             self._update_alarm_state()
 
@@ -167,9 +163,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             self.async_write_ha_state()
 
             try:
-                await self.coordinator.client.arm(
-                    self.coordinator.installation, target
-                )
+                await self._arm_with_session_recovery(target)
             except ArmingExceptionError as exc:
                 zones = ", ".join(e.alias for e in exc.exceptions)
                 _LOGGER.warning(
@@ -211,9 +205,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             self.async_write_ha_state()
 
             try:
-                await self.coordinator.client.disarm(
-                    self.coordinator.installation
-                )
+                await self._disarm_with_session_recovery()
             except (OperationFailedError, OperationTimeoutError) as exc:
                 self._update_alarm_state()
                 _LOGGER.error("Disarm failed: %s", exc.message)
@@ -231,6 +223,45 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         _LOGGER.info("Disarmed successfully")
         self._expire_force_context()
         await self.coordinator.async_request_refresh()
+
+    # --- Session recovery for arm/disarm ---
+
+    async def _arm_with_session_recovery(
+        self,
+        target: AlarmState,
+        force_arming_remote_id: str | None = None,
+        suid: str | None = None,
+    ) -> None:
+        """Arm with one retry on session expiry. Raises through on all other errors."""
+        try:
+            await self.coordinator.client.arm(
+                self.coordinator.installation,
+                target,
+                force_arming_remote_id=force_arming_remote_id,
+                suid=suid,
+            )
+        except SessionExpiredError:
+            _LOGGER.info("Session expired during arm — re-authenticating")
+            await self.coordinator.client.login()
+            await self.coordinator.client.arm(
+                self.coordinator.installation,
+                target,
+                force_arming_remote_id=force_arming_remote_id,
+                suid=suid,
+            )
+
+    async def _disarm_with_session_recovery(self) -> None:
+        """Disarm with one retry on session expiry. Raises through on all other errors."""
+        try:
+            await self.coordinator.client.disarm(
+                self.coordinator.installation
+            )
+        except SessionExpiredError:
+            _LOGGER.info("Session expired during disarm — re-authenticating")
+            await self.coordinator.client.login()
+            await self.coordinator.client.disarm(
+                self.coordinator.installation
+            )
 
     # --- Force arm ---
 
@@ -256,8 +287,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             self.async_write_ha_state()
 
             try:
-                await self.coordinator.client.arm(
-                    self.coordinator.installation,
+                await self._arm_with_session_recovery(
                     ctx.target,
                     force_arming_remote_id=ctx.reference_id,
                     suid=ctx.suid,
@@ -300,7 +330,12 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         mode: str,
         target: AlarmState,
     ) -> None:
-        """Store force-arm context from an arming exception."""
+        """Store force-arm context from an arming exception.
+
+        Starts a 120-second timer for deterministic expiry, independent
+        of poll interval.
+        """
+        self._cancel_force_context_timer()
         self.coordinator.force_context = ForceArmContext(
             reference_id=exc.reference_id,
             suid=exc.suid,
@@ -312,6 +347,31 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         self._update_force_attributes()
         self.coordinator.async_update_listeners()
 
+        def _on_force_context_expired(_now: datetime.datetime) -> None:
+            if self.coordinator.force_context is None:
+                return  # already cleared by user action
+            _LOGGER.info("Force context expired after 2 minutes")
+            self.coordinator.force_context = None
+            self._force_context_timer = None
+            self._update_force_attributes()
+            self._update_alarm_state()
+            self.coordinator.async_update_listeners()
+            # Dismiss stale notification — fire-and-forget from sync callback
+            self.hass.async_create_task(
+                self._dismiss_notification(),
+                "verisure_italy_dismiss_force_notification",
+            )
+
+        self._force_context_timer = async_call_later(
+            self.hass, 120, _on_force_context_expired
+        )
+
+    def _cancel_force_context_timer(self) -> None:
+        """Cancel the force context expiry timer if active."""
+        if self._force_context_timer is not None:
+            self._force_context_timer()
+            self._force_context_timer = None
+
     def _clear_force_context(self) -> None:
         """Clear force context and notify all entities immediately.
 
@@ -319,6 +379,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         """
         if self.coordinator.force_context is None:
             return
+        self._cancel_force_context_timer()
         self.coordinator.force_context = None
         self._update_force_attributes()
         self.coordinator.async_update_listeners()
@@ -332,6 +393,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         """
         if self.coordinator.force_context is None:
             return
+        self._cancel_force_context_timer()
         self.coordinator.force_context = None
         self._update_force_attributes()
 
