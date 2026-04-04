@@ -3,6 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
+from verisure_italy.exceptions import UnexpectedStateError
 from verisure_italy.models import (
     PROTO_TO_STATE,
     STATE_TO_COMMAND,
@@ -36,7 +37,7 @@ class TestProtoCodeParsing:
         ["Q", "C", "X", "", "d", "disarmed", "ARMED"],
     )
     def test_invalid_proto_codes_raise(self, code: str) -> None:
-        with pytest.raises(ValueError, match="Unknown proto response code"):
+        with pytest.raises(UnexpectedStateError, match="Unexpected alarm proto code"):
             parse_proto_code(code)
 
 
@@ -134,7 +135,7 @@ class TestOperationResultParsing:
             "protomResponseDate": "2026-04-02T18:00:05Z",
         }
         result = OperationResult.model_validate(raw)
-        with pytest.raises(ValueError, match="Unknown proto response code"):
+        with pytest.raises(UnexpectedStateError, match="Unexpected alarm proto code"):
             _ = result.proto_code
 
     def test_missing_required_field_raises(self) -> None:

@@ -11,6 +11,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from .exceptions import UnexpectedStateError
+
 # ---------------------------------------------------------------------------
 # Alarm state model: two axes, six valid states
 # ---------------------------------------------------------------------------
@@ -88,14 +90,11 @@ STATE_TO_PROTO: dict[AlarmState, ProtoCode] = {v: k for k, v in PROTO_TO_STATE.i
 
 
 def parse_proto_code(code: str) -> ProtoCode:
-    """Parse a proto response code. Raises ValueError on unknown codes."""
+    """Parse a proto response code. Raises UnexpectedStateError on unknown codes."""
     try:
         return ProtoCode(code)
     except ValueError:
-        raise ValueError(
-            f"Unknown proto response code {code!r}. "
-            f"Valid codes: {', '.join(c.value for c in ProtoCode)}"
-        ) from None
+        raise UnexpectedStateError(code) from None
 
 
 # ---------------------------------------------------------------------------
@@ -155,34 +154,45 @@ class Installation(BaseModel):
     phone: str
 
 
-class OperationResult(BaseModel):
-    """Result of a check-alarm-status, arm-status, or disarm-status poll.
+class _AlarmOperationBase(BaseModel):
+    """Shared base for alarm operation results.
 
-    This is the core response from any alarm state query. The protom_response
-    field contains the ProtoCode that determines the alarm state.
-
-    During WAIT (pending), most fields are null — only access proto_code,
-    alarm_state, timestamp on completed results.
+    Provides proto_code, alarm_state, and is_pending from the common
+    protom_response and res fields. Raises UnexpectedStateError on
+    unknown proto codes, never defaults.
     """
 
     res: str
     msg: str | None
-    status: str | None
+    status: str | None = None
     numinst: str | None
     protom_response: str | None = Field(alias="protomResponse")
     protom_response_data: str | None = Field(alias="protomResponseDate")
 
     @property
     def proto_code(self) -> ProtoCode:
-        """Parse protom_response into a ProtoCode. Raises ValueError if unknown or pending."""
+        """Parse protom_response into a ProtoCode. Raises if unknown or pending."""
         if self.protom_response is None:
             raise ValueError("No proto code — operation still pending")
         return parse_proto_code(self.protom_response)
 
     @property
     def alarm_state(self) -> AlarmState:
-        """Resolve to an AlarmState. Raises ValueError if proto code is unknown or pending."""
+        """Resolve to an AlarmState. Raises if proto code is unknown or pending."""
         return PROTO_TO_STATE[self.proto_code]
+
+    @property
+    def is_pending(self) -> bool:
+        """True if the operation is still in progress."""
+        return self.res == "WAIT"
+
+
+class OperationResult(_AlarmOperationBase):
+    """Result of a check-alarm-status poll.
+
+    During WAIT (pending), most fields are null — only access proto_code,
+    alarm_state, timestamp on completed results.
+    """
 
     @property
     def timestamp(self) -> datetime:
@@ -190,11 +200,6 @@ class OperationResult(BaseModel):
         if self.protom_response_data is None:
             raise ValueError("No timestamp — operation still pending")
         return datetime.fromisoformat(self.protom_response_data)
-
-    @property
-    def is_pending(self) -> bool:
-        """True if the operation is still in progress."""
-        return self.res == "WAIT"
 
 
 class ZoneException(BaseModel):
@@ -216,57 +221,18 @@ class PanelError(BaseModel):
     suid: str | None = None
 
 
-class ArmResult(BaseModel):
+class ArmResult(_AlarmOperationBase):
     """Result of an arm operation status poll."""
 
-    res: str
-    msg: str | None
-    status: str | None
-    numinst: str | None
-    protom_response: str | None = Field(alias="protomResponse")
-    protom_response_data: str | None = Field(alias="protomResponseDate")
     request_id: str | None = Field(alias="requestId")
     error: PanelError | None
 
-    @property
-    def proto_code(self) -> ProtoCode:
-        if self.protom_response is None:
-            raise ValueError("No proto code — operation still pending")
-        return parse_proto_code(self.protom_response)
 
-    @property
-    def alarm_state(self) -> AlarmState:
-        return PROTO_TO_STATE[self.proto_code]
-
-    @property
-    def is_pending(self) -> bool:
-        return self.res == "WAIT"
-
-
-class DisarmResult(BaseModel):
+class DisarmResult(_AlarmOperationBase):
     """Result of a disarm operation status poll."""
 
-    res: str
-    msg: str | None
-    numinst: str | None
-    protom_response: str | None = Field(alias="protomResponse")
-    protom_response_data: str | None = Field(alias="protomResponseDate")
     request_id: str | None = Field(alias="requestId")
     error: PanelError | None
-
-    @property
-    def proto_code(self) -> ProtoCode:
-        if self.protom_response is None:
-            raise ValueError("No proto code — operation still pending")
-        return parse_proto_code(self.protom_response)
-
-    @property
-    def alarm_state(self) -> AlarmState:
-        return PROTO_TO_STATE[self.proto_code]
-
-    @property
-    def is_pending(self) -> bool:
-        return self.res == "WAIT"
 
 
 class GeneralStatus(BaseModel):
@@ -279,14 +245,6 @@ class GeneralStatus(BaseModel):
 
 class CheckAlarmResponse(BaseModel):
     """Response from xSCheckAlarm — initiates a status check on the panel."""
-
-    res: str
-    msg: str
-    reference_id: str = Field(alias="referenceId")
-
-
-class ArmPanelResponse(BaseModel):
-    """Response from xSArmPanel — initiates an arm operation."""
 
     res: str
     msg: str

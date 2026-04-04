@@ -22,7 +22,6 @@ from .models import (
     STATE_TO_PROTO,
     AlarmState,
     ArmCommand,
-    ArmPanelResponse,
     ArmResult,
     CameraDevice,
     CheckAlarmResponse,
@@ -51,7 +50,7 @@ __all__ = [
     "APIResponseError",
     "AlarmState",
     "ArmCommand",
-    "ArmPanelResponse",
+
     "ArmResult",
     "ArmingExceptionError",
     "AuthenticationError",
