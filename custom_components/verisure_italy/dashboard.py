@@ -127,13 +127,14 @@ def _discover_entities(
                 device_id, CameraGroup(camera_entity=entry.entity_id)
             ).camera_entity = entry.entity_id
         elif entry.domain == "button":
-            if "capture_all" in entry.unique_id:
+            uid = entry.unique_id or ""
+            if uid.endswith("_capture_all"):
                 result.capture_all_entity = entry.entity_id
-            elif "force_arm_cancel" in entry.unique_id:
+            elif uid.endswith("_force_arm_cancel"):
                 result.force_arm_cancel_entity = entry.entity_id
-            elif "force_arm" in entry.unique_id:
+            elif uid.endswith("_force_arm"):
                 result.force_arm_entity = entry.entity_id
-            else:
+            elif "_capture_" in uid:
                 device_id = entry.device_id or ""
                 result.cameras.setdefault(
                     device_id, CameraGroup(camera_entity="")

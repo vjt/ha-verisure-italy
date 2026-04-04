@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import Any
 
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
@@ -18,10 +17,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from pydantic import ValidationError
 
 from verisure_italy import (
     OperationFailedError,
     OperationTimeoutError,
+    VerisureError,
 )
 from verisure_italy.exceptions import ArmingExceptionError
 from verisure_italy.models import (
@@ -33,7 +34,7 @@ from verisure_italy.models import (
 )
 
 from .const import DOMAIN
-from .coordinator import VerisureCoordinator
+from .coordinator import ForceArmContext, VerisureCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +58,12 @@ _STATE_MAP: dict[AlarmState, AlarmControlPanelState] = {
     PROTO_TO_STATE[ProtoCode.PARTIAL]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
     PROTO_TO_STATE[ProtoCode.TOTAL]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
 }
+
+# Startup assertion: _STATE_MAP must cover all PROTO_TO_STATE values
+assert _STATE_MAP.keys() == set(PROTO_TO_STATE.values()), (
+    f"_STATE_MAP keys {set(_STATE_MAP.keys())} don't match "
+    f"PROTO_TO_STATE values {set(PROTO_TO_STATE.values())}"
+)
 
 _NOTIFICATION_ID_PREFIX = f"{DOMAIN}.arming_exception"
 
@@ -100,10 +107,8 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         self._update_alarm_state()
 
     def _update_alarm_state(self) -> None:
-        """Update _attr_alarm_state from coordinator data."""
-        self._attr_alarm_state = _STATE_MAP.get(
-            self.coordinator.data.alarm_state
-        )
+        """Update _attr_alarm_state from coordinator data. Crashes on unknown state."""
+        self._attr_alarm_state = _STATE_MAP[self.coordinator.data.alarm_state]
         self._update_force_attributes()
 
     def _update_force_attributes(self) -> None:
@@ -112,9 +117,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         if ctx is not None:
             self._attr_extra_state_attributes = {
                 "force_arm_available": True,
-                "arm_exceptions": [
-                    e.alias for e in ctx["exceptions"]
-                ],
+                "arm_exceptions": [e.alias for e in ctx.exceptions],
             }
         else:
             self._attr_extra_state_attributes = {}
@@ -131,7 +134,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             # Don't update alarm state while force context is active —
             # the panel reports DISARMED but we're waiting for force-arm.
             elapsed = (
-                datetime.datetime.now() - ctx["created_at"]
+                datetime.datetime.now() - ctx.created_at
             ).total_seconds()
             if elapsed > 120:
                 _LOGGER.info("Force context expired after 2 minutes")
@@ -179,6 +182,13 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             await self._notify_operation_failed("Arm", exc.message)
             self.async_write_ha_state()
             return
+        except (VerisureError, ValidationError) as exc:
+            self._update_alarm_state()
+            msg = exc.message if isinstance(exc, VerisureError) else str(exc)
+            _LOGGER.error("Arm failed (unexpected): %s", msg)
+            await self._notify_operation_failed("Arm", msg)
+            self.async_write_ha_state()
+            return
         finally:
             self._arm_in_progress = False
 
@@ -203,6 +213,13 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             await self._notify_operation_failed("Disarm", exc.message)
             self.async_write_ha_state()
             return
+        except (VerisureError, ValidationError) as exc:
+            self._update_alarm_state()
+            msg = exc.message if isinstance(exc, VerisureError) else str(exc)
+            _LOGGER.error("Disarm failed (unexpected): %s", msg)
+            await self._notify_operation_failed("Disarm", msg)
+            self.async_write_ha_state()
+            return
         finally:
             self._arm_in_progress = False
 
@@ -219,14 +236,11 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             _LOGGER.warning("force_arm called but no force context available")
             return
 
-        target: AlarmState = ctx["target"]
-        ref_id: str = ctx["reference_id"]
-        suid: str = ctx["suid"]
-        zones = ", ".join(e.alias for e in ctx["exceptions"])
+        zones = ", ".join(e.alias for e in ctx.exceptions)
 
         _LOGGER.info(
             "Force-arming with %d bypassed zone(s): %s",
-            len(ctx["exceptions"]), zones,
+            len(ctx.exceptions), zones,
         )
 
         self._arm_in_progress = True
@@ -236,14 +250,23 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         try:
             await self.coordinator.client.arm(
                 self.coordinator.installation,
-                target,
-                force_arming_remote_id=ref_id,
-                suid=suid,
+                ctx.target,
+                force_arming_remote_id=ctx.reference_id,
+                suid=ctx.suid,
             )
         except (OperationFailedError, OperationTimeoutError) as exc:
             self._clear_force_context()
             self._update_alarm_state()
             _LOGGER.error("Force arm failed: %s", exc.message)
+            await self._notify_operation_failed("Force arm", exc.message)
+            self.async_write_ha_state()
+            return
+        except (VerisureError, ValidationError) as exc:
+            self._clear_force_context()
+            self._update_alarm_state()
+            msg = exc.message if isinstance(exc, VerisureError) else str(exc)
+            _LOGGER.error("Force arm failed (unexpected): %s", msg)
+            await self._notify_operation_failed("Force arm", msg)
             self.async_write_ha_state()
             return
         finally:
@@ -272,14 +295,14 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         target: AlarmState,
     ) -> None:
         """Store force-arm context from an arming exception."""
-        self.coordinator.force_context = {
-            "reference_id": exc.reference_id,
-            "suid": exc.suid,
-            "mode": mode,
-            "target": target,
-            "exceptions": exc.exceptions,
-            "created_at": datetime.datetime.now(),
-        }
+        self.coordinator.force_context = ForceArmContext(
+            reference_id=exc.reference_id,
+            suid=exc.suid,
+            mode=mode,
+            target=target,
+            exceptions=exc.exceptions,
+            created_at=datetime.datetime.now(),
+        )
         self._update_force_attributes()
         self.coordinator.async_update_listeners()
 

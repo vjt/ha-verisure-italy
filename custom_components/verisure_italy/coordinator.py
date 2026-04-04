@@ -6,9 +6,8 @@ import asyncio
 import base64
 import io
 import logging
-from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Protocol, runtime_checkable
 
 from aiohttp import ClientSession
 from homeassistant.config_entries import ConfigEntry
@@ -16,6 +15,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from pydantic import BaseModel, ConfigDict
 
 from verisure_italy import (
     AlarmState,
@@ -89,14 +89,36 @@ def _overlay_text(jpeg_bytes: bytes, camera_name: str, timestamp: datetime) -> b
     return buf.getvalue()
 
 
-@dataclass(frozen=True)
-class VerisureStatusData:
+class VerisureStatusData(BaseModel):
     """Data returned by the coordinator."""
+
+    model_config = ConfigDict(frozen=True)
 
     alarm_state: AlarmState
     proto_code: ProtoCode
     timestamp: str
     exceptions: list[ZoneException]
+
+
+class ForceArmContext(BaseModel):
+    """Typed context for a pending force-arm operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    reference_id: str
+    suid: str
+    mode: str
+    target: AlarmState
+    exceptions: list[ZoneException]
+    created_at: datetime
+
+
+@runtime_checkable
+class ForceArmable(Protocol):
+    """Protocol for entities that support force-arm operations."""
+
+    async def async_force_arm(self) -> None: ...
+    async def async_force_arm_cancel(self) -> None: ...
 
 
 class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
@@ -153,15 +175,26 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         self._capture_lock = asyncio.Lock()  # one capture at a time
 
         # Force-arm context — shared between alarm entity and force-arm buttons
-        self.force_context: dict[str, Any] | None = None
+        self.force_context: ForceArmContext | None = None
 
         # Set by VerisureAlarmPanel.__init__ — used by force-arm buttons
-        self.alarm_entity: Any = None
+        self.alarm_entity: ForceArmable | None = None
+
+        # Camera entity references — set by camera.async_setup_entry
+        self.camera_entities: list[object] = []
 
     async def async_shutdown(self) -> None:
-        """Close the HTTP session."""
+        """Close the HTTP session and clean up references."""
+        self.camera_entities.clear()
+        self.alarm_entity = None
         await super().async_shutdown()
         await self._session.close()
+
+    def notify_camera_entities(self) -> None:
+        """Notify camera entities that images have been updated."""
+        for entity in self.camera_entities:
+            if hasattr(entity, "refresh_from_coordinator"):
+                entity.refresh_from_coordinator()  # type: ignore[union-attr]
 
     async def _async_update_data(self) -> VerisureStatusData:
         """Poll xSStatus for current alarm state."""
@@ -244,7 +277,12 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                 for i, camera in enumerate(self.camera_devices)
             ), return_exceptions=True)
 
-            ok = sum(1 for r in results if r is True)
+            ok = 0
+            for r in results:
+                if r is True:
+                    ok += 1
+                elif isinstance(r, BaseException):
+                    _LOGGER.error("Unexpected capture error: %s", r)
             fail = len(results) - ok
             _LOGGER.info("Capture round complete: %d ok, %d failed", ok, fail)
 
@@ -353,8 +391,8 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         if full_image is not None and len(full_image) > len(
             self.camera_images.get(camera.zone_id, b"")
         ):
-            self.camera_images[camera.zone_id] = _overlay_text(
-                full_image, camera.name, timestamp
+            self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
+                _overlay_text, full_image, camera.name, timestamp
             )
             _LOGGER.info(
                 "Upgraded %s to full image: %d bytes",

@@ -18,7 +18,7 @@ from .const import (
     DEFAULT_POLL_TIMEOUT,
     DOMAIN,
 )
-from .coordinator import VerisureCoordinator
+from .coordinator import ForceArmable, VerisureCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -106,49 +106,45 @@ def _register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, "force_arm"):
         return  # Already registered
 
-    def _get_alarm_entity(call: ServiceCall):
+    def _get_alarm_entity() -> ForceArmable | None:
         """Find the alarm entity via coordinator."""
         for coordinator in hass.data[DOMAIN].values():
-            if isinstance(coordinator, VerisureCoordinator):
-                if coordinator.alarm_entity is not None:
-                    return coordinator.alarm_entity
+            if (
+                isinstance(coordinator, VerisureCoordinator)
+                and coordinator.alarm_entity is not None
+            ):
+                return coordinator.alarm_entity
         _LOGGER.error("No VerisureAlarmPanel entity found")
         return None
 
     async def async_force_arm(call: ServiceCall) -> None:
         """Handle force_arm service call."""
-        entity = _get_alarm_entity(call)
+        entity = _get_alarm_entity()
         if entity is not None:
             await entity.async_force_arm()
 
     async def async_force_arm_cancel(call: ServiceCall) -> None:
         """Handle force_arm_cancel service call."""
-        entity = _get_alarm_entity(call)
+        entity = _get_alarm_entity()
         if entity is not None:
             await entity.async_force_arm_cancel()
 
-    service_schema = vol.Schema({
-        vol.Required("entity_id"): str,
-    })
-
     hass.services.async_register(
-        DOMAIN, "force_arm", async_force_arm, schema=service_schema
+        DOMAIN, "force_arm", async_force_arm, schema=vol.Schema({}),
     )
     hass.services.async_register(
         DOMAIN, "force_arm_cancel", async_force_arm_cancel,
-        schema=service_schema,
+        schema=vol.Schema({}),
     )
 
     async def async_capture_cameras(call: ServiceCall) -> None:
         """Capture images from all cameras now."""
-        for entry_id, coordinator in hass.data[DOMAIN].items():
+        for coordinator in hass.data[DOMAIN].values():
             if isinstance(coordinator, VerisureCoordinator):
                 await coordinator.async_capture_all_cameras()
-                # Notify camera entities to refresh
-                from .camera import refresh_all_cameras
-
-                refresh_all_cameras(hass, entry_id)
+                coordinator.notify_camera_entities()
 
     hass.services.async_register(
         DOMAIN, "capture_cameras", async_capture_cameras,
+        schema=vol.Schema({}),
     )

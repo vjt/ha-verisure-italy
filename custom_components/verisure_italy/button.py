@@ -36,17 +36,19 @@ async def async_setup_entry(
 
     if coordinator.camera_devices:
         entities.append(
-            VerisureCaptureAllButton(coordinator, config_entry.entry_id),
+            VerisureCaptureAllButton(coordinator),
         )
         entities.extend(
-            VerisureCaptureButton(coordinator, camera, config_entry.entry_id)
+            VerisureCaptureButton(coordinator, camera)
             for camera in coordinator.camera_devices
         )
 
     async_add_entities(entities)
 
 
-class VerisureCaptureAllButton(ButtonEntity):  # type: ignore[reportIncompatibleVariableOverride]
+class VerisureCaptureAllButton(  # type: ignore[reportIncompatibleVariableOverride]
+    CoordinatorEntity[VerisureCoordinator], ButtonEntity
+):
     """Button to capture all cameras at once."""
 
     _attr_has_entity_name = True
@@ -56,10 +58,8 @@ class VerisureCaptureAllButton(ButtonEntity):  # type: ignore[reportIncompatible
     def __init__(
         self,
         coordinator: VerisureCoordinator,
-        entry_id: str,
     ) -> None:
-        self._coordinator = coordinator
-        self._entry_id = entry_id
+        super().__init__(coordinator)
         self._capturing = False
 
         inst = coordinator.installation
@@ -73,24 +73,24 @@ class VerisureCaptureAllButton(ButtonEntity):  # type: ignore[reportIncompatible
         """Unavailable while capture is running (grays out the tile)."""
         if self._capturing:
             return False
-        return self._coordinator.last_update_success
+        return self.coordinator.last_update_success
 
     async def async_press(self) -> None:
         """Capture all cameras sequentially."""
-        from .camera import refresh_all_cameras
-
         _LOGGER.info("Capture all cameras requested")
         self._capturing = True
         self.async_write_ha_state()
         try:
-            await self._coordinator.async_capture_all_cameras()
+            await self.coordinator.async_capture_all_cameras()
         finally:
             self._capturing = False
             self.async_write_ha_state()
-        refresh_all_cameras(self.hass, self._entry_id)
+        self.coordinator.notify_camera_entities()
 
 
-class VerisureCaptureButton(ButtonEntity):  # type: ignore[reportIncompatibleVariableOverride]
+class VerisureCaptureButton(  # type: ignore[reportIncompatibleVariableOverride]
+    CoordinatorEntity[VerisureCoordinator], ButtonEntity
+):
     """Button to trigger an on-demand camera capture."""
 
     _attr_has_entity_name = True
@@ -100,11 +100,9 @@ class VerisureCaptureButton(ButtonEntity):  # type: ignore[reportIncompatibleVar
         self,
         coordinator: VerisureCoordinator,
         camera: CameraDevice,
-        entry_id: str,
     ) -> None:
-        self._coordinator = coordinator
+        super().__init__(coordinator)
         self._camera = camera
-        self._entry_id = entry_id
         self._capturing = False
 
         inst = coordinator.installation
@@ -126,21 +124,19 @@ class VerisureCaptureButton(ButtonEntity):  # type: ignore[reportIncompatibleVar
         """Unavailable while capture is running (grays out the tile)."""
         if self._capturing:
             return False
-        return self._coordinator.last_update_success
+        return self.coordinator.last_update_success
 
     async def async_press(self) -> None:
         """Handle button press — capture a fresh image."""
-        from .camera import refresh_all_cameras
-
         _LOGGER.info("Manual capture requested for %s", self._camera.name)
         self._capturing = True
         self.async_write_ha_state()
         try:
-            await self._coordinator.capture_single_camera(self._camera)
+            await self.coordinator.capture_single_camera(self._camera)
         finally:
             self._capturing = False
             self.async_write_ha_state()
-        refresh_all_cameras(self.hass, self._entry_id)
+        self.coordinator.notify_camera_entities()
 
 
 # --- Force-arm buttons ---
@@ -177,8 +173,8 @@ class VerisureForceArmButton(  # type: ignore[reportIncompatibleVariableOverride
         ctx = self.coordinator.force_context
         if ctx is not None:
             return {
-                "open_zones": [e.alias for e in ctx["exceptions"]],
-                "mode": ctx["mode"],
+                "open_zones": [e.alias for e in ctx.exceptions],
+                "mode": ctx.mode,
             }
         return {}
 
