@@ -45,8 +45,10 @@ async def async_setup_entry(
     from .dashboard import async_register_dashboard, async_setup_dashboard
 
     async_register_dashboard(hass)
-    hass.async_create_task(
-        async_setup_dashboard(hass, entry.entry_id)
+    entry.async_create_background_task(
+        hass,
+        async_setup_dashboard(hass, entry.entry_id),
+        "verisure_italy_dashboard_setup",
     )
 
     return True

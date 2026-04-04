@@ -43,7 +43,11 @@ async def async_setup_entry(
     coordinator.camera_entities = list(entities)
 
     # Fetch existing cached thumbnails on startup (passive, no panel ping)
-    hass.async_create_task(coordinator.async_refresh_all_thumbnails())
+    config_entry.async_create_background_task(
+        hass,
+        coordinator.async_refresh_all_thumbnails(),
+        "verisure_italy_thumbnail_refresh",
+    )
 
 
 class VerisureCamera(  # type: ignore[reportIncompatibleVariableOverride]
