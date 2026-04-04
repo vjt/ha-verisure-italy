@@ -1,57 +1,141 @@
 # Example Automations
 
-Ready-to-use HA automations for the Verisure Italy integration.
+Ready-to-use automations for the Verisure Italy integration. Copy, adapt
+entity names to your setup, and paste into your `automations.yaml`.
 
-## Auto force-arm when leaving home
+> **Placeholder entities** — replace `notify.mobile_app_you` with your
+> actual notify service. Replace `person.*` and `sensor.*_room` entities
+> with yours.
 
-When arming away fails due to open zones, notify about which windows
-are open and force-arm automatically. Only triggers for `armed_away`
-(leaving home) — for `armed_home` (night mode) the dashboard Force
-Arm button lets you decide.
+---
+
+## Prerequisites
+
+### Presence sensors
+
+Several automations need to know whether anyone is home. Create these
+template binary sensors in your `configuration.yaml` (or a file included
+from it via `template: !include template.yaml`):
 
 ```yaml
-- id: alarm_auto_force_arm
-  alias: 'Alarm: auto force-arm when leaving'
+template:
+- binary_sensor:
+  - unique_id: residents_home
+    name: Residents Home
+    device_class: presence
+    state: >
+      {{ is_state('person.person1', 'home')
+         or is_state('person.person2', 'home') }}
+
+  - unique_id: anyone_home
+    name: Anyone Home
+    device_class: presence
+    state: >
+      {{ is_state('binary_sensor.residents_home', 'on') }}
+```
+
+**`residents_home`** is `on` when any resident is home. **`anyone_home`**
+wraps it so you can extend it with non-residents (e.g. a cleaning person
+tracked via a separate device tracker) without touching the alarm
+automations.
+
+> **Tip:** if you have WiFi-based presence detection (e.g.
+> [OpenWrt device trackers](https://github.com/vjt/openwrt-ha-presence)),
+> add those as extra `or` conditions for faster
+> detection than GPS-based `person` entities:
+> ```yaml
+>     state: >
+>       {{ is_state('person.person1', 'home')
+>          or is_state('person.person2', 'home')
+>          or is_state('device_tracker.person1_wifi', 'home')
+>          or is_state('device_tracker.person2_wifi', 'home') }}
+> ```
+
+---
+
+## Arm & Disarm
+
+### :rotating_light: Auto arm when leaving home
+
+Arms away when everyone has left. Requires a `binary_sensor` that
+tracks whether anyone is home (e.g. via the `group` integration,
+Bluetooth, or router-based presence detection).
+
+```yaml
+- id: alarm_arm_on_leave
+  alias: "Alarm: arm away when the last one leaves"
   triggers:
-  - trigger: event
-    event_type: verisure_italy_arming_exception
-  conditions:
-  - condition: template
-    value_template: "{{ trigger.event.data.mode == 'armed_away' }}"
+  - trigger: state
+    entity_id: binary_sensor.anyone_home
+    to: "off"
   actions:
-  - action: notify.mobile_app_you
-    data:
-      message: "Open zones: {{ trigger.event.data.zones | join(', ') }} — force-arming..."
-  - action: verisure_italy.force_arm
-    data:
+  - action: alarm_control_panel.alarm_arm_away
+    target:
       entity_id: alarm_control_panel.verisure_alarm
   mode: single
 ```
 
-## Night arm when both residents are in bedroom
+### :shield: Safety net — arm when away and disarmed
 
-Arms home when both residents are in the bedroom, between midnight
-and 7AM. Triggers at midnight if already in bed, or when the second
-person enters the bedroom.
+Catches edge cases where the primary arm-on-leave automation misses
+(e.g. HA restart, presence sensor glitch). Two triggers: reactive
+(alarm goes disarmed while nobody's home) and periodic (every 5 min).
 
-Requires room-level presence sensors (e.g. WiFi AP-based tracking
-via OpenWrt, ESPresense BLE, or mmWave sensors). Adapt the
-`sensor.*_room` entities to match your setup.
+```yaml
+- id: alarm_safety_net
+  alias: "Alarm: safety net — arm when away and disarmed"
+  description: >-
+    If nobody is home and the alarm is disarmed, arm it and notify.
+    Catches missed arm-on-leave triggers.
+  triggers:
+  - trigger: state
+    entity_id: alarm_control_panel.verisure_alarm
+    to: disarmed
+    id: reactive
+  - trigger: time_pattern
+    minutes: /5
+    id: periodic
+  conditions:
+  - condition: state
+    entity_id: binary_sensor.anyone_home
+    state: "off"
+  - condition: state
+    entity_id: alarm_control_panel.verisure_alarm
+    state: disarmed
+  actions:
+  - action: alarm_control_panel.alarm_arm_away
+    target:
+      entity_id: alarm_control_panel.verisure_alarm
+  - action: notify.mobile_app_you
+    data:
+      message: "Safety net: nobody home and alarm was disarmed — arming now"
+  mode: single
+```
+
+### :crescent_moon: Night arm when both residents are in bedroom
+
+Arms home between midnight and 7AM when both residents are in the
+bedroom. Triggers at midnight if already in bed, or when the second
+person enters.
+
+Requires room-level presence sensors (e.g. [WiFi AP-based tracking
+via OpenWrt](https://github.com/vjt/openwrt-ha-presence), ESPresense
+BLE, or mmWave sensors).
 
 ```yaml
 - id: alarm_night_arm
-  alias: 'Alarm: night arm when both in bedroom'
+  alias: "Alarm: night arm when both in bedroom"
   triggers:
   - trigger: time
-    at: '00:00:00'
+    at: "00:00:00"
   - trigger: template
     value_template: >-
       {{ states('sensor.presence_person1_room') == 'bedroom'
          and states('sensor.presence_person2_room') == 'bedroom' }}
   conditions:
   - condition: time
-    after: '00:00:00'
-    before: '07:00:00'
+    after: "00:00:00"
+    before: "07:00:00"
   - condition: state
     entity_id: alarm_control_panel.verisure_alarm
     state: disarmed
@@ -69,16 +153,16 @@ via OpenWrt, ESPresense BLE, or mmWave sensors). Adapt the
   mode: single
 ```
 
-## Morning disarm
+### :sunny: Morning disarm
 
 Disarms the alarm at 7AM if it's armed.
 
 ```yaml
 - id: alarm_morning_disarm
-  alias: 'Alarm: morning disarm'
+  alias: "Alarm: morning disarm"
   triggers:
   - trigger: time
-    at: '07:00:00'
+    at: "07:00:00"
   conditions:
   - condition: not
     conditions:
@@ -95,13 +179,47 @@ Disarms the alarm at 7AM if it's armed.
   mode: single
 ```
 
-## Alarm state change notification
+---
 
-Sends a push notification on every alarm state change.
+## Force Arm
+
+### :muscle: Auto force-arm when leaving
+
+When arming away fails due to open zones, notify about which windows
+are open and force-arm automatically. Only triggers for `armed_away`
+(leaving home) — for `armed_home` (night mode) the dashboard Force
+Arm button lets you decide.
+
+```yaml
+- id: alarm_auto_force_arm
+  alias: "Alarm: auto force-arm when leaving"
+  triggers:
+  - trigger: event
+    event_type: verisure_italy_arming_exception
+  conditions:
+  - condition: template
+    value_template: "{{ trigger.event.data.mode == 'armed_away' }}"
+  actions:
+  - action: notify.mobile_app_you
+    data:
+      message: "Open zones: {{ trigger.event.data.zones | join(', ') }} — force-arming..."
+  - action: verisure_italy.force_arm
+    data:
+      entity_id: alarm_control_panel.verisure_alarm
+  mode: single
+```
+
+---
+
+## Notifications
+
+### :loudspeaker: Alarm state change
+
+Push notification on every alarm state change.
 
 ```yaml
 - id: alarm_notify_state_change
-  alias: 'Alarm: notify state change'
+  alias: "Alarm: notify state change"
   triggers:
   - trigger: state
     entity_id: alarm_control_panel.verisure_alarm
@@ -109,6 +227,7 @@ Sends a push notification on every alarm state change.
     - disarmed
     - armed_home
     - armed_away
+    - armed_custom_bypass
   actions:
   - action: notify.mobile_app_you
     data:
@@ -116,15 +235,113 @@ Sends a push notification on every alarm state change.
   mode: single
 ```
 
-## Available event data
+### :bell: Actionable disarm notification on arrival
 
-The `verisure_italy_arming_exception` event provides:
+When someone arrives home and the alarm is armed, sends a push
+notification with a **Disarm** action button. Auto-dismissed if the
+alarm gets disarmed by other means. Runs in parallel mode so both
+residents get their own notification.
+
+```yaml
+- id: alarm_notify_disarm_on_arrival
+  alias: "Alarm: notify to disarm on arrival"
+  triggers:
+  - trigger: zone
+    entity_id:
+    - person.person1
+    - person.person2
+    zone: zone.home
+    event: enter
+  conditions:
+  - condition: not
+    conditions:
+    - condition: state
+      entity_id: alarm_control_panel.verisure_alarm
+      state: disarmed
+  actions:
+  - variables:
+      notify_target: >-
+        {% if trigger.entity_id == 'person.person1' %}
+          notify.mobile_app_person1
+        {% else %}
+          notify.mobile_app_person2
+        {% endif %}
+  - action: "{{ notify_target }}"
+    data:
+      message: Alarm is armed! Disarm?
+      data:
+        tag: alarm_disarm_prompt
+        actions:
+        - action: DISARM_ALARM
+          title: Disarm
+  - wait_for_trigger:
+    - trigger: event
+      event_type: mobile_app_notification_action
+      event_data:
+        action: DISARM_ALARM
+    - trigger: state
+      entity_id: alarm_control_panel.verisure_alarm
+      to: disarmed
+    timeout: "00:05:00"
+    continue_on_timeout: true
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: "{{ wait.trigger and wait.trigger.platform == 'event' }}"
+      sequence:
+      - action: alarm_control_panel.alarm_disarm
+        target:
+          entity_id: alarm_control_panel.verisure_alarm
+  mode: parallel
+  max: 2
+```
+
+### :warning: Unknown alarm state alert
+
+**Security-critical.** The alarm reported a state code the integration
+doesn't recognize. The alarm entity goes unavailable. Sends a critical
+push notification (bypasses Do Not Disturb on iOS).
+
+```yaml
+- id: alarm_unknown_state_alert
+  alias: "Alarm: alert on unknown state"
+  triggers:
+  - trigger: event
+    event_type: verisure_italy_unknown_state
+  actions:
+  - action: notify.mobile_app_you
+    data:
+      message: >-
+        ALARM: unknown state code "{{ trigger.event.data.proto_code }}"
+        — entity unavailable. Check the Verisure app NOW.
+      data:
+        push:
+          sound:
+            name: default
+            critical: 1
+            volume: 1.0
+  mode: single
+```
+
+---
+
+## Events Reference
+
+### `verisure_italy_arming_exception`
+
+Fired when arming is blocked by open zones.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `entity_id` | string | The alarm entity that triggered it |
-| `zones` | list[string] | Names of open zones (e.g. `["Finstudio1", "Cucina"]`) |
-| `mode` | string | Attempted arm mode (`armed_home` or `armed_away`) |
+| `entity_id` | string | The alarm entity |
+| `zones` | list | Names of open zones (e.g. `["Window Studio", "Kitchen"]`) |
+| `mode` | string | Attempted arm mode: `armed_home` or `armed_away` |
 
-The Force Arm button entity (`button.verisure_force_arm`) exposes
-`open_zones` and `mode` as state attributes when available.
+### `verisure_italy_unknown_state`
+
+Fired when the panel reports an unrecognized proto code.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `proto_code` | string | The unknown code from the panel |
+| `installation` | string | Installation number |
