@@ -52,8 +52,11 @@ timeout = 5
 testpaths = ["tests"]
 
 [tool.pyright]
-pythonVersion = "3.12"
+pythonVersion = "3.13"
 typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+include = ["verisure_italy/", "custom_components/verisure_italy/"]
 reportMissingTypeStubs = false
 
 [tool.ruff]

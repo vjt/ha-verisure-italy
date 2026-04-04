@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -163,6 +163,23 @@ class VerisureForceArmButton(  # type: ignore[reportIncompatibleVariableOverride
             identifiers={(DOMAIN, inst.number)},
         )
         self._pressing = False
+        self._update_force_attributes()
+
+    def _handle_coordinator_update(self) -> None:
+        """Update attributes from force context on every coordinator refresh."""
+        self._update_force_attributes()
+        super()._handle_coordinator_update()
+
+    def _update_force_attributes(self) -> None:
+        """Sync extra_state_attributes from current force context."""
+        ctx = self.coordinator.force_context
+        if ctx is not None:
+            self._attr_extra_state_attributes = {
+                "open_zones": [e.alias for e in ctx.exceptions],
+                "mode": ctx.mode,
+            }
+        else:
+            self._attr_extra_state_attributes = {}
 
     @property
     def available(self) -> bool:  # type: ignore[override]
@@ -170,17 +187,6 @@ class VerisureForceArmButton(  # type: ignore[reportIncompatibleVariableOverride
         if self._pressing:
             return False
         return self.coordinator.force_context is not None
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Show which zones are being bypassed."""
-        ctx = self.coordinator.force_context
-        if ctx is not None:
-            return {
-                "open_zones": [e.alias for e in ctx.exceptions],
-                "mode": ctx.mode,
-            }
-        return {}
 
     async def async_press(self) -> None:
         """Execute force-arm via the alarm entity."""
