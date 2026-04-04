@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from homeassistant.components import frontend
-from homeassistant.components.lovelace.dashboard import LovelaceStorage
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
@@ -62,11 +61,14 @@ def async_register_dashboard(hass: HomeAssistant) -> None:
 
 def async_unregister_dashboard(hass: HomeAssistant) -> None:
     """Remove the Verisure panel from the sidebar."""
-    frontend.async_remove_panel(hass, DASHBOARD_URL)
-    lovelace_data = hass.data.get(LOVELACE_DATA)
-    if lovelace_data is not None:
-        lovelace_data.dashboards.pop(DASHBOARD_URL, None)
-    _LOGGER.debug("Unregistered panel '%s'", DASHBOARD_URL)
+    try:
+        frontend.async_remove_panel(hass, DASHBOARD_URL)
+        lovelace_data = hass.data.get(LOVELACE_DATA)
+        if lovelace_data is not None:
+            lovelace_data.dashboards.pop(DASHBOARD_URL, None)
+        _LOGGER.debug("Unregistered panel '%s'", DASHBOARD_URL)
+    except Exception:
+        _LOGGER.exception("Dashboard cleanup failed — ignoring")
 
 
 async def async_setup_dashboard(
@@ -75,9 +77,40 @@ async def async_setup_dashboard(
 ) -> None:
     """Create and populate the Verisure dashboard.
 
-    Creates a LovelaceStorage instance for the dashboard if it doesn't
-    exist, then writes the card config based on discovered entities.
+    Uses HA Lovelace internals (LovelaceStorage) — these are NOT public API
+    and may break on HA updates. Wrapped in try/except so dashboard failure
+    never prevents the integration from loading.
     """
+    try:
+        await _setup_dashboard_internal(hass, config_entry_id)
+    except Exception:
+        _LOGGER.exception(
+            "Dashboard setup failed — Lovelace internals may have changed. "
+            "The integration works fine without the dashboard. "
+            "Report this at https://github.com/vjt/ha-verisure-italy/issues"
+        )
+        await hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "message": (
+                    "Verisure dashboard setup failed — likely due to a Home Assistant "
+                    "update changing Lovelace internals. The alarm and cameras work "
+                    "normally. Check logs for details."
+                ),
+                "title": "Verisure Italy — Dashboard Error",
+                "notification_id": "verisure_italy.dashboard_error",
+            },
+        )
+
+
+async def _setup_dashboard_internal(
+    hass: HomeAssistant,
+    config_entry_id: str,
+) -> None:
+    """Internal dashboard setup — may raise on HA Lovelace changes."""
+    from homeassistant.components.lovelace.dashboard import LovelaceStorage
+
     lovelace_data = hass.data.get(LOVELACE_DATA)
     if lovelace_data is None:
         _LOGGER.debug("Lovelace not loaded, skipping dashboard setup")
