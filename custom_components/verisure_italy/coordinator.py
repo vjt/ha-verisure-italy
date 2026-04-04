@@ -6,7 +6,7 @@ import asyncio
 import base64
 import io
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Protocol, runtime_checkable
 
 from homeassistant.config_entries import ConfigEntry
@@ -346,7 +346,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             )
             return False
 
-        now = datetime.now(tz=UTC)
+        now = datetime.now()  # local time — displayed on camera overlay
         self.camera_timestamps[camera.zone_id] = now.isoformat()
         self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
             _overlay_text, image_bytes, camera.name, now
@@ -435,10 +435,10 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             try:
                 ts = datetime.fromisoformat(thumbnail.timestamp)
             except ValueError:
-                ts = datetime.now(tz=UTC)
+                ts = datetime.now()  # local time for overlay
             self.camera_timestamps[camera.zone_id] = thumbnail.timestamp
         else:
-            ts = datetime.now(tz=UTC)
+            ts = datetime.now()  # local time for overlay
             self.camera_timestamps[camera.zone_id] = ts.isoformat()
 
         self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
