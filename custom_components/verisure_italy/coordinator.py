@@ -200,6 +200,47 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         for entity in self.camera_entities:
             entity.refresh_from_coordinator()
 
+    # --- Arm / Disarm (with session recovery) ---
+
+    async def async_arm(
+        self,
+        target: AlarmState,
+        force_arming_remote_id: str | None = None,
+        suid: str | None = None,
+    ) -> None:
+        """Arm the alarm with one retry on session expiry.
+
+        Raises ArmingExceptionError, OperationFailedError,
+        OperationTimeoutError, or VerisureError through to the caller.
+        """
+        try:
+            await self.client.arm(
+                self.installation, target,
+                force_arming_remote_id=force_arming_remote_id,
+                suid=suid,
+            )
+        except SessionExpiredError:
+            _LOGGER.info("Session expired during arm — re-authenticating")
+            await self.client.login()
+            await self.client.arm(
+                self.installation, target,
+                force_arming_remote_id=force_arming_remote_id,
+                suid=suid,
+            )
+
+    async def async_disarm(self) -> None:
+        """Disarm the alarm with one retry on session expiry.
+
+        Raises OperationFailedError, OperationTimeoutError,
+        or VerisureError through to the caller.
+        """
+        try:
+            await self.client.disarm(self.installation)
+        except SessionExpiredError:
+            _LOGGER.info("Session expired during disarm — re-authenticating")
+            await self.client.login()
+            await self.client.disarm(self.installation)
+
     async def _async_update_data(self) -> VerisureStatusData:
         """Poll xSStatus for current alarm state."""
         try:

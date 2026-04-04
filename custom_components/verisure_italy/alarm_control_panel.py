@@ -24,7 +24,6 @@ from pydantic import ValidationError
 from verisure_italy import (
     OperationFailedError,
     OperationTimeoutError,
-    SessionExpiredError,
     VerisureError,
 )
 from verisure_italy.exceptions import ArmingExceptionError
@@ -159,7 +158,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             self.async_write_ha_state()
 
             try:
-                await self._arm_with_session_recovery(target)
+                await self.coordinator.async_arm(target)
             except ArmingExceptionError as exc:
                 zones = ", ".join(e.alias for e in exc.exceptions)
                 _LOGGER.warning(
@@ -204,7 +203,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             self.async_write_ha_state()
 
             try:
-                await self._disarm_with_session_recovery()
+                await self.coordinator.async_disarm()
             except (OperationFailedError, OperationTimeoutError) as exc:
                 self._update_alarm_state()
                 _LOGGER.error("Disarm failed: %s", exc.message)
@@ -222,45 +221,6 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         _LOGGER.info("Disarmed successfully")
         self._expire_force_context()
         await self.coordinator.async_request_refresh()
-
-    # --- Session recovery for arm/disarm ---
-
-    async def _arm_with_session_recovery(
-        self,
-        target: AlarmState,
-        force_arming_remote_id: str | None = None,
-        suid: str | None = None,
-    ) -> None:
-        """Arm with one retry on session expiry. Raises through on all other errors."""
-        try:
-            await self.coordinator.client.arm(
-                self.coordinator.installation,
-                target,
-                force_arming_remote_id=force_arming_remote_id,
-                suid=suid,
-            )
-        except SessionExpiredError:
-            _LOGGER.info("Session expired during arm — re-authenticating")
-            await self.coordinator.client.login()
-            await self.coordinator.client.arm(
-                self.coordinator.installation,
-                target,
-                force_arming_remote_id=force_arming_remote_id,
-                suid=suid,
-            )
-
-    async def _disarm_with_session_recovery(self) -> None:
-        """Disarm with one retry on session expiry. Raises through on all other errors."""
-        try:
-            await self.coordinator.client.disarm(
-                self.coordinator.installation
-            )
-        except SessionExpiredError:
-            _LOGGER.info("Session expired during disarm — re-authenticating")
-            await self.coordinator.client.login()
-            await self.coordinator.client.disarm(
-                self.coordinator.installation
-            )
 
     # --- Force arm ---
 
@@ -286,7 +246,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             self.async_write_ha_state()
 
             try:
-                await self._arm_with_session_recovery(
+                await self.coordinator.async_arm(
                     ctx.target,
                     force_arming_remote_id=ctx.reference_id,
                     suid=ctx.suid,
