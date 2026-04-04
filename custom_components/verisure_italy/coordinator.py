@@ -243,6 +243,10 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         proto = parse_proto_code(status.status)
         alarm_state = PROTO_TO_STATE[proto]
 
+        # Keep the client's currentStatus in sync with passive polls,
+        # so the first arm/disarm after startup sends the real proto code.
+        self.client.set_last_proto(status.status)
+
         return VerisureStatusData(
             alarm_state=alarm_state,
             proto_code=proto,

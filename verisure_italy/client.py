@@ -179,6 +179,14 @@ class VerisureClient:
         if delay is not None:
             self._poll_delay = delay
 
+    def set_last_proto(self, proto_code: str) -> None:
+        """Set last known proto code from external polling (e.g. coordinator).
+
+        Ensures arm/disarm commands send correct currentStatus from the
+        first operation after startup, not an empty string.
+        """
+        self._last_proto = proto_code
+
     # -------------------------------------------------------------------
     # HTTP transport — returns raw response text, never dicts
     # -------------------------------------------------------------------
