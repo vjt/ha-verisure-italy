@@ -24,26 +24,26 @@ pip install -e ".[dev]"
 ```
 ha-verisure-italy/
 ├── verisure_italy/          # API client library (published to PyPI)
-│   ├── client.py            # VerisureClient — all API operations (1227 LOC)
-│   ├── models.py            # Pydantic models — the type boundary (431 LOC)
+│   ├── client.py            # VerisureClient — all API operations
+│   ├── models.py            # Pydantic models — the type boundary
 │   ├── exceptions.py        # One exception per failure mode
 │   ├── graphql.py           # GraphQL query/mutation strings
 │   └── responses.py         # Response envelope parsing
 │
 ├── custom_components/
 │   └── verisure_italy/      # HA integration (installed via HACS)
-│       ├── coordinator.py   # Polling + shared state (408 LOC)
-│       ├── alarm_control_panel.py  # Alarm entity + force-arm (359 LOC)
-│       ├── config_flow.py   # Config + options + reconfigure (384 LOC)
-│       ├── dashboard.py     # Auto-managed Lovelace panel (267 LOC)
-│       ├── button.py        # Capture + force-arm buttons (232 LOC)
-│       └── camera.py        # Camera entities (114 LOC)
+│       ├── coordinator.py   # Polling + shared state
+│       ├── alarm_control_panel.py  # Alarm entity + force-arm
+│       ├── config_flow.py   # Config + options + reconfigure
+│       ├── dashboard.py     # Auto-managed Lovelace panel
+│       ├── button.py        # Capture + force-arm buttons
+│       └── camera.py        # Camera entities
 │
 ├── tests/                   # pytest test suite
-│   ├── test_client.py       # Client integration tests (1035 LOC)
-│   ├── test_camera.py       # Camera model + capture tests (717 LOC)
-│   ├── test_architecture.py # AST-enforced type constraints (244 LOC)
-│   ├── test_models.py       # Pydantic model tests (211 LOC)
+│   ├── test_client.py       # Client integration tests
+│   ├── test_camera.py       # Camera model + capture tests
+│   ├── test_architecture.py # AST-enforced type constraints
+│   ├── test_models.py       # Pydantic model tests
 │   └── test_state_mapping.py
 │
 ├── scripts/
