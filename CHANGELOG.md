@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.7.0 — 2026-04-04
+
+Security hardening, type safety, HA pattern fixes from full codebase review.
+
+### Added
+- **Reauth flow** — HA-initiated credential refresh on `ConfigEntryAuthFailed`, with full 2FA support. No more "remove and re-add" when credentials expire
+- `ForceArmContext` Pydantic model — typed force-arm state replaces `dict[str, Any]` across coordinator, alarm entity, and buttons
+- `ForceArmable` Protocol — typed `alarm_entity` back-reference replaces `Any`
+- `_AlarmOperationBase` base class — eliminates triplicated `proto_code`/`alarm_state`/`is_pending` properties
+- Startup assertion that `_STATE_MAP` covers all `PROTO_TO_STATE` values
+- `asyncio.gather` exception logging in parallel camera capture
+
+### Changed
+- `parse_proto_code` raises `UnexpectedStateError` (was `ValueError` — the coordinator catch was dead code)
+- `_STATE_MAP[]` crash-loud on unknown alarm states (was `.get()` returning `None`)
+- Arm/disarm/force-arm catch all `VerisureError` + `ValidationError` with state recovery and persistent notification (was missing `APIConnectionError`, `WAFBlockedError`, `SessionExpiredError`)
+- `_overlay_text` dispatched via `async_add_executor_job` in `_try_full_image` (was blocking event loop)
+- Camera entities and capture buttons inherit `CoordinatorEntity` for proper availability tracking
+- Module-level `_CAMERA_ENTITIES` global replaced with `coordinator.camera_entities`
+- `VerisureStatusData` converted from `@dataclass` to Pydantic `BaseModel`
+- All JWT/auth datetime comparisons use UTC-aware timestamps
+- `check_request_images_status` raises `OperationFailedError` on ERROR response (was treating it as "done")
+- `_check_graphql_errors` catch-all for unrecognized GraphQL errors (was silently swallowed)
+- Dashboard entity matching uses `endswith()` instead of fragile substring contains
+- Service schemas cleaned up (removed unused `entity_id` parameter)
+
+### Removed
+- Dead `ArmPanelResponse` model (never used, `ArmPanelEnvelope` had its own inline result)
+
 ## 0.6.0 — 2026-04-04
 
 Force-arm UX, reconfigure flow, state management overhaul.
