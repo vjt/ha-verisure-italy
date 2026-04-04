@@ -1,5 +1,5 @@
 ---
-name: deploy
+name: verisure-deploy
 description: Full deploy pipeline — test, typecheck, deploy to HAOS, smoke test
 ---
 

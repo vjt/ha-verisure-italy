@@ -1,5 +1,5 @@
 ---
-name: investigate
+name: verisure-investigate
 description: Structured investigation — HA logs, API trace, code trace. No code changes until approved.
 ---
 

@@ -1,6 +1,6 @@
 ---
-name: review
-description: Dispatch parallel codebase review agents per docs/reviewing.md
+name: verisure-review
+description: Dispatch 8 parallel agents for full codebase review (line-level + architecture)
 ---
 
 Run a full codebase review. No argument needed — this project is small
@@ -93,7 +93,6 @@ Severity: CRITICAL (blocks correctness/safety), HIGH (maintenance burden), MEDIU
 3. **Trajectory review**: answer: what did we build, does it serve the
    mission (replace Verisure app with HA), what's missing, risk check,
    and a 2-3 sentence direction recommendation.
-   See Trajectory Review section below.
 4. Compile into: `docs/reviews/YYYY-MM-DD-codebase-review.md`
 5. Summary table: severity counts by agent scope.
 6. Present top findings + trajectory to user.
