@@ -27,7 +27,7 @@ LOVELACE_DATA = "lovelace"
 class CameraGroup:
     """A camera device with its associated entities."""
 
-    camera_entity: str
+    camera_entity: str | None = None
     capture_entity: str | None = None
 
 
@@ -170,7 +170,7 @@ def _discover_entities(
             elif "_capture_" in uid:
                 device_id = entry.device_id or ""
                 result.cameras.setdefault(
-                    device_id, CameraGroup(camera_entity="")
+                    device_id, CameraGroup()
                 ).capture_entity = entry.entity_id
 
     return result
@@ -182,9 +182,9 @@ def _build_config(entities: DashboardEntities) -> dict[str, Any]:
 
     camera_cards: list[dict[str, Any]] = []
     for group in sorted(
-        entities.cameras.values(), key=lambda g: g.camera_entity
+        entities.cameras.values(), key=lambda g: g.camera_entity or ""
     ):
-        if not group.camera_entity:
+        if group.camera_entity is None:
             continue
 
         stack: list[dict[str, Any]] = [
