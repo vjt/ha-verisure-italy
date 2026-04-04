@@ -82,5 +82,5 @@ select = [
 # HA integration uses `from __future__ import annotations` which makes ruff
 # think all type annotations are type-checking-only. They're not — HomeAssistant,
 # ConfigEntry, etc. are runtime function parameters.
-"custom_components/**/*.py" = ["TCH002"]
+"custom_components/**/*.py" = ["TCH001", "TCH002"]
 "scripts/**/*.py" = ["T201"]

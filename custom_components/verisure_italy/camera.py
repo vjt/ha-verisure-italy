@@ -6,12 +6,12 @@ import logging
 from typing import TYPE_CHECKING
 
 from homeassistant.components.camera import Camera
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from . import VerisureConfigEntry
 from .const import (
     DOMAIN,
 )
@@ -25,11 +25,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: VerisureConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up camera entities from config entry."""
-    coordinator: VerisureCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator = config_entry.runtime_data
 
     if not coordinator.camera_devices:
         _LOGGER.debug("No camera devices found, skipping camera setup")

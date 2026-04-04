@@ -13,7 +13,6 @@ from homeassistant.components.alarm_control_panel.const import (
     AlarmControlPanelEntityFeature,
     AlarmControlPanelState,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -35,6 +34,7 @@ from verisure_italy.models import (
     ProtoCode,
 )
 
+from . import VerisureConfigEntry
 from .const import DOMAIN
 from .coordinator import ForceArmContext, VerisureCoordinator
 
@@ -72,11 +72,11 @@ _NOTIFICATION_ID_PREFIX = f"{DOMAIN}.arming_exception"
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: VerisureConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the alarm control panel from a config entry."""
-    coordinator: VerisureCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator = config_entry.runtime_data
     async_add_entities([VerisureAlarmPanel(coordinator)])
 
 

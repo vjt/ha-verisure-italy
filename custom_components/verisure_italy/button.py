@@ -6,13 +6,13 @@ import logging
 from typing import TYPE_CHECKING
 
 from homeassistant.components.button import ButtonEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from . import VerisureConfigEntry
 from .const import DOMAIN
 from .coordinator import VerisureCoordinator
 
@@ -24,11 +24,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: VerisureConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up button entities from config entry."""
-    coordinator: VerisureCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator = config_entry.runtime_data
 
     entities: list[ButtonEntity] = [
         VerisureForceArmButton(coordinator),
