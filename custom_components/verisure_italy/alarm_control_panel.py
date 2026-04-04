@@ -306,7 +306,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         self._update_force_attributes()
         self.coordinator.async_update_listeners()
 
-        def _on_force_context_expired(_now: datetime.datetime) -> None:
+        async def _async_expire_force_context() -> None:
             if self.coordinator.force_context is None:
                 return  # already cleared by user action
             _LOGGER.info("Force context expired after 2 minutes")
@@ -314,11 +314,14 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             self._force_context_timer = None
             self._update_force_attributes()
             self._update_alarm_state()
+            self.async_write_ha_state()
             self.coordinator.async_update_listeners()
-            # Dismiss stale notification — fire-and-forget from sync callback
+            await self._dismiss_notification()
+
+        def _on_force_context_expired(_now: datetime.datetime) -> None:
             self.hass.async_create_task(
-                self._dismiss_notification(),
-                "verisure_italy_dismiss_force_notification",
+                _async_expire_force_context(),
+                "verisure_italy_expire_force_context",
             )
 
         self._force_context_timer = async_call_later(
