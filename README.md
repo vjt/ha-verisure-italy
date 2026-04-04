@@ -100,20 +100,29 @@ is unloaded.
 
 ## Force Arm
 
-When arming fails because a zone is open (e.g. a window), the
-integration detects the exception and:
+A forgotten open window shouldn't leave your house unprotected.
+Verisure panels refuse to arm when a zone is open — but an unarmed
+alarm is worse than an armed one with exceptions. This integration
+detects the blocked arming and lets you force-arm with one tap,
+or automate it entirely so leaving the house always arms the alarm.
 
-1. Shows a persistent notification listing the open zones
+When arming fails because a zone is open, the integration:
+
+1. Shows an alert banner on the dashboard listing the open zones
 2. Fires a `verisure_italy_arming_exception` event (for automations)
-3. Makes the **Force Arm** and **Cancel Force Arm** buttons available
-   on the dashboard
+3. Makes the **Force Arm** and **Cancel** buttons available
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/vjt/ha-verisure-italy/master/docs/screenshots/08-force-arm.png" alt="Force Arm dashboard" width="500">
+</p>
 
 Tap **Force Arm** to arm anyway, bypassing the open zones. Tap
-**Cancel** to abort and revert to disarmed. The buttons disappear
-automatically once used or after 2 minutes.
+**Cancel** to abort. The buttons disappear automatically once
+used or after 2 minutes.
 
-The force arm button exposes `open_zones` and `mode` as state
-attributes, usable in automations and templates.
+For full automation, use the [auto force-arm example](docs/automations.md#muscle-auto-force-arm-when-leaving)
+to bypass open zones automatically when leaving home — no manual
+intervention needed.
 
 > **Note:** Force arm requires an **administrator** API user.
 > A restricted user will arm regardless of open zones without
