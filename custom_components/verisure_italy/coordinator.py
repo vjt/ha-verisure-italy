@@ -218,6 +218,26 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             raise UpdateFailed(err.message) from err
         except UnexpectedStateError as err:
             _LOGGER.error("Unexpected alarm state: %s", err.proto_code)
+            await self.hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "message": (
+                        f"Your alarm reported unknown state code: **{err.proto_code}**. "
+                        f"The alarm entity is now unavailable. "
+                        f"Verify your alarm status through the Verisure app immediately."
+                    ),
+                    "title": "Verisure Italy — Unknown Alarm State",
+                    "notification_id": f"{DOMAIN}.unknown_state",
+                },
+            )
+            self.hass.bus.async_fire(
+                f"{DOMAIN}_unknown_state",
+                {
+                    "proto_code": err.proto_code,
+                    "installation": self.installation.number,
+                },
+            )
             raise UpdateFailed(err.message) from err
         except ValidationError as err:
             raise UpdateFailed(
