@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Config flow skips 2FA when device is already validated (was stuck on empty phone list)
+- `asyncio.Lock` guards concurrent arm/disarm/force-arm (was boolean flag — race condition on conflicting commands)
+- `ValidationError` and `TwoFactorRequiredError` caught in coordinator polling (was unhandled traceback)
+- Use HA's shared `ClientSession` instead of standalone sessions (session leak on abandoned config flows)
+- Dashboard setup wrapped in try/except with persistent notification on failure (Lovelace internals breakage no longer crashes integration)
+- Disarm status poll preserves error codes from panel (was discarded during `OperationResult` conversion)
+- Camera overlay timestamps use local time, not UTC (display values should be human-readable)
+
 ## 0.7.0 — 2026-04-04
 
 Security hardening, type safety, HA pattern fixes from full codebase review.
