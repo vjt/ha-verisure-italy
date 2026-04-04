@@ -24,7 +24,10 @@ convenience.
 - **Python 3.12**, async (aiohttp)
 - **Pydantic** for all models
 - **pytest** — `pytest tests/ -x -q`
-- **pyright** — strict mode
+- **pyright** — strict mode, `include` limits to project sources only.
+  Runs in ~14s. Do NOT run without `include` — analyzing the full
+  venv (homeassistant + deps) takes 30+ min on the Pi.
+- **`./scripts/check.sh`** — chains pyright + pytest + ruff
 - **ruff** — linter + formatter
 
 ## Engineering Standards
@@ -70,6 +73,13 @@ convenience.
   before implementing: "Returns X or raises Y."
 
 ### Architecture
+- **Entity registry caches attributes.** Changing `entity_category`,
+  `entity_registry_visible_default`, etc. in code does NOT update
+  existing entities. Must delete + re-register, or update via the
+  websocket API (`config/entity_registry/update`).
+- **HA 2026.4+ thread safety.** Callbacks from `async_call_later`
+  must not call `async_write_ha_state` or `async_update_listeners`
+  directly. Dispatch via `hass.async_create_task()`.
 - **Constructor injection.** No global state, no singletons.
 - **No leaky abstractions.** Each layer owns its domain. Return
   domain types, not strings/dicts callers parse.
@@ -145,5 +155,9 @@ Unknown proto codes are errors, not defaults.
 - SSH to HA container: `ssh hassio@homeassistant` (no scp, tar over ssh)
 - Deploy path: `/mnt/data/supervisor/homeassistant/custom_components/`
   via root SSH (files are root-owned, hassio can't write)
+- Client library path (inside HA Docker container):
+  `/usr/local/lib/python3.14/site-packages/verisure_italy/`
+  Deploy via: `ssh root@homeassistant -p 22222 "docker exec -i homeassistant sh -c 'cat > /usr/local/lib/...'" < file`
+  Python version in path may change with HA updates.
 - Reload: `ha core restart` via root SSH, or better: reload integration
   via HA API
