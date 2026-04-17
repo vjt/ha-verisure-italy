@@ -573,6 +573,47 @@ class TestListInstallations:
         assert inst.panel == "SDVECU"
         assert inst.alias == "Casa"
 
+    async def test_null_metadata_fields_accepted(self, mock_api, client):
+        """Verisure returns ``null`` for metadata fields on some installations.
+
+        Issue #2: ``name`` came back null and crashed setup. Pre-empt all
+        non-load-bearing metadata fields (``name``, ``surname``, ``address``,
+        ``city``, ``postcode``, ``province``, ``email``, ``phone``,
+        ``type``) — only ``number``, ``panel``, ``alias`` are required.
+        """
+        _authenticate(client)
+        body = json.dumps({
+            "data": {
+                "xSInstallations": {
+                    "installations": [{
+                        "number": "1234567",
+                        "alias": "Casa",
+                        "panel": "SDVECU",
+                        "type": None,
+                        "name": None,
+                        "surname": None,
+                        "address": None,
+                        "city": None,
+                        "postcode": None,
+                        "province": None,
+                        "email": None,
+                        "phone": None,
+                    }]
+                }
+            }
+        })
+        mock_api.post(API_URL, body=body)
+
+        installations = await client.list_installations()
+
+        assert len(installations) == 1
+        inst = installations[0]
+        assert inst.number == "1234567"
+        assert inst.alias == "Casa"
+        assert inst.name is None
+        assert inst.surname is None
+        assert inst.email is None
+
 
 class TestGetServices:
     async def test_returns_services(self, mock_api, client):

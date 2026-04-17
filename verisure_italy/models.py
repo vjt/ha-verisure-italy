@@ -140,18 +140,21 @@ class Installation(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+    # Load-bearing — code uses these for API calls + UI.
     number: str = Field(alias="numinst")
     alias: str
     panel: str
-    type: str
-    name: str
-    surname: str
-    address: str
-    city: str
-    postcode: str
-    province: str
-    email: str
-    phone: str
+    # Metadata — never read by code, soften so Verisure schema drift
+    # (any of these arriving as null) doesn't crash setup. Issue #2.
+    type: str | None = None
+    name: str | None = None
+    surname: str | None = None
+    address: str | None = None
+    city: str | None = None
+    postcode: str | None = None
+    province: str | None = None
+    email: str | None = None
+    phone: str | None = None
 
 
 class _AlarmOperationBase(BaseModel):
