@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.2 — 2026-04-17
+
+Bugfix release — config flow resilience (continued).
+
+### Fixes
+- **`Installation` metadata fields accept null** ([#2](https://github.com/vjt/ha-verisure-italy/issues/2)) — Verisure returns `null` for optional installation fields (`name`, `surname`, `address`, `city`, `postcode`, `province`, `email`, `phone`, `type`), crashing the config flow with Pydantic `string_type` errors when picking among multiple installations. These nine fields are pure metadata — the integration only reads `number`, `panel`, `alias` — so they are now `str | None`. The three load-bearing fields stay strict.
+
 ## 0.8.1 — 2026-04-17
 
 Bugfix release — config flow resilience.
