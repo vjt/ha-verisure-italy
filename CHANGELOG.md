@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1 — 2026-04-17
+
+Bugfix release — config flow resilience.
+
+### Fixes
+- **`RawDevice.is_active` accepts null** ([#1](https://github.com/vjt/ha-verisure-italy/issues/1)) — Verisure started returning `isActive: null` for some devices in `xSDeviceList`, breaking setup with a Pydantic `bool_type` validation error. Field is now `bool | None`. Camera filter changed to only skip explicit `False` (null devices treated as active), matching the upstream [guerrerotook/securitas-direct-new-api](https://github.com/guerrerotook/securitas-direct-new-api) behavior — three years of Spain traffic beats our guess.
+
 ## 0.8.0 — 2026-04-04
 
 Full codebase review (8 parallel agents, 43 findings). All HIGH and MEDIUM items resolved. Clean pyright (0 errors, 14 seconds). 165 tests.
