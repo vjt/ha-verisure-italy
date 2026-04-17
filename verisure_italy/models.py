@@ -321,7 +321,7 @@ class RawDevice(BaseModel):
     zone_id: str | None = Field(None, alias="zoneId")
     name: str
     device_type: str = Field(alias="type")
-    is_active: bool = Field(alias="isActive")
+    is_active: bool | None = Field(alias="isActive")
     serial_number: str | None = Field(None, alias="serialNumber")
 
 

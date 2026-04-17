@@ -999,7 +999,9 @@ class VerisureClient:
         for raw in raw_devices:
             if raw.device_type not in CAMERA_DEVICE_TYPES:
                 continue
-            if not raw.is_active:
+            # Only explicit False filters. `null` = active per upstream
+            # guerrerotook/securitas-direct-new-api.
+            if raw.is_active is False:
                 continue
 
             if not raw.code.isdigit():

@@ -137,6 +137,23 @@ class TestCameraModels:
         raw = RawDevice.model_validate(data)
         assert raw.zone_id is None
 
+    def test_raw_device_null_is_active(self) -> None:
+        """Verisure returns ``isActive: null`` on some devices (issue #1).
+
+        Parse must not crash; filter treats ``None`` as inactive.
+        """
+        data = {
+            "id": "cam3",
+            "code": "7",
+            "zoneId": "QR07",
+            "name": "Mystery Device",
+            "type": "QR",
+            "isActive": None,
+            "serialNumber": None,
+        }
+        raw = RawDevice.model_validate(data)
+        assert raw.is_active is None
+
     def test_camera_device_frozen(self) -> None:
         cam = CameraDevice(
             id="cam1",
@@ -438,6 +455,32 @@ class TestListCameraDevices:
         cameras = await client.list_camera_devices(INSTALLATION)
         assert len(cameras) == 1
         assert cameras[0].name == "Active"
+
+    @pytest.mark.asyncio
+    async def test_null_is_active_is_included(
+        self, client: VerisureClient, mock_api: aioresponses
+    ) -> None:
+        """Verisure returns ``isActive: null`` for real devices (issue #1).
+
+        Only explicit ``False`` filters — matches upstream
+        guerrerotook/securitas-direct-new-api behavior.
+        """
+        response = {
+            "data": {
+                "xSDeviceList": {
+                    "res": "OK",
+                    "devices": [{
+                        "id": "cam1", "code": "5", "zoneId": "QR05",
+                        "name": "Null-Active Camera", "type": "QR",
+                        "isActive": None, "serialNumber": None,
+                    }],
+                }
+            }
+        }
+        mock_api.post(API_URL, payload=response)
+        cameras = await client.list_camera_devices(INSTALLATION)
+        assert len(cameras) == 1
+        assert cameras[0].name == "Null-Active Camera"
 
     @pytest.mark.asyncio
     async def test_constructs_zone_id_when_null(
