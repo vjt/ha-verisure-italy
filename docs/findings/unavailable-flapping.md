@@ -2,16 +2,26 @@
 
 ## Symptoms
 
-Two distinct failure modes observed on 2026-04-20:
+Three distinct failure modes observed on 2026-04-20:
 
 **A. Brief flapping (~8×/day)**: `alarm_control_panel.verisure_alarm`
 transitions to `unavailable` for a single poll tick (~5s), recovers
-next tick. Annoying but survivable.
+next tick. Annoying but survivable. **Fixed in v0.8.4.**
 
 **B. Multi-hour sticky outage**: on 2026-04-20, alarm was unavailable
 from 10:11 UTC to 16:04 UTC (~6h). Integration completely dormant —
 zero `verisure_italy` log lines in the gap. Recovery required a
-manual HA core restart. **Unacceptable for security software.**
+manual HA core restart. **Unacceptable for security software. Fixed
+in v0.8.4.**
+
+**C. Stale capabilities loop**: on 2026-04-20 21:07 UTC, alarm went
+unavailable and every subsequent 5s poll raised `SessionExpiredError`
+from the `Status` operation. The coordinator's `except
+SessionExpiredError` handler called `login()` and retried, but the
+retry kept hitting `SessionExpiredError` too — so the error escaped
+all handlers and logged as "Unexpected error fetching
+verisure_italy data" on every tick. Integration cycled in this state
+until a manual restart. **Fixed in v0.8.5.**
 
 ## Root cause
 
@@ -56,6 +66,41 @@ Verisure's backend is visibly flaky — logs show ~8 `ECONNRESET` /
 `verisureservicesecuritylayer-svc.owa-ns` (their Kubernetes
 namespace name leaks in error messages). Each of these briefly
 flags our entity unavailable.
+
+### Mode C — stale capabilities loop
+
+The Verisure API uses **two separate JWTs per authenticated call**:
+`_auth_token` (from `login()`) and `_capabilities[installation]`
+(from `get_services()`). Both are load-bearing: any authenticated
+operation sends both, and the server rejects the call if either one
+is invalid — returning a 403 that `_check_graphql_errors` maps to
+`SessionExpiredError`.
+
+`_ensure_auth` refreshes each token independently, based on the
+local JWT `exp` claim (with a 1-minute safety margin). This is the
+bug: **the server can invalidate the session while the local `exp`
+claim still says "valid"** (session purge, user logged in elsewhere,
+backend restart, infrastructure rotation). In that case:
+
+1. Poll tick N: `Status` fails with `SessionExpiredError`
+   (server rejects the stale capabilities).
+2. Coordinator catches it → calls `client.login()`. `login()`
+   succeeds and installs a fresh `_auth_token`.
+3. Coordinator retries `get_general_status()` → `_ensure_auth`
+   sees `_capabilities_exp` still in the future → **skips
+   `get_services()` refresh** → sends the same stale capabilities
+   → server rejects again → second `SessionExpiredError`.
+4. The second error is raised from inside the coordinator's
+   `except SessionExpiredError` block, so it escapes every handler,
+   falls through to `DataUpdateCoordinator`'s generic `Exception`
+   catcher, and logs as `Unexpected error fetching verisure_italy
+   data`.
+5. Entity `unavailable`, next tick repeats step 1 forever.
+
+No `ConfigEntryAuthFailed` fires (v0.8.4's Mode B fix holds), no
+retry absorbs the error (wrong layer — this is a GraphQL-level
+session rejection, not an HTTP blip). The integration is stuck
+until an HA restart clears in-memory token state.
 
 ## Design constraints
 
@@ -123,7 +168,39 @@ indicates "credentials rejected" (HTTP 401, or a known error code),
 we can reintroduce targeted classification — but the current
 `APIResponseError` catch is too broad to distinguish.
 
-### 3. Automation trigger (lives in `ha-config` repo)
+### 3. Invalidate cached tokens on `SessionExpiredError` (v0.8.5)
+
+When `_check_graphql_errors` raises `SessionExpiredError`, the client
+wraps it in `_execute` to nuke both cached tokens before propagating:
+
+```python
+try:
+    self._check_graphql_errors(response_text, operation)
+except SessionExpiredError:
+    self._auth_token = None
+    if installation is not None:
+        self._capabilities.pop(installation.number, None)
+        self._capabilities_exp.pop(installation.number, None)
+    raise
+```
+
+The next `_ensure_auth` call sees both tokens missing (or the auth
+token missing for installation-less operations) and does a full
+refresh: `login()` + `get_services()`. The coordinator's existing
+`except SessionExpiredError → login() + retry` flow now recovers
+naturally because `get_general_status()` → `_ensure_auth()` does
+the cascaded refresh.
+
+**KISS decision — nuke both, not just the likely culprit.** Auth
+and capabilities are tied to the same server session (capabilities
+is minted via an authenticated call, so it cannot exist without a
+valid auth session). A 403 does not tell us which of the two the
+server rejected. Invalidating only capabilities would need
+cascading logic for the case where auth is also bad. Invalidating
+both costs at most one extra `login()` call per recovery event,
+which is negligible and rare.
+
+### 4. Automation trigger (lives in `ha-config` repo)
 
 In `automations.yaml`, add a trigger on prolonged unavailability:
 

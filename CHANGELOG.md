@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.5 — 2026-04-20
+
+Reliability — recover from server-side session invalidation (Mode C).
+
+### Bugfixes
+- **Stale capabilities token no longer traps the integration in an infinite `SessionExpiredError` loop**. On 2026-04-20 21:07 UTC — a few hours after v0.8.4 shipped — the alarm entity went `unavailable` and every 5s poll raised `SessionExpiredError` from the `Status` operation, indefinitely. The coordinator's existing `except SessionExpiredError → login() + retry` recovery refreshed `_auth_token` but **not** the per-installation capabilities JWT: `_ensure_auth` trusted the local JWT `exp` claim (fresh until tomorrow), skipped the `get_services()` refresh, and sent the same stale capabilities to the server, which kept rejecting it. The error then escaped every handler, logged as "Unexpected error fetching verisure_italy data", and the cycle continued until HA restart. Fix: `_execute` now catches `SessionExpiredError` from `_check_graphql_errors`, nukes `_auth_token` and the installation's capabilities cache, then re-raises. The next `_ensure_auth` sees tokens missing → full refresh (`login()` + `get_services()`) → recovery works on the next tick. See `docs/findings/unavailable-flapping.md` (Mode C).
+
 ## 0.8.4 — 2026-04-20
 
 Reliability — absorb transient upstream failures, stop classifying server bugs as auth errors.

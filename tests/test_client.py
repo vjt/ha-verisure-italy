@@ -1112,6 +1112,58 @@ class TestTransientRetry:
 
 
 # ---------------------------------------------------------------------------
+# SessionExpired token invalidation
+# ---------------------------------------------------------------------------
+
+
+class TestSessionExpiredInvalidation:
+    """When the server says the session is dead, cached auth + capabilities
+    tokens must be nuked. Without this, _ensure_auth trusts the local JWT
+    exp claim and keeps sending stale credentials forever (Mode C).
+
+    See docs/findings/unavailable-flapping.md for the 2026-04-20 incident.
+    """
+
+    async def test_session_expired_clears_auth_and_capabilities(
+        self, mock_api, client
+    ):
+        """SessionExpired on an installation-scoped operation clears both
+        the auth token and the capabilities token for that installation.
+        """
+        _authenticate(client)
+        assert client._auth_token is not None
+        assert INSTALLATION.number in client._capabilities
+
+        mock_api.post(API_URL, body=_error_session_expired())
+
+        with pytest.raises(SessionExpiredError):
+            await client.get_general_status(INSTALLATION)
+
+        assert client._auth_token is None
+        assert INSTALLATION.number not in client._capabilities
+        assert INSTALLATION.number not in client._capabilities_exp
+
+    async def test_session_expired_on_list_installations_clears_auth(
+        self, mock_api, client
+    ):
+        """SessionExpired on a non-installation operation still clears auth
+        (installation-less operations only rely on auth_token).
+        """
+        _authenticate(client)
+        other_inst_number = "99999999"
+        client._capabilities[other_inst_number] = "untouched-cap-token"
+
+        mock_api.post(API_URL, body=_error_session_expired())
+
+        with pytest.raises(SessionExpiredError):
+            await client.list_installations()
+
+        assert client._auth_token is None
+        # Other installations' capabilities are not touched
+        assert client._capabilities[other_inst_number] == "untouched-cap-token"
+
+
+# ---------------------------------------------------------------------------
 # Auto-auth & token refresh
 # ---------------------------------------------------------------------------
 

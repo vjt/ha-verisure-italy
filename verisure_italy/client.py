@@ -333,7 +333,18 @@ class VerisureClient:
                 response_text = await self._execute_raw(
                     content, operation, installation
                 )
-                self._check_graphql_errors(response_text, operation)
+                try:
+                    self._check_graphql_errors(response_text, operation)
+                except SessionExpiredError:
+                    # Server said the session is dead. Nuke cached tokens so
+                    # the next _ensure_auth does a full refresh — otherwise
+                    # we trust the local JWT exp claim and keep sending
+                    # stale credentials forever (Mode C, 2026-04-20).
+                    self._auth_token = None
+                    if installation is not None:
+                        self._capabilities.pop(installation.number, None)
+                        self._capabilities_exp.pop(installation.number, None)
+                    raise
                 return response_text
             except APIConnectionError as err:
                 last_exc = err
