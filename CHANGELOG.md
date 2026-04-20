@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.4 — 2026-04-20
+
+Reliability — absorb transient upstream failures, stop classifying server bugs as auth errors.
+
+### Bugfixes
+- **Transient Verisure backend errors no longer lock the integration out**. On 2026-04-20 a Node.js "Cannot read properties of undefined" bug on Verisure's login endpoint left `alarm_control_panel.verisure_alarm` unavailable for ~6 hours — the coordinator had classified the upstream JS error as `AuthenticationError`, which HA translates into `ConfigEntryAuthFailed` (Repair card, zero auto-retry). The blanket `APIResponseError → AuthenticationError` conversion inside `login()` has been removed. `AuthenticationError` is now reserved for confirmed credential problems (null auth token in response, malformed JWT); generic upstream errors propagate as `APIResponseError` and flow through the normal `UpdateFailed` path. True credential failures still surface via Repair card.
+- **Transient HTTP / network blips no longer flap the entity to `unavailable`**. `APIConnectionError` (TCP reset, DNS hiccup) and 5xx `APIResponseError` are retried up to 3 times inside a single coordinator tick with exponential backoff (5s, 10s; ±20% jitter). Genuine persistent failures still surface as `UpdateFailed` after the third attempt. WAF blocks, session expiry, 2FA, and 4xx are never retried — each has its own recovery path. Observed pre-fix rate: ~8 single-tick unavailable flaps/day from Verisure backend instability. Expected post-fix rate: zero flaps from single blips.
+
+### Docs
+- `docs/findings/unavailable-flapping.md` — root cause, design constraints (no SMS without user approval, fail-secure preserved), fix rationale, and test strategy.
+
 ## 0.8.3 — 2026-04-20
 
 Fail-secure gate against unverified panel types + diagnostic probe + CLI.

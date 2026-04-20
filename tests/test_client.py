@@ -79,6 +79,19 @@ async def http_session():
 
 
 @pytest.fixture
+def no_sleep(monkeypatch: pytest.MonkeyPatch):
+    """Patch asyncio.sleep inside the client module to a no-op.
+
+    Retries use real-time backoff (seconds). Tests must never block on
+    wall-clock waits.
+    """
+    async def _fast_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("verisure_italy.client.asyncio.sleep", _fast_sleep)
+
+
+@pytest.fixture
 def client(http_session: ClientSession) -> VerisureClient:
     return VerisureClient(
         username="test@test.it",
@@ -516,11 +529,45 @@ class TestLogin:
         with pytest.raises(AuthenticationError, match="null auth token"):
             await client.login()
 
-    async def test_graphql_error_raises_auth_error(self, mock_api, client):
-        mock_api.post(API_URL, body=_error_generic("Invalid credentials"))
+    async def test_graphql_error_propagates_as_api_error(
+        self, mock_api, client, no_sleep
+    ):
+        """Transient GraphQL errors during login must NOT be classified as
+        AuthenticationError. That would trigger ConfigEntryAuthFailed and
+        lock the integration out for hours on an upstream server bug
+        (docs/findings/unavailable-flapping.md).
+        """
+        # Register 3 mocks — retry will consume all three
+        for _ in range(3):
+            mock_api.post(
+                API_URL,
+                body=_error_generic(
+                    "Login failed: Cannot read properties of undefined (reading 'it')"
+                ),
+            )
 
-        with pytest.raises(AuthenticationError, match="Login failed"):
+        with pytest.raises(APIResponseError, match="Cannot read properties"):
             await client.login()
+
+    async def test_transient_graphql_error_retried_then_succeeds(
+        self, mock_api, client, no_sleep
+    ):
+        """A single transient GraphQL error should be retried and not leak
+        to the caller if a subsequent attempt succeeds.
+        """
+        token = _make_jwt()
+        mock_api.post(
+            API_URL,
+            body=_error_generic(
+                "Login failed: Cannot read properties of undefined (reading 'it')"
+            ),
+        )
+        mock_api.post(API_URL, body=_login_ok(token))
+
+        result = await client.login()
+
+        assert result.hash == token
+        assert client._auth_token == token
 
 
 class TestLogout:
@@ -535,9 +582,13 @@ class TestLogout:
         assert client._login_timestamp == 0
         assert client._refresh_token == ""
 
-    async def test_clears_state_even_on_error(self, mock_api, client):
+    async def test_clears_state_even_on_error(
+        self, mock_api, client, no_sleep
+    ):
         _authenticate(client)
-        mock_api.post(API_URL, status=500, body="Internal Server Error")
+        # 5xx is retried — register 3 mocks, one per attempt
+        for _ in range(3):
+            mock_api.post(API_URL, status=500, body="Internal Server Error")
 
         with pytest.raises(APIResponseError):
             await client.logout()
@@ -883,29 +934,36 @@ class TestHTTPErrors:
         with pytest.raises(APIResponseError, match="HTTP 403"):
             await client.list_installations()
 
-    async def test_http_500(self, mock_api, client):
+    async def test_http_500_exhausts_retries(self, mock_api, client, no_sleep):
+        """5xx is transient — retried 3 times total, then surfaces."""
         _authenticate(client)
-        mock_api.post(API_URL, status=500, body="Internal Server Error")
+        for _ in range(3):
+            mock_api.post(API_URL, status=500, body="Internal Server Error")
 
         with pytest.raises(APIResponseError, match="HTTP 500"):
             await client.list_installations()
 
-    async def test_http_429(self, mock_api, client):
+    async def test_http_429_not_retried(self, mock_api, client):
+        """4xx is a client-side error — not retried."""
         _authenticate(client)
         mock_api.post(API_URL, status=429, body="Too Many Requests")
 
         with pytest.raises(APIResponseError, match="HTTP 429"):
             await client.list_installations()
 
-    async def test_connection_error(self, mock_api, client):
+    async def test_connection_error_exhausts_retries(
+        self, mock_api, client, no_sleep
+    ):
+        """Network-level failure is transient — retried 3 times total."""
         _authenticate(client)
-        mock_api.post(
-            API_URL,
-            exception=ClientConnectorError(
-                connection_key=MagicMock(),
-                os_error=OSError("Connection refused"),
-            ),
-        )
+        for _ in range(3):
+            mock_api.post(
+                API_URL,
+                exception=ClientConnectorError(
+                    connection_key=MagicMock(),
+                    os_error=OSError("Connection refused"),
+                ),
+            )
 
         with pytest.raises(APIConnectionError, match="Connection error"):
             await client.list_installations()
@@ -931,11 +989,125 @@ class TestGraphQLErrors:
         with pytest.raises(TwoFactorRequiredError):
             await client.list_installations()
 
-    async def test_generic_error_message(self, mock_api, client):
+    async def test_generic_error_message(self, mock_api, client, no_sleep):
+        """Generic GraphQL error with no HTTP status is treated as transient
+        and retried 3 times before surfacing.
+        """
         _authenticate(client)
-        mock_api.post(API_URL, body=_error_generic("Database timeout"))
+        for _ in range(3):
+            mock_api.post(API_URL, body=_error_generic("Database timeout"))
 
         with pytest.raises(APIResponseError, match="Database timeout"):
+            await client.list_installations()
+
+
+# ---------------------------------------------------------------------------
+# Transient retry behavior
+# ---------------------------------------------------------------------------
+
+
+class TestTransientRetry:
+    """Retries absorb single-tick upstream blips inside one coordinator tick.
+
+    See docs/findings/unavailable-flapping.md for the incident that
+    motivated this behavior.
+    """
+
+    async def test_http_500_then_success(self, mock_api, client, no_sleep):
+        """One 5xx blip is absorbed — caller sees only the success."""
+        _authenticate(client)
+        mock_api.post(API_URL, status=500, body="Internal Server Error")
+        mock_api.post(API_URL, body=_installation_list())
+
+        result = await client.list_installations()
+
+        assert len(result) == 1
+        assert result[0].number == INSTALLATION.number
+
+    async def test_connection_error_then_success(
+        self, mock_api, client, no_sleep
+    ):
+        """One TCP reset is absorbed — caller sees only the success."""
+        _authenticate(client)
+        mock_api.post(
+            API_URL,
+            exception=ClientConnectorError(
+                connection_key=MagicMock(),
+                os_error=OSError("Connection reset by peer"),
+            ),
+        )
+        mock_api.post(API_URL, body=_installation_list())
+
+        result = await client.list_installations()
+
+        assert len(result) == 1
+
+    async def test_graphql_js_bug_then_success(
+        self, mock_api, client, no_sleep
+    ):
+        """The Mode B regression scenario: the Verisure backend JS undefined
+        bug must be treated as transient and absorbed, not classified as
+        credentials failure.
+        """
+        _authenticate(client)
+        mock_api.post(
+            API_URL,
+            body=_error_generic("Cannot read properties of undefined (reading 'it')"),
+        )
+        mock_api.post(API_URL, body=_installation_list())
+
+        result = await client.list_installations()
+
+        assert len(result) == 1
+
+    async def test_two_failures_then_success(self, mock_api, client, no_sleep):
+        """Max retries = 3 attempts; two failures then success still works."""
+        _authenticate(client)
+        mock_api.post(API_URL, status=500, body="Server error")
+        mock_api.post(API_URL, status=502, body="Bad gateway")
+        mock_api.post(API_URL, body=_installation_list())
+
+        result = await client.list_installations()
+
+        assert len(result) == 1
+
+    async def test_waf_not_retried(self, mock_api, client, no_sleep):
+        """WAF blocking demands a cold-off — never retried."""
+        _authenticate(client)
+        mock_api.post(
+            API_URL, status=403, body="_Incapsula_Resource blocked"
+        )
+        # If retry were attempted, next call would have no mock and fail
+
+        with pytest.raises(WAFBlockedError):
+            await client.list_installations()
+
+    async def test_session_expired_not_retried(
+        self, mock_api, client, no_sleep
+    ):
+        """Session expiry has its own recovery path — don't retry in-place."""
+        _authenticate(client)
+        mock_api.post(API_URL, body=_error_session_expired())
+
+        with pytest.raises(SessionExpiredError):
+            await client.list_installations()
+
+    async def test_2fa_not_retried(self, mock_api, client, no_sleep):
+        """2FA requires user action — never retried."""
+        _authenticate(client)
+        mock_api.post(API_URL, body=_error_2fa_required())
+
+        with pytest.raises(TwoFactorRequiredError):
+            await client.list_installations()
+
+    async def test_4xx_not_retried(self, mock_api, client, no_sleep):
+        """4xx client errors are not transient — not retried."""
+        _authenticate(client)
+        mock_api.post(API_URL, status=401, body="Unauthorized")
+        # Only one mock registered — if retry were attempted, test would
+        # raise a MockNotFound error from aioresponses
+
+        with pytest.raises(APIResponseError, match="HTTP 401"):
             await client.list_installations()
 
 

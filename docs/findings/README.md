@@ -24,3 +24,6 @@ The Verisure API is undocumented. Everything here was discovered by:
   workflow for adding a new one
 - [`panel-SDVECU-probe.json`](panel-SDVECU-probe.json) — redacted
   reference probe for the verified SDVECU panel
+- [`unavailable-flapping.md`](unavailable-flapping.md) — why the
+  alarm entity flaps to `unavailable` and the 6h sticky outage root
+  cause (over-broad `AuthenticationError` classification)

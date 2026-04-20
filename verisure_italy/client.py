@@ -13,6 +13,7 @@ import asyncio
 import base64
 import json
 import logging
+import random
 import secrets
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -113,6 +114,17 @@ DEVICE_VERSION = "10.102.0"
 ALARM_STATUS_SERVICE_ID = "11"
 DEFAULT_POLL_DELAY: float = 2.0
 DEFAULT_POLL_TIMEOUT: float = 60.0
+
+# Retry schedule for transient upstream failures. Delays apply BEFORE
+# each retry attempt — first attempt is always immediate. Base values
+# are multiplied by (1 ± _RETRY_JITTER) to avoid thundering-herd when
+# multiple clients retry simultaneously.
+#
+# With (5.0, 10.0) a single coordinator tick may block up to ~15s
+# absorbing blips; persistent failures still surface on the third
+# attempt. See docs/findings/unavailable-flapping.md.
+_RETRY_DELAYS: tuple[float, ...] = (5.0, 10.0)
+_RETRY_JITTER: float = 0.2
 
 # Max bytes of response text written to the debug log per call. Responses
 # carrying JPEG payloads (thumbnails, photos) would otherwise swamp the log.
@@ -293,10 +305,46 @@ class VerisureClient:
         """Send a GraphQL request with error checking. Returns response text.
 
         Raises on HTTP errors, GraphQL errors, session expiry, and 2FA.
+
+        Absorbs transient upstream failures by retrying inside a single
+        coordinator tick. Retried: network errors (APIConnectionError)
+        and APIResponseError when the HTTP status is 5xx or absent
+        (GraphQL-layer errors — the Verisure backend periodically
+        returns Node.js "undefined" errors under load). Not retried:
+        4xx, WAF blocks, session expiry, 2FA, validation errors — each
+        has its own recovery path.
         """
-        response_text = await self._execute_raw(content, operation, installation)
-        self._check_graphql_errors(response_text, operation)
-        return response_text
+        last_exc: APIConnectionError | APIResponseError | None = None
+        max_attempts = len(_RETRY_DELAYS) + 1
+
+        for attempt in range(1, max_attempts + 1):
+            if attempt > 1:
+                assert last_exc is not None
+                base = _RETRY_DELAYS[attempt - 2]
+                delay = base * (1.0 + (random.random() - 0.5) * 2 * _RETRY_JITTER)
+                _LOGGER.warning(
+                    "Transient %s on %s, retry %d/%d in %.1fs: %s",
+                    type(last_exc).__name__, operation,
+                    attempt, max_attempts, delay, last_exc.message,
+                )
+                await asyncio.sleep(delay)
+
+            try:
+                response_text = await self._execute_raw(
+                    content, operation, installation
+                )
+                self._check_graphql_errors(response_text, operation)
+                return response_text
+            except APIConnectionError as err:
+                last_exc = err
+            except APIResponseError as err:
+                # 4xx (except 5xx) is a client error — not retried.
+                if err.http_status is not None and 400 <= err.http_status < 500:
+                    raise
+                last_exc = err
+
+        assert last_exc is not None
+        raise last_exc
 
     def _check_graphql_errors(
         self, response_text: str, operation: str
@@ -461,8 +509,15 @@ class VerisureClient:
     async def login(self) -> LoginResponse:
         """Authenticate. Returns LoginResponse or raises.
 
-        Raises AuthenticationError on bad credentials.
-        Raises TwoFactorRequiredError if 2FA is needed.
+        Raises AuthenticationError for confirmed credential problems
+        (null hash in response, malformed JWT). Raises APIResponseError
+        for upstream/transient errors — the coordinator surfaces those
+        as UpdateFailed, not ConfigEntryAuthFailed, so a flaky Verisure
+        backend does not lock the integration out. Raises
+        TwoFactorRequiredError if 2FA is needed.
+
+        See docs/findings/unavailable-flapping.md for why generic
+        APIResponseError must NOT be reclassified as AuthenticationError.
         """
         content: GraphQLContent = {
             "operationName": "mkLoginToken",
@@ -486,14 +541,7 @@ class VerisureClient:
             "query": LOGIN_TOKEN_MUTATION,
         }
 
-        try:
-            response_text = await self._execute(content, "mkLoginToken", None)
-        except (TwoFactorRequiredError, SessionExpiredError):
-            raise
-        except APIResponseError as err:
-            raise AuthenticationError(
-                f"Login failed: {err.message}"
-            ) from err
+        response_text = await self._execute(content, "mkLoginToken", None)
 
         envelope = LoginEnvelope.model_validate_json(response_text)
         result = envelope.data.xSLoginToken
