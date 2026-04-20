@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import json
 import logging
 
 from homeassistant.components.alarm_control_panel import (
@@ -23,11 +24,14 @@ from pydantic import ValidationError
 from verisure_italy import (
     OperationFailedError,
     OperationTimeoutError,
+    UnsupportedPanelError,
     VerisureError,
+    run_probe,
 )
 from verisure_italy.exceptions import ArmingExceptionError
 from verisure_italy.models import (
     PROTO_TO_STATE,
+    SUPPORTED_PANELS,
     AlarmState,
     InteriorMode,
     PerimeterMode,
@@ -138,6 +142,63 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         self._update_alarm_state()
         super()._handle_coordinator_update()
 
+    async def _check_panel_supported(self, action: str) -> bool:
+        """Guard arm/disarm against unverified panel types.
+
+        Returns True when safe to proceed. Returns False after emitting
+        a probe to the log and notifying the user — the caller must
+        bail out without sending any command.
+        """
+        panel = self.coordinator.installation.panel
+        if panel in SUPPORTED_PANELS:
+            return True
+
+        _LOGGER.warning(
+            "Refusing %s: panel %r not in SUPPORTED_PANELS=%s. "
+            "Running read-only probe for diagnosis.",
+            action, panel, sorted(SUPPORTED_PANELS),
+        )
+        try:
+            probe = await run_probe(
+                self.coordinator.client, self.coordinator.installation,
+            )
+            _LOGGER.warning(
+                "=== VERISURE PROBE BEGIN ===\n%s\n=== VERISURE PROBE END ===",
+                json.dumps(probe, indent=2, sort_keys=True),
+            )
+        except Exception:
+            # Probe failure must not mask the gate — log and continue to raise.
+            _LOGGER.exception("Probe failed for unsupported panel %r", panel)
+
+        await self._notify_unsupported_panel(panel, action)
+        raise UnsupportedPanelError(
+            panel,
+            f"Panel type {panel!r} is not yet supported. "
+            f"Search github.com/vjt/ha-verisure-italy/issues for your panel "
+            f"or open a new issue with the probe output from the HA log "
+            f"(marked 'VERISURE PROBE BEGIN').",
+        )
+
+    async def _notify_unsupported_panel(self, panel: str, action: str) -> None:
+        """User-facing notification when the panel is not on the allowlist."""
+        await self.hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "message": (
+                    f"{action.capitalize()} refused: panel type '{panel}' is "
+                    f"not verified. Zero bytes were sent to the panel. "
+                    f"A diagnostic probe was written to the HA log (search "
+                    f"for 'VERISURE PROBE BEGIN'). Please check "
+                    f"[GitHub issues](https://github.com/vjt/ha-verisure-italy/issues) "
+                    f"for your panel type, or open a new issue and paste the "
+                    f"probe between the BEGIN/END markers."
+                ),
+                "title": "Verisure Italy — Unsupported Panel",
+                "notification_id": f"{DOMAIN}.unsupported_panel",
+            },
+        )
+
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         """Arm partial + perimeter."""
         await self._async_arm(_PARTIAL_PERIMETER, "armed_home")
@@ -151,6 +212,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         if self._arm_lock.locked():
             _LOGGER.warning("Arm rejected — another operation in progress")
             return
+
+        if not await self._check_panel_supported("arm"):
+            return  # _check_panel_supported raises; defensive belt-and-braces
 
         async with self._arm_lock:
             _LOGGER.info("Arming %s (target: %s)", mode, target)
@@ -195,6 +259,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         """Disarm the alarm."""
         if self._arm_lock.locked():
             _LOGGER.warning("Disarm rejected — another operation in progress")
+            return
+
+        if not await self._check_panel_supported("disarm"):
             return
 
         async with self._arm_lock:

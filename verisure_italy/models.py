@@ -284,14 +284,52 @@ class OtpPhone(BaseModel):
     phone: str
 
 
+class ServiceAttribute(BaseModel):
+    """A single attribute inside a Service's attributes list.
+
+    Verisure attributes carry per-panel capability details (limits,
+    secondary commands, labels). Names and values vary by panel type —
+    parsed structurally, interpreted downstream.
+    """
+
+    model_config = {"populate_by_name": True}
+
+    name: str | None = None
+    value: str | None = None
+    active: bool | None = None
+
+
+class _ServiceAttributesWrapper(BaseModel):
+    """Inner wrapper for Service.attributes — GraphQL returns attributes.attributes."""
+
+    attributes: list[ServiceAttribute] | None = None
+
+
 class Service(BaseModel):
-    """A service available on the installation."""
+    """A service available on the installation.
+
+    `attributes` carries per-panel capability data — load-bearing for
+    panel-type discovery.
+    """
+
+    model_config = {"populate_by_name": True}
 
     id_service: int = Field(alias="idService")
     active: bool
     visible: bool
     request: str
     description: str | None = None
+    bde: bool | None = None
+    is_premium: bool | None = Field(None, alias="isPremium")
+    cod_oper: bool | None = Field(None, alias="codOper")
+    min_wrapper_version: str | None = Field(None, alias="minWrapperVersion")
+    attributes: _ServiceAttributesWrapper | None = None
+
+
+# Panel types for which explicit command maps have been verified on live
+# hardware. Arm/disarm commands are sent ONLY to these panels. Unknown
+# panels raise UnsupportedPanelError — fail-secure, no blind commands.
+SUPPORTED_PANELS: frozenset[str] = frozenset({"SDVECU"})
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 [project]
 name = "verisure-italy"
-version = "0.8.2"
+version = "0.8.3"
 description = "Async Python client for the Verisure Italy alarm API"
 requires-python = ">=3.12"
 license = "MIT"
@@ -27,6 +27,9 @@ dependencies = [
 Homepage = "https://github.com/vjt/ha-verisure-italy"
 Repository = "https://github.com/vjt/ha-verisure-italy"
 Issues = "https://github.com/vjt/ha-verisure-italy/issues"
+
+[project.scripts]
+verisure-italy-cli = "verisure_italy.cli:main"
 
 [project.optional-dependencies]
 dev = [

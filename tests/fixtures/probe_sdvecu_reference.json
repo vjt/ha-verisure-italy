@@ -1,0 +1,739 @@
+{
+  "alarm_state": {
+    "exceptions": [],
+    "status": "D",
+    "timestampUpdate": "REDACTED"
+  },
+  "client_version": "0.8.3",
+  "devices": [
+    {
+      "code": "1",
+      "id": "1",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG01"
+    },
+    {
+      "code": "2",
+      "id": "2",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG02"
+    },
+    {
+      "code": "3",
+      "id": "3",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG03"
+    },
+    {
+      "code": "4",
+      "id": "4",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG04"
+    },
+    {
+      "code": "5",
+      "id": "5",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG05"
+    },
+    {
+      "code": "6",
+      "id": "6",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG06"
+    },
+    {
+      "code": "7",
+      "id": "7",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG07"
+    },
+    {
+      "code": "8",
+      "id": "8",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG08"
+    },
+    {
+      "code": "9",
+      "id": "9",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG09"
+    },
+    {
+      "code": "1",
+      "id": "10",
+      "idService": null,
+      "isActive": true,
+      "type": "VV",
+      "zoneId": "VV01"
+    },
+    {
+      "code": "10",
+      "id": "11",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG10"
+    },
+    {
+      "code": "2",
+      "id": "12",
+      "idService": null,
+      "isActive": true,
+      "type": "VV",
+      "zoneId": "VV02"
+    },
+    {
+      "code": "11",
+      "id": "13",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG11"
+    },
+    {
+      "code": "12",
+      "id": "14",
+      "idService": null,
+      "isActive": true,
+      "type": "MG",
+      "zoneId": "MG12"
+    },
+    {
+      "code": "3",
+      "id": "15",
+      "idService": null,
+      "isActive": true,
+      "type": "VK",
+      "zoneId": "VK03"
+    },
+    {
+      "code": "13",
+      "id": "16",
+      "idService": null,
+      "isActive": true,
+      "type": "FX",
+      "zoneId": "FX13"
+    },
+    {
+      "code": "14",
+      "id": "17",
+      "idService": null,
+      "isActive": true,
+      "type": "QR",
+      "zoneId": "QR14"
+    },
+    {
+      "code": "15",
+      "id": "18",
+      "idService": null,
+      "isActive": true,
+      "type": "QR",
+      "zoneId": "QR15"
+    },
+    {
+      "code": "16",
+      "id": "19",
+      "idService": null,
+      "isActive": true,
+      "type": "QR",
+      "zoneId": "QR16"
+    },
+    {
+      "code": "17",
+      "id": "20",
+      "idService": null,
+      "isActive": true,
+      "type": "FX",
+      "zoneId": "FX17"
+    },
+    {
+      "code": "18",
+      "id": "21",
+      "idService": null,
+      "isActive": true,
+      "type": "QP",
+      "zoneId": "QP18"
+    },
+    {
+      "code": "19",
+      "id": "22",
+      "idService": null,
+      "isActive": true,
+      "type": "QP",
+      "zoneId": "QP19"
+    },
+    {
+      "code": "20",
+      "id": "25",
+      "idService": null,
+      "isActive": true,
+      "type": "QR",
+      "zoneId": "QR20"
+    }
+  ],
+  "installation": {
+    "numinst_hash": "REDACTED",
+    "panel": "SDVECU",
+    "type": "home"
+  },
+  "schema_version": 1,
+  "services": [
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 1,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "IMG",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 11,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "EST",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 31,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "ARM",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 32,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "DARM",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 40,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "KEY",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 43,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "ARMNIGHT",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 45,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "PLAN",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [
+        {
+          "active": false,
+          "name": "explanation",
+          "value": "https://api.whatsapp.com/send?phone=393400784322"
+        },
+        {
+          "active": false,
+          "name": "type",
+          "value": "standard"
+        }
+      ],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 51,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "BILLS",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [
+        {
+          "active": false,
+          "name": "limitedPartial",
+          "value": "false"
+        }
+      ],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 52,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "ESTINV",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [
+        {
+          "active": false,
+          "name": "DARM",
+          "value": "DESCONECTAR"
+        },
+        {
+          "active": false,
+          "name": "ARMDAY",
+          "value": "ARMADO DIA"
+        },
+        {
+          "active": false,
+          "name": "ARMNIGHT",
+          "value": "ARMADO NOCHE"
+        },
+        {
+          "active": false,
+          "name": "ARM",
+          "value": "CONECTAR"
+        }
+      ],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 60,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "SCH",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 64,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "CAMS",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 66,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "DIY",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 67,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "GC",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 69,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "ASI",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 78,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "PAYMENTG",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 86,
+      "isPremium": false,
+      "minWrapperVersion": "10.33.0",
+      "request": "RATEINAPP",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 88,
+      "isPremium": false,
+      "minWrapperVersion": "10.70.0",
+      "request": "INAPPCAMPAIGN",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 89,
+      "isPremium": false,
+      "minWrapperVersion": "10.39.0",
+      "request": "MAILBOX",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 91,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "CAMERAS",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 97,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "DYNAMICINFO",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 98,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "DEACTIVATEZONE",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 99,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "REFERRALPROGRAM",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 104,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "SUPPORTHUB",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 401,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "MYSD",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 404,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "INSTWORDS",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 500,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "CONTMGRFAQ",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 501,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "CONTMGRDOWN",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 502,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "CONTMGRMYSERV",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [
+        {
+          "active": false,
+          "name": "chatUrl",
+          "value": "https://api.whatsapp.com/send?phone=393400784322"
+        }
+      ],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 504,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "WHATSAPP",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 506,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "TIMELINE",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 507,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "NOTCONF",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 508,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "DEVICESCONF",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 509,
+      "isPremium": false,
+      "minWrapperVersion": "10.39.0",
+      "request": "CONNSTATUS",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 510,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "REMINDERS",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 511,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "UPDCUENEXTIME",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 517,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "ARMMODESDEVCONF",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 520,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "SMARTNOT",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 522,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "HOMETIERED",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 523,
+      "isPremium": false,
+      "minWrapperVersion": "10.132.0",
+      "request": "VCARD",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 524,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "DOORSCH",
+      "visible": true
+    },
+    {
+      "active": true,
+      "attributes": [],
+      "bde": false,
+      "codOper": false,
+      "description": null,
+      "idService": 527,
+      "isPremium": false,
+      "minWrapperVersion": null,
+      "request": "KEYDUPLICATE",
+      "visible": true
+    }
+  ],
+  "timestamp": "2026-04-20T00:00:00Z"
+}

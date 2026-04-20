@@ -71,6 +71,7 @@ from .models import (
     LoginResponse,
     OperationResult,
     OtpPhone,
+    RawDevice,
     Service,
     Thumbnail,
     ZoneException,
@@ -113,10 +114,30 @@ ALARM_STATUS_SERVICE_ID = "11"
 DEFAULT_POLL_DELAY: float = 2.0
 DEFAULT_POLL_TIMEOUT: float = 60.0
 
+# Max bytes of response text written to the debug log per call. Responses
+# carrying JPEG payloads (thumbnails, photos) would otherwise swamp the log.
+_DEBUG_RESPONSE_MAX_BYTES = 4096
+
+# Keys scrubbed from GraphQL variables before logging. These are
+# credentials or opaque device identifiers — never written to logs.
+_SENSITIVE_VAR_KEYS: frozenset[str] = frozenset({
+    "password", "idDevice", "idDeviceIndigitall", "uuid",
+})
+
 # Type aliases
 PollFn = Callable[[Installation, str, int], Awaitable[OperationResult]]
 GraphQLVars = dict[str, str | int | bool | list[int]]
 GraphQLContent = dict[str, str | GraphQLVars]
+
+
+def _sanitize_vars(variables: GraphQLVars | None) -> dict[str, str | int | bool | list[int]]:
+    """Return a copy of GraphQL variables safe to write to debug logs."""
+    if variables is None:
+        return {}
+    return {
+        k: ("<redacted>" if k in _SENSITIVE_VAR_KEYS else v)
+        for k, v in variables.items()
+    }
 
 
 def generate_uuid() -> str:
@@ -179,12 +200,26 @@ class VerisureClient:
         if delay is not None:
             self._poll_delay = delay
 
+    @property
+    def refresh_token(self) -> str:
+        """Return the current refresh token, or '' if none."""
+        return self._refresh_token
+
     def set_last_proto(self, proto_code: str) -> None:
         """Set last known proto code from external polling (e.g. coordinator).
 
         Ensures arm/disarm commands send correct currentStatus from the
         first operation after startup, not an empty string.
         """
+        self._update_last_proto(proto_code, source="external")
+
+    def _update_last_proto(self, proto_code: str, *, source: str) -> None:
+        """Update _last_proto with a DEBUG log of the transition."""
+        if proto_code != self._last_proto:
+            _LOGGER.debug(
+                "last_proto: %r -> %r (source=%s)",
+                self._last_proto, proto_code, source,
+            )
         self._last_proto = proto_code
 
     # -------------------------------------------------------------------
@@ -203,7 +238,14 @@ class VerisureClient:
         Use _execute for the common path that also checks GraphQL errors.
         """
         headers = self._build_headers(operation, installation)
-        _LOGGER.debug("[%s] Executing request", operation)
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            variables = content.get("variables")
+            safe_vars = (
+                _sanitize_vars(variables)  # type: ignore[arg-type]
+                if isinstance(variables, dict)
+                else {}
+            )
+            _LOGGER.debug("[%s] request vars=%s", operation, safe_vars)
 
         try:
             async with self._http.post(
@@ -215,6 +257,14 @@ class VerisureClient:
             raise APIConnectionError(
                 f"Connection error with {API_URL}: {err}"
             ) from err
+
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            snippet = response_text[:_DEBUG_RESPONSE_MAX_BYTES]
+            truncated = " (truncated)" if len(response_text) > _DEBUG_RESPONSE_MAX_BYTES else ""
+            _LOGGER.debug(
+                "[%s] http=%d response%s: %s",
+                operation, http_status, truncated, snippet,
+            )
 
         if http_status == 403:
             if "_Incapsula_Resource" in response_text:
@@ -701,6 +751,13 @@ class VerisureClient:
         command = STATE_TO_COMMAND[target_state]
         await self._ensure_auth(installation)
 
+        _LOGGER.debug(
+            "arm: target=%s command=%s panel=%s currentStatus=%r "
+            "force_arming_remote_id=%r suid=%r",
+            target_state, command.value, installation.panel,
+            self._last_proto, force_arming_remote_id, suid,
+        )
+
         variables: GraphQLVars = {
             "request": command.value,
             "numinst": installation.number,
@@ -722,6 +779,11 @@ class VerisureClient:
         )
         envelope = ArmPanelEnvelope.model_validate_json(response_text)
         arm_resp = envelope.data.xSArmPanel
+
+        _LOGGER.debug(
+            "arm: panel accepted command res=%s msg=%r referenceId=%s",
+            arm_resp.res, arm_resp.msg, arm_resp.reference_id,
+        )
 
         if arm_resp.res != "OK":
             raise OperationFailedError(
@@ -748,7 +810,7 @@ class VerisureClient:
                 http_status=None,
             )
 
-        self._last_proto = result.protom_response
+        self._update_last_proto(result.protom_response, source="arm")
         return ArmResult(
             res=result.res,
             msg=result.msg,
@@ -789,6 +851,11 @@ class VerisureClient:
         )
         envelope = ArmStatusEnvelope.model_validate_json(response_text)
         arm_result = envelope.data.xSArmStatus
+
+        _LOGGER.debug(
+            "arm poll #%d: res=%s status=%r proto=%r",
+            counter, arm_result.res, arm_result.status, arm_result.protom_response,
+        )
 
         # Detect force-arm-eligible error BEFORE converting to OperationResult
         if (
@@ -883,6 +950,11 @@ class VerisureClient:
         command = ArmCommand.DISARM_ALL
         await self._ensure_auth(installation)
 
+        _LOGGER.debug(
+            "disarm: command=%s panel=%s currentStatus=%r",
+            command.value, installation.panel, self._last_proto,
+        )
+
         content: GraphQLContent = {
             "operationName": "xSDisarmPanel",
             "variables": {
@@ -897,6 +969,11 @@ class VerisureClient:
         )
         envelope = DisarmPanelEnvelope.model_validate_json(response_text)
         disarm_resp = envelope.data.xSDisarmPanel
+
+        _LOGGER.debug(
+            "disarm: panel accepted command res=%s msg=%r referenceId=%s",
+            disarm_resp.res, disarm_resp.msg, disarm_resp.reference_id,
+        )
 
         if disarm_resp.res != "OK":
             raise OperationFailedError(
@@ -916,7 +993,7 @@ class VerisureClient:
                 http_status=None,
             )
 
-        self._last_proto = result.protom_response
+        self._update_last_proto(result.protom_response, source="disarm")
         return DisarmResult(
             res=result.res,
             msg=result.msg,
@@ -952,6 +1029,12 @@ class VerisureClient:
         envelope = DisarmStatusEnvelope.model_validate_json(response_text)
         disarm_result = envelope.data.xSDisarmStatus
 
+        _LOGGER.debug(
+            "disarm poll #%d: res=%s status=%r proto=%r",
+            counter, disarm_result.res, disarm_result.status,
+            disarm_result.protom_response,
+        )
+
         # Surface disarm errors with full diagnostic info
         if disarm_result.res == "ERROR" and disarm_result.error is not None:
             raise OperationFailedError(
@@ -973,12 +1056,14 @@ class VerisureClient:
     # Camera / Images
     # -------------------------------------------------------------------
 
-    async def list_camera_devices(
+    async def get_raw_device_list(
         self, installation: Installation
-    ) -> list[CameraDevice]:
-        """List active camera devices. Filters xSDeviceList for camera types.
+    ) -> list[RawDevice]:
+        """Return the unfiltered device list from xSDeviceList.
 
-        Returns CameraDevice list or raises on API failure.
+        Used by the probe to dump every declared device. For cameras,
+        callers should use list_camera_devices which filters and
+        validates for camera-specific use.
         """
         await self._ensure_auth(installation)
         content: GraphQLContent = {
@@ -993,7 +1078,16 @@ class VerisureClient:
             content, "xSDeviceList", installation
         )
         envelope = DeviceListEnvelope.model_validate_json(response_text)
-        raw_devices = envelope.data.xSDeviceList.devices
+        return envelope.data.xSDeviceList.devices
+
+    async def list_camera_devices(
+        self, installation: Installation
+    ) -> list[CameraDevice]:
+        """List active camera devices. Filters xSDeviceList for camera types.
+
+        Returns CameraDevice list or raises on API failure.
+        """
+        raw_devices = await self.get_raw_device_list(installation)
 
         cameras: list[CameraDevice] = []
         for raw in raw_devices:
@@ -1269,7 +1363,9 @@ class VerisureClient:
                             error_type=None,
                         )
                     if result.protom_response is not None:
-                        self._last_proto = result.protom_response
+                        self._update_last_proto(
+                            result.protom_response, source="poll"
+                        )
                     return result
                 counter += 1
 

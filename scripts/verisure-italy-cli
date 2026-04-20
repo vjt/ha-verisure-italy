@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Bare-clone wrapper for the Verisure Italy CLI.
+#
+# Run the CLI straight from a git clone, no `pip install` needed:
+#     git clone https://github.com/vjt/ha-verisure-italy && cd ha-verisure-italy
+#     ./scripts/verisure-italy-cli login
+#     ./scripts/verisure-italy-cli probe > probe.json
+#
+# Requires the same runtime deps as the library (aiohttp, pydantic, pyjwt).
+# If you already ran `pip install -e .`, the `verisure-italy-cli` binary in
+# your PATH is preferable — this wrapper exists for the zero-install path.
+
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m verisure_italy.cli "$@"

@@ -1,5 +1,7 @@
 """Verisure Italy API client."""
 
+__version__ = "0.8.3"
+
 from .client import VerisureClient, generate_device_id, generate_uuid
 from .exceptions import (
     APIConnectionError,
@@ -12,6 +14,7 @@ from .exceptions import (
     SessionExpiredError,
     TwoFactorRequiredError,
     UnexpectedStateError,
+    UnsupportedPanelError,
     VerisureError,
     WAFBlockedError,
 )
@@ -20,6 +23,7 @@ from .models import (
     PROTO_TO_STATE,
     STATE_TO_COMMAND,
     STATE_TO_PROTO,
+    SUPPORTED_PANELS,
     AlarmState,
     ArmCommand,
     ArmResult,
@@ -35,22 +39,25 @@ from .models import (
     OtpPhone,
     PerimeterMode,
     ProtoCode,
+    RawDevice,
     Service,
+    ServiceAttribute,
     Thumbnail,
     ZoneException,
     parse_proto_code,
 )
+from .probe import run_probe
 
 __all__ = [
     "CAMERA_DEVICE_TYPES",
     "PROTO_TO_STATE",
     "STATE_TO_COMMAND",
     "STATE_TO_PROTO",
+    "SUPPORTED_PANELS",
     "APIConnectionError",
     "APIResponseError",
     "AlarmState",
     "ArmCommand",
-
     "ArmResult",
     "ArmingExceptionError",
     "AuthenticationError",
@@ -69,11 +76,14 @@ __all__ = [
     "OtpPhone",
     "PerimeterMode",
     "ProtoCode",
+    "RawDevice",
     "Service",
+    "ServiceAttribute",
     "SessionExpiredError",
     "Thumbnail",
     "TwoFactorRequiredError",
     "UnexpectedStateError",
+    "UnsupportedPanelError",
     "VerisureClient",
     "VerisureError",
     "WAFBlockedError",
@@ -81,4 +91,5 @@ __all__ = [
     "generate_device_id",
     "generate_uuid",
     "parse_proto_code",
+    "run_probe",
 ]

@@ -99,6 +99,19 @@ class OperationFailedError(VerisureError):
         self.error_type = error_type
 
 
+class UnsupportedPanelError(VerisureError):
+    """Panel type is not in SUPPORTED_PANELS — arm/disarm refused.
+
+    Fail-secure: the integration has no verified command mapping for
+    this panel, so it sends nothing. Caller must surface a probe so the
+    user can report capabilities and get the panel type supported.
+    """
+
+    def __init__(self, panel: str, message: str) -> None:
+        super().__init__(message)
+        self.panel = panel
+
+
 class ImageCaptureError(VerisureError):
     """Image capture failed — timeout, invalid data, or no image returned."""
 

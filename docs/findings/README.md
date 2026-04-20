@@ -20,3 +20,7 @@ The Verisure API is undocumented. Everything here was discovered by:
   capture, undiscovered APIs
 - [`camera-capture-tuning.md`](camera-capture-tuning.md) — 2 s
   stagger sweet spot for parallel captures
+- [`panel-types.md`](panel-types.md) — supported panel types and the
+  workflow for adding a new one
+- [`panel-SDVECU-probe.json`](panel-SDVECU-probe.json) — redacted
+  reference probe for the verified SDVECU panel

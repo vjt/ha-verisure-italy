@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.3 — 2026-04-20
+
+Fail-secure gate against unverified panel types + diagnostic probe + CLI.
+
+### Security & Correctness
+- **SUPPORTED_PANELS allowlist gate** ([#1](https://github.com/vjt/ha-verisure-italy/issues/1)) — arm/disarm are refused with `UnsupportedPanelError` on panels not on the allowlist (currently: `SDVECU`). Zero bytes are sent to the panel. Previously, hardcoded `STATE_TO_COMMAND` mutation strings were sent blindly to whatever panel the account reported, silently failing against non-SDVECU hardware (e.g. `CENT`). No blind commands, no guessing — fail-secure.
+- **Diagnostic probe** — new `verisure_italy.probe.run_probe()` dumps the panel's declared capabilities (services with attributes, raw device list, server-cached alarm status) as redacted JSON for diagnosing unsupported panels. Strictly read-only: only `xSSrv`, `xSDeviceList`, `xSStatus` — no `xSCheckAlarm` (that one pings the panel), no arm/disarm. PII (numinst, names, phones, addresses, device serials, JWT tokens, reference IDs) is stripped at the boundary; a unit test asserts every sensitive field is scrubbed.
+- **Unsupported-panel notification + log emission** — when a user on an unverified panel tries to arm/disarm, the integration emits the probe to the HA log between `VERISURE PROBE BEGIN` / `END` markers and raises a persistent notification instructing the user to search existing issues or open a new one with the probe output.
+
+### Tooling
+- **`verisure-italy-cli`** — new read-only diagnostic CLI (`login` / `probe` / `logout`). Shares the library with HA: same output, two reporting paths. Optional for users (same data available in HA logs); meant for fast iteration when diagnosing new panel types without HA restarts. Installable via `pip install verisure-italy`, also runnable from a bare repo clone via `./scripts/verisure-italy-cli`. Session cached at `$XDG_CACHE_HOME/verisure-italy/session.json` with mode 0600; password never persisted.
+- **Debug logging on arm/disarm paths** — every GraphQL call logs sanitized request variables and response envelope at DEBUG; arm/disarm entry, panel accept, poll iteration, and `_last_proto` transitions are all traced. Enable with `logger: custom_components.verisure_italy: debug` + `verisure_italy: debug`. Users on unsupported panels can send the probe plus these logs without installing anything.
+
+### API Client
+- **`Service.attributes` parsed** — the `attributes` wrapper returned by `xSSrv` was previously requested in GraphQL but discarded. Now parsed as `list[ServiceAttribute]` (name, value, active). Load-bearing for panel-type discovery.
+- **`VerisureClient.get_raw_device_list()`** — unfiltered `list[RawDevice]` from `xSDeviceList` (pre-existing `list_camera_devices` now delegates to it).
+- **`VerisureClient.refresh_token`** property — read-only accessor for the refresh token.
+
+### Docs
+- `docs/findings/panel-types.md` — supported-panel workflow and the process for adding new panels.
+- `docs/findings/panel-SDVECU-probe.json` — redacted reference probe for the verified SDVECU panel.
+
 ## 0.8.2 — 2026-04-17
 
 Bugfix release — config flow resilience (continued).
