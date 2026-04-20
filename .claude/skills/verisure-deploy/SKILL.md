@@ -10,9 +10,9 @@ Run the full deployment pipeline. Abort on any failure — never continue past a
 1. **Test suite**: `pytest tests/ -x -q` — abort if any test fails.
 2. **Type check**: `pyright verisure_italy/ custom_components/` — abort if any new errors.
 3. **Lint**: `ruff check verisure_italy/ tests/ custom_components/` — abort on errors.
-4. **Deploy integration files**: push all `custom_components/verisure_italy/*.py` to HAOS via SSH pipe:
+4. **Deploy integration files**: push all integration Python files + `manifest.json` to HAOS via SSH pipe. Manifest is load-bearing — it carries the integration version + client library pin, so HACS and HA Dev Tools both show the deployed version correctly:
    ```bash
-   for f in custom_components/verisure_italy/*.py; do
+   for f in custom_components/verisure_italy/*.py custom_components/verisure_italy/manifest.json; do
      ssh root@homeassistant -p 22222 \
        "cat > /mnt/data/supervisor/homeassistant/custom_components/verisure_italy/$(basename $f)" \
        < "$f"
@@ -30,8 +30,16 @@ Run the full deployment pipeline. Abort on any failure — never continue past a
    **Note**: The Python version path (3.14) may change with HA updates. If deploy fails
    with "No such file or directory", check the actual path with:
    `ssh root@homeassistant -p 22222 "docker exec homeassistant python3 -c \"import verisure_italy; print(verisure_italy.__file__)\""`
-6. **Restart HA**: `ssh root@homeassistant -p 22222 "ha core restart"`
-7. **Wait**: 30 seconds for HA to fully start.
+6. **Restart HA**: `ssh root@homeassistant -p 22222 "ha core restart"` — returns immediately once the restart is *scheduled*; core takes ~30-60s to come back up.
+7. **Wait until HA is up**: do NOT hard-sleep. The Bash tool blocks long leading `sleep N` commands. `ha core info` returns info even while core is restarting, so poll the HTTP API instead — it only answers 200 once HA is fully booted:
+   ```bash
+   source .env
+   until [ "$(curl -sf -o /dev/null -w '%{http_code}' \
+     http://homeassistant:8123/api/ -H "Authorization: Bearer $HA_TOKEN")" = "200" ]; do
+     sleep 3
+   done
+   ```
+   Use this inside a plain Bash call (not Monitor) — it exits as soon as the API responds. You'll get a completion notification automatically.
 8. **Smoke test**: `./scripts/smoke_test.sh` — abort if any entity/service missing.
 9. **Log check**: `ssh root@homeassistant -p 22222 "docker logs homeassistant 2>&1 | grep -i verisure_italy | tail -20"` — look for ERROR/WARNING.
 

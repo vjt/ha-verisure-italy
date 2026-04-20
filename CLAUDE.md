@@ -150,6 +150,14 @@ Unknown proto codes are errors, not defaults.
   TIMELINE(id=506), DEACTIVATEZONE, CONNSTATUS, plus others
 - No sentinel/CONFORT sensors, no DOORLOCK
 
+### Panel-Type Allowlist (v0.8.3+)
+`SUPPORTED_PANELS: frozenset[str]` in `verisure_italy/models.py` gates
+arm/disarm. Only verified panels get commands — unknown panels raise
+`UnsupportedPanelError` and emit a diagnostic probe to the HA log (no
+bytes sent). Adding a new panel requires live probe output (via the
+`verisure-italy-cli` tool or HA log) + committed command map.
+See `docs/findings/panel-types.md`.
+
 ## Access
 - SSH to HAOS: `ssh root@homeassistant -p 22222`
 - SSH to HA container: `ssh hassio@homeassistant` (no scp, tar over ssh)
