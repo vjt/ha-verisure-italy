@@ -61,6 +61,12 @@ Arms away when everyone has left. Requires a `binary_sensor` that
 tracks whether anyone is home (e.g. via the `group` integration,
 Bluetooth, or router-based presence detection).
 
+**Post-check:** after the service call, waits up to 60s for the state
+to change to `armed_away`. If it doesn't, the service call was
+dropped (e.g. entity `unavailable` during an API outage) and a
+critical notification fires so a human can act. Without this, a
+failed arm is **silent** — HA logs a WARNING and moves on.
+
 ```yaml
 - id: alarm_arm_on_leave
   alias: "Alarm: arm away when the last one leaves"
@@ -72,6 +78,34 @@ Bluetooth, or router-based presence detection).
   - action: alarm_control_panel.alarm_arm_away
     target:
       entity_id: alarm_control_panel.verisure_alarm
+  - wait_for_trigger:
+    - trigger: state
+      entity_id: alarm_control_panel.verisure_alarm
+      to: armed_away
+    timeout: "00:01:00"
+    continue_on_timeout: true
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: "{{ not wait.trigger }}"
+      sequence:
+      - action: notify.mobile_app_you
+        data:
+          message: >-
+            CRITICAL: arm-away failed — alarm is
+            "{{ states('alarm_control_panel.verisure_alarm') }}".
+            Nobody home. Check Verisure app NOW.
+          data:
+            push:
+              interruption-level: critical
+              sound:
+                name: default
+                critical: 1
+                volume: 1.0
+    default:
+    - action: notify.mobile_app_you
+      data:
+        message: Nobody home — alarm armed away
   mode: single
 ```
 
@@ -80,6 +114,12 @@ Bluetooth, or router-based presence detection).
 Catches edge cases where the primary arm-on-leave automation misses
 (e.g. HA restart, presence sensor glitch). Two triggers: reactive
 (alarm goes disarmed while nobody's home) and periodic (every 5 min).
+
+**Note:** the condition `state: disarmed` fails silently when the
+entity is `unavailable` — this is intentional. The separate
+[**Alert on prolonged unavailable**](#ambulance-alert-on-prolonged-unavailable)
+automation covers that failure mode. The post-check below catches
+the case where the service call is issued but doesn't land.
 
 ```yaml
 - id: alarm_safety_net
@@ -106,9 +146,33 @@ Catches edge cases where the primary arm-on-leave automation misses
   - action: alarm_control_panel.alarm_arm_away
     target:
       entity_id: alarm_control_panel.verisure_alarm
-  - action: notify.mobile_app_you
-    data:
-      message: "Safety net: nobody home and alarm was disarmed — arming now"
+  - wait_for_trigger:
+    - trigger: state
+      entity_id: alarm_control_panel.verisure_alarm
+      to: armed_away
+    timeout: "00:01:00"
+    continue_on_timeout: true
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: "{{ not wait.trigger }}"
+      sequence:
+      - action: notify.mobile_app_you
+        data:
+          message: >-
+            CRITICAL: safety net failed to arm — alarm is
+            "{{ states('alarm_control_panel.verisure_alarm') }}".
+          data:
+            push:
+              interruption-level: critical
+              sound:
+                name: default
+                critical: 1
+                volume: 1.0
+    default:
+    - action: notify.mobile_app_you
+      data:
+        message: "Safety net: nobody home and alarm was disarmed — arming now"
   mode: single
 ```
 
@@ -294,6 +358,44 @@ residents get their own notification.
           entity_id: alarm_control_panel.verisure_alarm
   mode: parallel
   max: 2
+```
+
+### :ambulance: Alert on prolonged unavailable
+
+**Security-critical.** The alarm entity has been `unavailable` for 5
+minutes. Transient API glitches are absorbed by the client's retry
+layer (HTTP 5xx / timeouts, exponential backoff up to ~15s), so this
+does NOT fire for every hiccup. A sustained outage means:
+
+- Service calls to the entity are **silently dropped** by HA
+- Arm/disarm automations stop working
+- Force-arm, force-disarm all dead
+
+A human needs to know. The 5-minute `for:` duration is the sweet spot
+— short enough to catch real problems, long enough to ignore noise.
+
+```yaml
+- id: alarm_unavailable_alert
+  alias: "Alarm: alert on prolonged unavailable"
+  triggers:
+  - trigger: state
+    entity_id: alarm_control_panel.verisure_alarm
+    to: unavailable
+    for: "00:05:00"
+  actions:
+  - action: notify.mobile_app_you
+    data:
+      message: >-
+        ALARM: entity unavailable for 5min. Arm/disarm automations
+        are DEAD until this recovers. Check HA logs + Verisure app.
+      data:
+        push:
+          interruption-level: critical
+          sound:
+            name: default
+            critical: 1
+            volume: 1.0
+  mode: single
 ```
 
 ### :warning: Unknown alarm state alert
