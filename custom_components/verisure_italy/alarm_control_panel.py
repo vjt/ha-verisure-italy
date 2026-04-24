@@ -333,7 +333,20 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self._fire_arming_exception_event(exc, mode)
                 self.async_write_ha_state()
                 return
-            except (OperationFailedError, OperationTimeoutError) as exc:
+            except OperationTimeoutError as exc:
+                # Fail-secure: timeout means we don't know whether the
+                # panel acted on the command or not. Show UNKNOWN so
+                # nothing downstream assumes a state. The post-`with`
+                # refresh below pulls fresh panel state and resolves.
+                self._attr_alarm_state = None
+                _LOGGER.error("Arm timed out — state UNKNOWN: %s", exc.message)
+                await self._notify_operation_failed(
+                    "Arm", exc.message, marker_operation="ARM",
+                )
+                self.async_write_ha_state()
+            except OperationFailedError as exc:
+                # Panel explicitly rejected the command — state is
+                # unambiguously the prior one.
                 self._update_alarm_state()
                 _LOGGER.error("Arm failed: %s", exc.message)
                 await self._notify_operation_failed(
@@ -350,9 +363,13 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 )
                 self.async_write_ha_state()
                 return
+            else:
+                _LOGGER.info("Armed %s successfully", mode)
+                self._expire_force_context()
 
-        _LOGGER.info("Armed %s successfully", mode)
-        self._expire_force_context()
+        # Fall-through: reached only on success OR OperationTimeoutError.
+        # In both cases a fresh poll is the right next step — it either
+        # confirms the armed state (success) or resolves UNKNOWN (timeout).
         await self.coordinator.async_request_refresh()
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
@@ -380,7 +397,19 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self._update_alarm_state()
                 self.async_write_ha_state()
                 return
-            except (OperationFailedError, OperationTimeoutError) as exc:
+            except OperationTimeoutError as exc:
+                # Fail-secure: disarm timeout leaves panel state ambiguous.
+                # Show UNKNOWN — disarmed is NEVER a safe default to assume
+                # (security software). Post-`with` refresh resolves it.
+                self._attr_alarm_state = None
+                _LOGGER.error(
+                    "Disarm timed out — state UNKNOWN: %s", exc.message
+                )
+                await self._notify_operation_failed(
+                    "Disarm", exc.message, marker_operation="DISARM",
+                )
+                self.async_write_ha_state()
+            except OperationFailedError as exc:
                 self._update_alarm_state()
                 _LOGGER.error("Disarm failed: %s", exc.message)
                 await self._notify_operation_failed(
@@ -397,9 +426,11 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 )
                 self.async_write_ha_state()
                 return
+            else:
+                _LOGGER.info("Disarmed successfully")
+                self._expire_force_context()
 
-        _LOGGER.info("Disarmed successfully")
-        self._expire_force_context()
+        # Success OR OperationTimeoutError — refresh to confirm / resolve.
         await self.coordinator.async_request_refresh()
 
     # --- Force arm ---
@@ -440,7 +471,21 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self._update_alarm_state()
                 self.async_write_ha_state()
                 return
-            except (OperationFailedError, OperationTimeoutError) as exc:
+            except OperationTimeoutError as exc:
+                # Fail-secure: force-arm timeout is state-ambiguous.
+                # Clear the stale context token (reference_id/suid are
+                # consumed server-side whether or not we got confirmation)
+                # and show UNKNOWN until refresh resolves.
+                self._clear_force_context()
+                self._attr_alarm_state = None
+                _LOGGER.error(
+                    "Force arm timed out — state UNKNOWN: %s", exc.message
+                )
+                await self._notify_operation_failed(
+                    "Force arm", exc.message, marker_operation="ARM",
+                )
+                self.async_write_ha_state()
+            except OperationFailedError as exc:
                 self._clear_force_context()
                 self._update_alarm_state()
                 _LOGGER.error("Force arm failed: %s", exc.message)
@@ -461,9 +506,11 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 )
                 self.async_write_ha_state()
                 return
+            else:
+                _LOGGER.info("Force-armed successfully, bypassed: %s", zones)
+                self._expire_force_context()
 
-        _LOGGER.info("Force-armed successfully, bypassed: %s", zones)
-        self._expire_force_context()
+        # Success OR OperationTimeoutError — refresh to confirm / resolve.
         await self.coordinator.async_request_refresh()
 
     async def async_force_arm_cancel(self) -> None:

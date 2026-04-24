@@ -20,7 +20,12 @@ import pytest
 from homeassistant.components.alarm_control_panel import AlarmControlPanelState
 
 from custom_components.verisure_italy.alarm_control_panel import _STATE_MAP
-from verisure_italy.exceptions import SameStateError, UnsupportedPanelError
+from verisure_italy.exceptions import (
+    OperationFailedError,
+    OperationTimeoutError,
+    SameStateError,
+    UnsupportedPanelError,
+)
 from verisure_italy.models import (
     SUPPORTED_PANELS,
     AlarmState,
@@ -485,3 +490,62 @@ class TestHandleCoordinatorUpdateClearsStaleForceContext:
             entity._handle_coordinator_update()
 
         assert coordinator.force_context is ctx
+
+
+class TestFailSecureOnTimeout:
+    """M6 — OperationTimeoutError sets UNKNOWN, refreshes to resolve.
+
+    OperationFailedError is unambiguous (panel rejected, prior state
+    is correct), so it keeps the old revert-to-prior behaviour.
+    """
+
+    async def test_arm_timeout_sets_unknown_and_refreshes(self, caplog):
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        coordinator.async_arm = AsyncMock(
+            side_effect=OperationTimeoutError("panel stopped responding"),
+        )
+
+        with caplog.at_level(
+            logging.ERROR,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            await entity.async_alarm_arm_home()
+
+        # UNKNOWN = None in HA alarm_control_panel contract
+        assert entity._attr_alarm_state is None
+        entity._update_alarm_state.assert_not_called()
+        coordinator.async_request_refresh.assert_awaited_once()
+        assert any(
+            "UNKNOWN" in r.message for r in caplog.records
+        )
+
+    async def test_arm_failed_reverts_and_refreshes_not(self, caplog):
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        coordinator.async_arm = AsyncMock(
+            side_effect=OperationFailedError(
+                "rejected", error_code=None, error_type=None,
+            ),
+        )
+
+        with caplog.at_level(
+            logging.ERROR,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            await entity.async_alarm_arm_home()
+
+        # Unambiguous — revert via _update_alarm_state, no refresh fall-through
+        entity._update_alarm_state.assert_called()
+        coordinator.async_request_refresh.assert_not_called()
+        assert entity._attr_alarm_state is not None
+
+    async def test_disarm_timeout_sets_unknown(self):
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        entity._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY  # type: ignore[attr-defined]
+        coordinator.async_disarm = AsyncMock(
+            side_effect=OperationTimeoutError("panel stopped responding"),
+        )
+
+        await entity.async_alarm_disarm()
+
+        assert entity._attr_alarm_state is None
+        coordinator.async_request_refresh.assert_awaited_once()
