@@ -43,6 +43,14 @@
 - Active services are fetched from `xSSrv` once per session and cached
   per installation; previously they would have been re-fetched on every
   arm/disarm. Cache invalidates on capabilities-token rotation.
+- HA UI now hides arm buttons while the panel is armed. Mirrors the
+  Verisure mobile app: armed → armed interior transitions
+  (`arm_home` → `arm_away` etc.) are rejected by the panel with
+  `error_code 106` / "Request not valid for Central Unit", so the
+  user must disarm first. `supported_features` is now a dynamic
+  property that only exposes `ARM_HOME | ARM_AWAY` when disarmed;
+  `_async_arm` enforces the same rule in code as belt-and-braces
+  against direct service calls (automations, REST).
 
 ### Removed
 - `STATE_TO_COMMAND` (replaced by `CommandResolver`).

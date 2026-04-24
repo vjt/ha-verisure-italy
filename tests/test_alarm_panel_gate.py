@@ -223,3 +223,120 @@ def test_operation_failed_template_points_at_marker_block_disarm() -> None:
     )
     assert "VERISURE DISARM FAILURE BEGIN" in text
     assert "VERISURE DISARM FAILURE END" in text
+
+
+# ---------------------------------------------------------------------------
+# Armed-to-armed gate — UI (supported_features) + code (_async_arm)
+# ---------------------------------------------------------------------------
+#
+# Verisure panels reject armed -> armed interior transitions with
+# error_code 106. The mobile app enforces the same rule. We mirror it
+# in HA: UI hides the arm buttons while armed, and the code path
+# refuses even if a service call bypasses the UI.
+
+
+class TestSupportedFeaturesDynamic:
+    """`supported_features` reflects current alarm state via _update_supported_features."""
+
+    def _entity_in_state(self, state: AlarmControlPanelState):
+        entity, _ = _make_panel_entity("SDVECU")
+        entity._attr_alarm_state = state  # type: ignore[attr-defined]
+        entity._update_supported_features()
+        return entity
+
+    def test_disarmed_exposes_arm_home_and_arm_away(self) -> None:
+        from homeassistant.components.alarm_control_panel.const import (
+            AlarmControlPanelEntityFeature,
+        )
+
+        entity = self._entity_in_state(AlarmControlPanelState.DISARMED)
+        features = entity._attr_supported_features
+        assert features & AlarmControlPanelEntityFeature.ARM_HOME
+        assert features & AlarmControlPanelEntityFeature.ARM_AWAY
+
+    def test_armed_home_hides_both_arm_modes(self) -> None:
+        from homeassistant.components.alarm_control_panel.const import (
+            AlarmControlPanelEntityFeature,
+        )
+
+        entity = self._entity_in_state(AlarmControlPanelState.ARMED_HOME)
+        features = entity._attr_supported_features
+        assert not (features & AlarmControlPanelEntityFeature.ARM_HOME)
+        assert not (features & AlarmControlPanelEntityFeature.ARM_AWAY)
+
+    def test_armed_away_hides_both_arm_modes(self) -> None:
+        from homeassistant.components.alarm_control_panel.const import (
+            AlarmControlPanelEntityFeature,
+        )
+
+        entity = self._entity_in_state(AlarmControlPanelState.ARMED_AWAY)
+        features = entity._attr_supported_features
+        assert not (features & AlarmControlPanelEntityFeature.ARM_HOME)
+        assert not (features & AlarmControlPanelEntityFeature.ARM_AWAY)
+
+    def test_arming_transient_also_hides_arm_modes(self) -> None:
+        """ARMING is a transient state — must not advertise arm modes either."""
+        from homeassistant.components.alarm_control_panel.const import (
+            AlarmControlPanelEntityFeature,
+        )
+
+        entity = self._entity_in_state(AlarmControlPanelState.ARMING)
+        features = entity._attr_supported_features
+        assert not (features & AlarmControlPanelEntityFeature.ARM_HOME)
+        assert not (features & AlarmControlPanelEntityFeature.ARM_AWAY)
+
+
+class TestAsyncArmRefusesArmedToArmed:
+    """Code-layer belt-and-braces: _async_arm must not hit the wire."""
+
+    async def test_arm_home_while_armed_away_is_refused(
+        self, caplog
+    ) -> None:
+        entity, coordinator = _make_panel_entity("SDVECU")
+        entity._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY  # type: ignore[attr-defined]
+        coordinator.async_arm = AsyncMock()
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            await entity.async_alarm_arm_home()
+
+        coordinator.async_arm.assert_not_called()
+        assert any(
+            "already armed" in r.message for r in caplog.records
+        )
+
+    async def test_arm_away_while_armed_home_is_refused(
+        self, caplog
+    ) -> None:
+        entity, coordinator = _make_panel_entity("SDVECU")
+        entity._attr_alarm_state = AlarmControlPanelState.ARMED_HOME  # type: ignore[attr-defined]
+        coordinator.async_arm = AsyncMock()
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            await entity.async_alarm_arm_away()
+
+        coordinator.async_arm.assert_not_called()
+        assert any(
+            "already armed" in r.message for r in caplog.records
+        )
+
+    async def test_arm_same_mode_twice_is_ignored_silently(
+        self, caplog
+    ) -> None:
+        """Same-mode arm is the existing no-op path — must not hit wire either."""
+        entity, coordinator = _make_panel_entity("SDVECU")
+        entity._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY  # type: ignore[attr-defined]
+        coordinator.async_arm = AsyncMock()
+
+        with caplog.at_level(
+            logging.DEBUG,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            await entity.async_alarm_arm_away()
+
+        coordinator.async_arm.assert_not_called()

@@ -106,10 +106,6 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
     _attr_has_entity_name = True
     _attr_icon = "mdi:shield-home"
     _attr_name = "Alarm"
-    _attr_supported_features = (
-        AlarmControlPanelEntityFeature.ARM_HOME
-        | AlarmControlPanelEntityFeature.ARM_AWAY
-    )
     _attr_code_arm_required = False
 
     def __init__(self, coordinator: VerisureCoordinator) -> None:
@@ -130,7 +126,30 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
     def _update_alarm_state(self) -> None:
         """Update _attr_alarm_state from coordinator data. Crashes on unknown state."""
         self._attr_alarm_state = _STATE_MAP[self.coordinator.data.alarm_state]
+        self._update_supported_features()
         self._update_force_attributes()
+
+    def _update_supported_features(self) -> None:
+        """Expose arm modes only when currently disarmed.
+
+        Verisure panels reject armed -> armed interior transitions
+        (arm_home -> arm_away etc.) with error_code 106 / "Request not
+        valid for Central Unit". The Verisure mobile app enforces the
+        same rule by graying out the arm buttons while armed. Mirror
+        that in HA: when already armed, the UI shows only the disarm
+        action; the user must disarm first to change mode.
+
+        Pops the cached_property from the instance __dict__ so HA
+        re-reads _attr_supported_features on the next state write.
+        """
+        if self._attr_alarm_state == AlarmControlPanelState.DISARMED:
+            self._attr_supported_features = (
+                AlarmControlPanelEntityFeature.ARM_HOME
+                | AlarmControlPanelEntityFeature.ARM_AWAY
+            )
+        else:
+            self._attr_supported_features = AlarmControlPanelEntityFeature(0)
+        vars(self).pop("supported_features", None)
 
     def _update_force_attributes(self) -> None:
         """Update extra state attributes from force context."""
@@ -230,6 +249,18 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         """Execute arm operation with force-arm exception handling."""
         if self._attr_alarm_state == ha_state:
             _LOGGER.debug("Arm-to-%s ignored — already in that state", ha_state)
+            return
+
+        # Armed -> armed interior transitions (arm_home -> arm_away etc.)
+        # are rejected by the panel with error_code 106. The UI already
+        # hides the buttons via `supported_features`; this guard catches
+        # direct service calls (automations, REST) that bypass the UI.
+        if self._attr_alarm_state != AlarmControlPanelState.DISARMED:
+            _LOGGER.warning(
+                "Arm-to-%s refused — panel already armed (%s). "
+                "Disarm first to change mode.",
+                ha_state, self._attr_alarm_state,
+            )
             return
 
         if self._arm_lock.locked():
