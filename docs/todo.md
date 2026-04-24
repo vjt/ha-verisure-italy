@@ -8,7 +8,7 @@ Backlog for ha-verisure. Prune aggressively — completed items go in
 `CHANGELOG.md`, not here. Keep context on pending items so the next
 session can pick them up cold.
 
-Updated: 2026-04-24 (post-v0.9.1 hardening release).
+Updated: 2026-04-24 (post-v0.9.2 INTERIOR_ONLY state-mapping fix).
 
 ## Immediate
 
@@ -22,11 +22,14 @@ Updated: 2026-04-24 (post-v0.9.1 hardening release).
   BEGIN` block lands, use it to identify the panel + any missing
   service gate. Reference:
   `docs/findings/arm-command-vocabulary.md`.
-- **Issue #3 SDVFAST live confirmation** — v0.9.0 nudge posted
-  2026-04-24 to the reporter with BEGIN/END paste instructions.
-  SDVFAST is in `SUPPORTED_PANELS` but never live-verified; first real
-  arm/disarm may surface an unknown proto code (fail-secure crashes
-  loud). Watch for their reply.
+- **Issue #3 SDVFAST live confirmation** — alan210874 confirmed v0.9.1
+  broken on SDVFAST (`UnsupportedCommandError: ARMDAY1PERI1 missing
+  PERI`). Root cause was entity-layer target assumption; fixed in
+  v0.9.2 by panel-family-aware arm targets (see CP04 S2). v0.9.2
+  comment posted 2026-04-24 asking reporter to update via HACS and
+  retest arm_home + arm_away. On success: close the issue. On a new
+  `VERISURE ARM FAILURE BEGIN` block: use it to identify any
+  remaining SDVFAST-specific quirk.
 
 ## High
 
