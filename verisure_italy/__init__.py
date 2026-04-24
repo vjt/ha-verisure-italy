@@ -20,6 +20,7 @@ from .exceptions import (
 )
 from .models import (
     CAMERA_DEVICE_TYPES,
+    PANEL_FAMILIES,
     PROTO_TO_STATE,
     STATE_TO_COMMAND,
     STATE_TO_PROTO,
@@ -37,6 +38,7 @@ from .models import (
     LoginResponse,
     OperationResult,
     OtpPhone,
+    PanelFamily,
     PerimeterMode,
     ProtoCode,
     RawDevice,
@@ -50,6 +52,7 @@ from .probe import run_probe
 
 __all__ = [
     "CAMERA_DEVICE_TYPES",
+    "PANEL_FAMILIES",
     "PROTO_TO_STATE",
     "STATE_TO_COMMAND",
     "STATE_TO_PROTO",
@@ -74,6 +77,7 @@ __all__ = [
     "OperationResult",
     "OperationTimeoutError",
     "OtpPhone",
+    "PanelFamily",
     "PerimeterMode",
     "ProtoCode",
     "RawDevice",

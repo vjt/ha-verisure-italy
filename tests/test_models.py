@@ -5,14 +5,17 @@ from pydantic import ValidationError
 
 from verisure_italy.exceptions import UnexpectedStateError
 from verisure_italy.models import (
+    PANEL_FAMILIES,
     PROTO_TO_STATE,
     STATE_TO_COMMAND,
     STATE_TO_PROTO,
+    SUPPORTED_PANELS,
     AlarmState,
     ArmCommand,
     GeneralStatus,
     InteriorMode,
     OperationResult,
+    PanelFamily,
     PerimeterMode,
     ProtoCode,
     ZoneException,
@@ -210,3 +213,24 @@ class TestArmCommands:
     def test_partial_perimeter_command(self) -> None:
         state = PROTO_TO_STATE[ProtoCode.PARTIAL_PERIMETER]
         assert STATE_TO_COMMAND[state] == ArmCommand.ARM_PARTIAL_PERIMETER
+
+
+class TestPanelFamilies:
+    """Panel roster + family classifier from the Verisure web bundle."""
+
+    def test_panel_families_covers_all_supported_panels(self) -> None:
+        assert set(PANEL_FAMILIES.keys()) == SUPPORTED_PANELS
+
+    def test_panel_family_a_is_peri_capable(self) -> None:
+        peri_panels = {"SDVECU", "SDVECUD", "SDVECUW", "SDVECU-D", "SDVECU-W", "MODPRO"}
+        for panel in peri_panels:
+            assert PANEL_FAMILIES[panel] is PanelFamily.PERI_CAPABLE, panel
+
+    def test_panel_family_b_has_no_perimeter(self) -> None:
+        no_peri = {"SDVFAST", "SDVFSW"}
+        for panel in no_peri:
+            assert PANEL_FAMILIES[panel] is PanelFamily.INTERIOR_ONLY, panel
+
+    def test_supported_panels_frozen(self) -> None:
+        assert isinstance(SUPPORTED_PANELS, frozenset)
+        assert len(SUPPORTED_PANELS) == 8

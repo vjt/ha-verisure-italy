@@ -326,10 +326,40 @@ class Service(BaseModel):
     attributes: _ServiceAttributesWrapper | None = None
 
 
-# Panel types for which explicit command maps have been verified on live
-# hardware. Arm/disarm commands are sent ONLY to these panels. Unknown
-# panels raise UnsupportedPanelError — fail-secure, no blind commands.
-SUPPORTED_PANELS: frozenset[str] = frozenset({"SDVECU"})
+# ---------------------------------------------------------------------------
+# Panel roster — classified by family from the Verisure web bundle.
+# See docs/findings/arm-command-vocabulary.md for the source.
+# ---------------------------------------------------------------------------
+
+
+class PanelFamily(StrEnum):
+    """Panel capability family.
+
+    PERI_CAPABLE panels have a two-axis state space (interior x perimeter).
+    INTERIOR_ONLY panels have no perimeter sensors — single-axis state,
+    and every *PERI* arm/disarm variant is rejected server-side.
+    """
+
+    PERI_CAPABLE = "peri_capable"
+    INTERIOR_ONLY = "interior_only"
+
+
+PANEL_FAMILIES: dict[str, PanelFamily] = {
+    "SDVECU": PanelFamily.PERI_CAPABLE,
+    "SDVECUD": PanelFamily.PERI_CAPABLE,
+    "SDVECUW": PanelFamily.PERI_CAPABLE,
+    "SDVECU-D": PanelFamily.PERI_CAPABLE,
+    "SDVECU-W": PanelFamily.PERI_CAPABLE,
+    "MODPRO": PanelFamily.PERI_CAPABLE,
+    "SDVFAST": PanelFamily.INTERIOR_ONLY,
+    "SDVFSW": PanelFamily.INTERIOR_ONLY,
+}
+
+# Panels the client is authorised to send commands to. Derived from the
+# web bundle — every Italian API panel is listed. Per-panel acceptance
+# of individual commands is still gated by Service.active from xSSrv
+# (see CommandResolver) — SUPPORTED_PANELS is the coarse gate.
+SUPPORTED_PANELS: frozenset[str] = frozenset(PANEL_FAMILIES.keys())
 
 
 # ---------------------------------------------------------------------------
