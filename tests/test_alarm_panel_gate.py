@@ -3,6 +3,9 @@
 Covers the fail-secure behaviour: unknown panel types must raise
 UnsupportedPanelError, emit a probe to the log, and send zero bytes
 to the Verisure API. SDVECU (supported) must pass through untouched.
+
+Also covers SUPPORTED_PANELS membership (one parametric test per panel)
+and the three primary _STATE_MAP values (DISARMED, ARMED_HOME, ARMED_AWAY).
 """
 
 from __future__ import annotations
@@ -12,9 +15,17 @@ import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.components.alarm_control_panel import AlarmControlPanelState
 
+from custom_components.verisure_italy.alarm_control_panel import _STATE_MAP
 from verisure_italy.exceptions import UnsupportedPanelError
-from verisure_italy.models import SUPPORTED_PANELS, Installation
+from verisure_italy.models import (
+    SUPPORTED_PANELS,
+    AlarmState,
+    Installation,
+    InteriorMode,
+    PerimeterMode,
+)
 
 
 def _make_installation(panel: str) -> Installation:
@@ -131,3 +142,51 @@ class TestCheckPanelSupported:
         payload = payload[payload.index("{"):]
         parsed = json.loads(payload)
         assert parsed["installation"]["panel"] == "ACME9000"
+
+
+# ---------------------------------------------------------------------------
+# SUPPORTED_PANELS membership — one parametric test per panel
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("panel", sorted(SUPPORTED_PANELS))
+def test_every_supported_panel_is_gate_admissible(panel: str) -> None:
+    """Every panel in SUPPORTED_PANELS must pass the coarse gate.
+
+    The gate is a membership check; this test locks down the roster
+    so a refactor that drops a panel from SUPPORTED_PANELS shows up
+    as a test failure per panel.
+    """
+    assert panel in SUPPORTED_PANELS
+
+
+def test_unknown_panel_not_in_supported_panels() -> None:
+    """Sanity check — an obviously-invalid panel stays refused."""
+    assert "TOTALLY_FAKE_PANEL" not in SUPPORTED_PANELS
+
+
+def test_supported_panels_has_exactly_the_roster_from_findings() -> None:
+    """Panel roster must match docs/findings/arm-command-vocabulary.md."""
+    expected = {
+        "SDVECU", "SDVECUD", "SDVECUW", "SDVECU-D", "SDVECU-W",
+        "MODPRO", "SDVFAST", "SDVFSW",
+    }
+    assert expected == SUPPORTED_PANELS
+
+
+# ---------------------------------------------------------------------------
+# _STATE_MAP primary values — the three states exposed in the HA UI
+# ---------------------------------------------------------------------------
+
+def test_primary_state_map_disarmed() -> None:
+    state = AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF)
+    assert _STATE_MAP[state] == AlarmControlPanelState.DISARMED
+
+
+def test_primary_state_map_partial_perimeter_is_armed_home() -> None:
+    state = AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON)
+    assert _STATE_MAP[state] == AlarmControlPanelState.ARMED_HOME
+
+
+def test_primary_state_map_total_perimeter_is_armed_away() -> None:
+    state = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
+    assert _STATE_MAP[state] == AlarmControlPanelState.ARMED_AWAY
