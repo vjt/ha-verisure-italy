@@ -1,5 +1,110 @@
 # Changelog
 
+## 0.9.1 — 2026-04-24
+
+Hardening release. Follow-up to the 0.9.0 full codebase review (34
+findings). All HIGH + MEDIUM items addressed, 0 CRITICAL outstanding.
+Every change verified on a live installation with the full E2E cycle
+(disarm → arm_home → disarm → arm_away → disarm → capture 6 cameras).
+
+### Security / fail-secure
+
+- **Race-free arm/disarm mutations.** `VerisureCoordinator` now exposes
+  an async `suppress_updates()` context manager; the alarm entity
+  wraps every mutation in it alongside `_arm_lock`. A background poll
+  landing mid-transition can no longer overwrite the ARMING / DISARMING
+  placeholder with a stale panel snapshot. (M3)
+- **Fail-secure on `OperationTimeoutError`.** Arm/disarm timeout no
+  longer reverts the UI to a guessed prior state. The entity now shows
+  UNKNOWN and triggers a forced refresh — the real panel state resolves
+  on the next poll. `OperationFailedError` (explicit panel rejection)
+  keeps the old revert behaviour, since that outcome is unambiguous. (M6)
+- **Force-arm context auto-expires when the panel moves on.** If the
+  user arms via the Verisure mobile app (or another HA automation)
+  while a 120s force-arm context is still live, the coordinator update
+  handler clears the stale `reference_id` / `suid` instead of letting
+  a future "Force Arm" press fire an invalid token. (M4)
+- **Structured audit log for every force-arm attempt.** One grep-stable
+  `FORCE_ARM_AUDIT { … }` line per attempt — success, noop, timeout,
+  or failure — carrying reference_id, suid, mode, bypassed zones,
+  proto-before, duration, and (on non-success) error class + message.
+  Satisfies the CLAUDE.md audit-trail requirement for the most
+  security-sensitive mutation in the codebase. (M17)
+
+### Reliability
+
+- **Typed `SameStateError`.** A benign race where the entity's cached
+  view said "not in target" but the client's `_last_proto` had already
+  caught up used to raise a bare `ValueError` and surface a raw
+  traceback. Now returns through a typed `SameStateError(VerisureError)`;
+  the client skips the failure report, the entity logs at INFO and
+  returns silently. (M15)
+- **Config-entry schema v2.** The config flow now persists the full
+  `Installation` dump instead of three scalar strings with empty-string
+  placeholders for missing metadata. `async_migrate_entry` synthesises
+  v2 from the three v1 scalars; v1 entries stay readable for downgrade
+  compatibility. (H2)
+- **Session-expired re-login maps network errors correctly.** A
+  transient `APIConnectionError` during the inner `client.login()` +
+  `get_general_status()` retry was bubbling out unhandled; now wrapped
+  as `UpdateFailed` (coordinator retries on the next interval) instead
+  of masquerading as `ConfigEntryAuthFailed` (which would trigger HA's
+  re-auth dialog even though the user's credentials are fine). (M9)
+
+### UX
+
+- **Config flow surfaces network / schema errors as form errors.**
+  `APIConnectionError` / `APIResponseError` / `WAFBlockedError` now map
+  to `cannot_connect`; pydantic `ValidationError` maps to `unknown`.
+  No more raw tracebacks on login / 2FA / reauth / reconfigure
+  screens. New translation strings added. (M10, M8)
+- **Dashboard `except Exception` narrowed.** Both the Lovelace
+  panel-register path and the dashboard-setup path now catch only the
+  expected `AttributeError / KeyError / TypeError / ImportError /
+  OSError` drift modes from HA's private Lovelace internals; real
+  programming errors surface. (H1)
+- **Thumbnail timestamp parse fallback is logged.** A non-ISO-8601
+  upstream timestamp now emits a WARNING before falling back to local
+  time; drift no longer goes unnoticed. (M16)
+
+### Typing / code-hygiene
+
+- **`CommandResolver` → Pydantic.** Last remaining `@dataclass` in the
+  codebase converted to `BaseModel` + frozen config, matching the
+  "Pydantic models only" rule in CLAUDE.md. (M1)
+- **Lovelace cards are TypedDict.** `dashboard.py` now declares
+  `PictureEntityCard / TileCard / MarkdownCard / AlarmPanelCard /
+  VerticalStackCard / ConditionalCard / GridSection / SectionsView /
+  LovelaceConfig`. A typo in a card-key name is now a pyright error
+  instead of a silent runtime bug. (M12)
+- **`tz=UTC` on every `datetime.now()` used for calculations.** Overlay
+  text still uses local time (that's a display value, not a comparison
+  operand). (M2)
+- **Force-context clear paths unified.** The timer-expiry callback now
+  routes through `_clear_force_context` rather than duplicating clear +
+  notify logic inline. (M5)
+- **Manifest declares HA 2026.4 minimum.** The thread-safety patterns
+  the code relies on (deferred `hass.async_create_task` for
+  `async_call_later` callbacks) were introduced in 2026.4. (M19)
+- **`# type: ignore` now carries pyright error codes and justifications.**
+  Architecture test `test_no_blanket_type_ignore` enforces it. (M18)
+
+### Dev
+
+- **`tests/test_coordinator.py` + expanded `tests/test_alarm_panel_gate.py`**
+  cover the new race guard, `SameStateError` catch paths, stale-context
+  eviction, fail-secure-on-timeout behaviour, and the force-arm audit
+  format. 320 tests pass, 0 pyright errors, ruff clean.
+- **`docs/reviews/2026-04-24-codebase-review.md`** — the full multi-agent
+  review report that drove this release.
+
+### Deferred
+
+- M7 (client → HA model-leak boundary) — structural, deserves a design
+  pass rather than a patch.
+- M20 (gate tests full `__init__` path) — the current `__new__` bypass
+  fixture costs less than a fake-HA harness would.
+
 ## 0.9.0 — 2026-04-24
 
 ### Added

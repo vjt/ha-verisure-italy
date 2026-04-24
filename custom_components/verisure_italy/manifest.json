@@ -7,6 +7,6 @@
   "documentation": "https://github.com/vjt/ha-verisure-italy",
   "homeassistant": "2026.4.0",
   "iot_class": "cloud_polling",
-  "requirements": ["verisure-italy>=0.9.0"],
-  "version": "0.9.0"
+  "requirements": ["verisure-italy>=0.9.1"],
+  "version": "0.9.1"
 }

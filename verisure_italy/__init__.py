@@ -1,6 +1,6 @@
 """Verisure Italy API client."""
 
-__version__ = "0.8.3"
+__version__ = "0.9.1"
 
 from .client import VerisureClient, generate_device_id, generate_uuid
 from .diagnostics import run_probe
