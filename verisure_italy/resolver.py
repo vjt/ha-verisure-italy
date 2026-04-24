@@ -25,32 +25,55 @@ from .models import (
     ServiceRequest,
 )
 
-# Every command → the service(s) that must be active to honour it.
-# Expressed as "all of these must be active" semantics — most commands
-# need exactly one, compound modes need two (the base service AND PERI).
+# Every command → the base service(s) that must be active to honour it.
+#
+# Empirical observation on a live SDVECU panel: `xSSrv` lists ARM + DARM +
+# ARMNIGHT as active but does NOT list ARMDAY or PERI, yet the panel
+# accepts ARMDAY1 / ARM1PERI1 / ARMDAY1PERI1 / DARM1DARMPERI fine. The
+# `ARMDAY` and `PERI` service rows are UI capability hints ("show the
+# Day and Perimeter buttons?"), not hard gates on the wire protocol.
+#
+# Mapping rule: every arm variant requires `ARM`; every disarm variant
+# requires `DARM`. Sub-capabilities that ARE reliably reported per-panel:
+#   - ARMNIGHT (SDVECU active; absent on panels without night mode)
+#   - ARMANNEX / DARMANNEX (annex-equipped panels only)
+# Perimeter gating is handled by panel FAMILY below (PERI_CAPABLE vs
+# INTERIOR_ONLY) — not by the ServiceRequest.PERI flag, which isn't
+# reliable across panels.
 _COMMAND_REQUIRES: dict[ArmCommand, frozenset[ServiceRequest]] = {
+    # Disarm — base DARM only; perimeter-disarm variants are family-gated.
     ArmCommand.DISARM: frozenset({ServiceRequest.DARM}),
-    ArmCommand.DISARM_ALL: frozenset({ServiceRequest.DARM, ServiceRequest.PERI}),
-    ArmCommand.DISARM_PERIMETER: frozenset({ServiceRequest.PERI}),
-    ArmCommand.DISARM_ANNEX: frozenset({ServiceRequest.DARMANNEX}),
+    ArmCommand.DISARM_ALL: frozenset({ServiceRequest.DARM}),
+    ArmCommand.DISARM_PERIMETER: frozenset({ServiceRequest.DARM}),
+    ArmCommand.DISARM_ANNEX: frozenset({ServiceRequest.DARM, ServiceRequest.DARMANNEX}),
+    # Arm — base ARM always required; NIGHT + ANNEX are observed sub-caps.
     ArmCommand.ARM_TOTAL: frozenset({ServiceRequest.ARM}),
-    ArmCommand.ARM_TOTAL_PERIMETER: frozenset({ServiceRequest.ARM, ServiceRequest.PERI}),
-    ArmCommand.ARM_PARTIAL: frozenset({ServiceRequest.ARMDAY}),
-    ArmCommand.ARM_PARTIAL_PERIMETER: frozenset({ServiceRequest.ARMDAY, ServiceRequest.PERI}),
-    ArmCommand.ARM_NIGHT: frozenset({ServiceRequest.ARMNIGHT}),
-    ArmCommand.ARM_NIGHT_PERIMETER: frozenset({ServiceRequest.ARMNIGHT, ServiceRequest.PERI}),
-    # Transition commands are gated by the base service that unlocks them
-    # per the web bundle table (ARM → ARMINTFPART1; ARMDAY → ARMPARTFINT*1).
-    # Panels that expose ARMINTFPART / ARMPARTFINT as *standalone* services
-    # (e.g. SDVFAST) satisfy this check via ARM / ARMDAY respectively —
-    # both sets appear in their active_services.
+    ArmCommand.ARM_TOTAL_PERIMETER: frozenset({ServiceRequest.ARM}),
+    ArmCommand.ARM_PARTIAL: frozenset({ServiceRequest.ARM}),
+    ArmCommand.ARM_PARTIAL_PERIMETER: frozenset({ServiceRequest.ARM}),
+    ArmCommand.ARM_NIGHT: frozenset({ServiceRequest.ARM, ServiceRequest.ARMNIGHT}),
+    ArmCommand.ARM_NIGHT_PERIMETER: frozenset({ServiceRequest.ARM, ServiceRequest.ARMNIGHT}),
     ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR: frozenset({ServiceRequest.ARM}),
-    ArmCommand.ARM_PARTIAL_FROM_TOTAL: frozenset({ServiceRequest.ARMDAY}),
-    ArmCommand.ARM_NIGHT_FROM_TOTAL: frozenset({ServiceRequest.ARMDAY}),
-    ArmCommand.ARM_ANNEX: frozenset({ServiceRequest.ARMANNEX}),
-    ArmCommand.ARM_INTERIOR_EXTERIOR: frozenset({ServiceRequest.ARM, ServiceRequest.PERI}),
-    ArmCommand.ARM_PERIMETER: frozenset({ServiceRequest.PERI}),
+    ArmCommand.ARM_PARTIAL_FROM_TOTAL: frozenset({ServiceRequest.ARM}),
+    ArmCommand.ARM_NIGHT_FROM_TOTAL: frozenset({ServiceRequest.ARM, ServiceRequest.ARMNIGHT}),
+    ArmCommand.ARM_ANNEX: frozenset({ServiceRequest.ARM, ServiceRequest.ARMANNEX}),
+    ArmCommand.ARM_INTERIOR_EXTERIOR: frozenset({ServiceRequest.ARM}),
+    ArmCommand.ARM_PERIMETER: frozenset({ServiceRequest.ARM}),
 }
+
+# Commands that operate on the perimeter axis — rejected client-side on
+# panels in the INTERIOR_ONLY family regardless of service declarations.
+# Source of truth: web-bundle panel classifier R(e). See
+# docs/findings/arm-command-vocabulary.md.
+_PERI_COMMANDS: frozenset[ArmCommand] = frozenset({
+    ArmCommand.ARM_PERIMETER,
+    ArmCommand.ARM_TOTAL_PERIMETER,
+    ArmCommand.ARM_PARTIAL_PERIMETER,
+    ArmCommand.ARM_NIGHT_PERIMETER,
+    ArmCommand.ARM_INTERIOR_EXTERIOR,
+    ArmCommand.DISARM_ALL,
+    ArmCommand.DISARM_PERIMETER,
+})
 
 
 @dataclass(frozen=True)
@@ -154,7 +177,21 @@ class CommandResolver:
         )
 
     def _assert_supported(self, command: ArmCommand) -> None:
-        """Raise UnsupportedCommandError if command requires a service not in active_services."""
+        """Raise UnsupportedCommandError if the panel cannot honour command.
+
+        Two gates, both fail-secure:
+          1. Family — INTERIOR_ONLY panels reject every perimeter variant
+             (PERI service flags aren't universally reliable; family is).
+          2. Sub-capability — ARMNIGHT / ARMANNEX / DARMANNEX gates based
+             on Service.active. Base ARM / DARM are always required.
+        """
+        family = PANEL_FAMILIES[self.panel]
+        if command in _PERI_COMMANDS and family == PanelFamily.INTERIOR_ONLY:
+            raise UnsupportedCommandError(
+                command=command,
+                panel=self.panel,
+                missing_services=frozenset({ServiceRequest.PERI}),
+            )
         required = _COMMAND_REQUIRES[command]
         missing = required - self.active_services
         if missing:

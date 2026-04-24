@@ -84,25 +84,34 @@ panel-aware, current-state-aware, and capability-gated via
 resolver instead of a static lookup. Multi-step transitions (TOTAL→DAY)
 use the correct transition-variant strings automatically.
 
-## Per-panel support (from `xSSrv.services[].active`)
+## Per-panel support — empirically observed
 
-The enum is schema-level and static. Which values a panel accepts is
-read from the active service set:
+**Correction (2026-04-24)**: the original version of this table — mapping
+each service flag to a specific enum subset — was **guesswork that didn't
+match reality**. Live observation on an SDVECU panel (and deployment
+failure) proved that `ARMDAY` and `PERI` are NOT reported as active
+services on SDVECU, yet the panel happily accepts `ARMDAY1`, `ARM1PERI1`,
+`ARMDAY1PERI1`, and `DARM1DARMPERI` commands.
 
-| Service request | Enum subset unlocked |
-|-----------------|----------------------|
-| `ARM` (active) | `ARM1`, `ARMINTFPART1` |
-| `DARM` (active) | `DARM1`, `DARM1DARMPERI` |
-| `ARMDAY` (active) | `ARMDAY1`, `ARMDAY1PERI1`, `ARMPARTFINTDAY1` |
-| `ARMNIGHT` (active) | `ARMNIGHT1`, `ARMNIGHT1PERI1` (?), `ARMPARTFINTNIGHT1` |
-| `ARMINTFPART` (active) | `ARMINTFPART1` (some panels expose this as a standalone service) |
-| `ARMPARTFINT` (active) | `ARMPARTFINTDAY1`, `ARMPARTFINTNIGHT1` |
-| `ARMANNEX` (active) | `ARMANNEX1` |
-| `DARMANNEX` (active) | `DARMANNEX1` |
-| `PERI` (active) | `PERI1`, `ARM1PERI1`, `ARMDAY1PERI1`, `DARMPERI` |
+The actual gating observed in practice:
 
-`PERI` being inactive (e.g. SDVFAST) means no perimeter variants
-regardless of other services.
+| Signal | Meaning |
+|--------|---------|
+| `ARM` (active) | Panel supports **any** arm command — base gate. |
+| `DARM` (active) | Panel supports **any** disarm command — base gate. |
+| `ARMNIGHT` (active) | Panel supports night-mode arming (sub-cap; reliably reported). |
+| `ARMANNEX` / `DARMANNEX` (active) | Panel has an annex zone (sub-cap). |
+| `ARMDAY` / `PERI` flags | **UI hints, not wire-protocol gates**. Absence doesn't block the corresponding wire commands on panels that physically support them. |
+| Panel FAMILY (peri-capable vs interior-only) | Reliable indicator for perimeter variants. SDVFAST/SDVFSW (interior-only family) reject every `*PERI*` command regardless of service flags. |
+
+### CommandResolver gating logic
+
+1. **Base gate**: every arm variant requires `ARM`; every disarm variant requires `DARM`.
+2. **Sub-capability gate**: `ARMNIGHT`/`ARMANNEX`/`DARMANNEX` required only for commands that use them (e.g. `ARMNIGHT1`).
+3. **Family gate**: perimeter-involving commands (`ARM1PERI1`, `ARMDAY1PERI1`, `ARMNIGHT1PERI1`, `PERI1`, `ARMINTEXT1`, `DARM1DARMPERI`, `DARMPERI`) are rejected client-side on `INTERIOR_ONLY` family panels.
+4. **Panel rejection** remains fail-secure: if we do send a command the panel refuses, we crash loud with the full wire-level response (see failure-report markers).
+
+`PERI` service flag is **not** used as a gate — it's observed to be absent on panels that fully support perimeter operations.
 
 ## Panel roster (from bundle, 2026-04-24 / v2.4.2)
 

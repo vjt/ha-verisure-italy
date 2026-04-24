@@ -125,13 +125,15 @@ def _authenticate(client: VerisureClient) -> None:
     client._capabilities[INSTALLATION.number] = cap_token
     client._capabilities_exp[INSTALLATION.number] = datetime.now(tz=UTC) + timedelta(hours=1)
 
-    # SDVECU active services, live-verified on panel 1234567.
+    # SDVECU active services, live-verified on panel 1234567 (2026-04-24).
+    # Important: ARMDAY and PERI are NOT active services on this panel,
+    # yet the panel accepts ARMDAY1 / ARM1PERI1 / DARM1DARMPERI fine.
+    # CommandResolver gates peri variants on panel FAMILY, not the PERI
+    # service flag. See docs/findings/panel-SDVECU-probe.json.
     client._services_cache[INSTALLATION.number] = frozenset({
         ServiceRequest.ARM,
         ServiceRequest.DARM,
-        ServiceRequest.ARMDAY,
         ServiceRequest.ARMNIGHT,
-        ServiceRequest.PERI,
     })
 
     # Realistic current-state observation — the coordinator polls

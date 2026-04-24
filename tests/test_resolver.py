@@ -26,10 +26,15 @@ _TOTAL = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF)
 _TOTAL_PERI = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
 _PERI = AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.ON)
 
+# Live-verified SDVECU service set (from a real panel's xSSrv response).
+# Note: ARMDAY and PERI are NOT listed as separate active services on
+# SDVECU, yet the panel accepts ARMDAY1, ARM1PERI1, ARMDAY1PERI1, and
+# DARM1DARMPERI. See docs/findings/panel-SDVECU-probe.json.
 _SDVECU_SERVICES = frozenset({
-    ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
-    ServiceRequest.ARMNIGHT, ServiceRequest.PERI,
+    ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
 })
+# SDVFAST (issue #3 reporter probe): explicit ARMDAY / ARMNIGHT /
+# ARMINTFPART / ARMPARTFINT entries, no PERI. Interior-only family.
 _SDVFAST_SERVICES = frozenset({
     ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
     ServiceRequest.ARMNIGHT, ServiceRequest.ARMINTFPART,
@@ -111,11 +116,29 @@ def test_arm_perimeter_rejected_on_interior_only_panel() -> None:
 
 # --- Capability gating ---
 
-def test_arm_total_peri_rejected_without_peri_service() -> None:
+def test_arm_night_rejected_without_armnight_service() -> None:
+    """ARMNIGHT is a reliably-reported sub-capability; its absence gates."""
     services = frozenset({ServiceRequest.ARM, ServiceRequest.DARM})
     r = _r("SDVECU", services)
-    with pytest.raises(UnsupportedCommandError):
+    target_night = AlarmState(
+        interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+    )
+    # ARM_NIGHT is unreachable via AlarmState today (no NIGHT variant in
+    # InteriorMode), so this test uses the capability-gate path directly
+    # to ensure the mapping still rejects when ARMNIGHT is missing.
+    from verisure_italy.resolver import _COMMAND_REQUIRES
+    assert ServiceRequest.ARMNIGHT in _COMMAND_REQUIRES[ArmCommand.ARM_NIGHT]
+    # Sanity: ARM_TOTAL (no NIGHT dep) does pass with the minimal set.
+    assert r.resolve(target=target_night, current=_OFF) == ArmCommand.ARM_TOTAL
+
+
+def test_base_arm_service_required_for_every_arm_variant() -> None:
+    """No ARM service = every arm command refused."""
+    services = frozenset({ServiceRequest.DARM})
+    r = _r("SDVECU", services)
+    with pytest.raises(UnsupportedCommandError) as exc:
         r.resolve(target=_TOTAL_PERI, current=_OFF)
+    assert ServiceRequest.ARM in exc.value.missing_services
 
 
 # --- Degenerate ---
