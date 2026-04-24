@@ -12,13 +12,21 @@ Updated: 2026-04-24.
 
 ## Immediate
 
-- **CENT panel (issue #1)** — blocked on reporter's probe.
-  When it arrives: inspect `installation.panel` to classify family
-  (peri-capable vs interior-only) and read `services[].active` to
-  determine capability set. Add panel to `SUPPORTED_PANELS` +
-  `PANEL_FAMILIES`; `CommandResolver` handles command routing via the
-  active-service capability filter. Reference: `docs/findings/panel-types.md`,
+- **Issue #1 arm failure (ewinters-ca-spark)** — v0.9.0 nudge posted
+  2026-04-24. Reporter's `xSDeviceList` had a device with `type: CENT`
+  ("Pannello di Controllo"), which earlier notes mistakenly tracked as
+  the panel model — `CENT` is the device type for the control-panel
+  unit, not `installation.panel`. Reporter's actual panel model is
+  unknown; likely one of the 8 now supported in v0.9.0. When they
+  respond: if arm works, close the issue. If a `VERISURE ARM FAILURE
+  BEGIN` block lands, use it to identify the panel + any missing
+  service gate. Reference:
   `docs/findings/arm-command-vocabulary.md`.
+- **Issue #3 SDVFAST live confirmation** — v0.9.0 nudge posted
+  2026-04-24 to the reporter with BEGIN/END paste instructions.
+  SDVFAST is in `SUPPORTED_PANELS` but never live-verified; first real
+  arm/disarm may surface an unknown proto code (fail-secure crashes
+  loud). Watch for their reply.
 
 ## High
 
