@@ -51,6 +51,13 @@
   property that only exposes `ARM_HOME | ARM_AWAY` when disarmed;
   `_async_arm` enforces the same rule in code as belt-and-braces
   against direct service calls (automations, REST).
+- Cross-perimeter armed transitions are now rejected by
+  `CommandResolver` instead of silently resolving to the wrong wire
+  command. For example, `TOTAL_PERI` → `PARTIAL` (perimeter OFF) used
+  to pick `ARMDAY1` under the old `STATE_TO_COMMAND` lookup — applied
+  to an armed panel, that's the wrong command. The resolver now
+  raises `ValueError("Cross-perimeter armed transition not supported")`;
+  caller must disarm first. Fail-secure safety addition.
 
 ### Removed
 - `STATE_TO_COMMAND` (replaced by `CommandResolver`).
