@@ -8,12 +8,12 @@ Dashboard config is rebuilt from discovered entities on every load.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, TypedDict, cast
 
 from homeassistant.components import frontend
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from pydantic import BaseModel, ConfigDict, Field
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,25 +23,121 @@ DASHBOARD_ICON = "mdi:shield-home"
 LOVELACE_DATA = "lovelace"
 
 
-@dataclass
-class CameraGroup:
+# --- Entity discovery result types (Pydantic, per CLAUDE.md) ---
+
+
+class CameraGroup(BaseModel):
     """A camera device with its associated entities."""
+
+    model_config = ConfigDict(frozen=False)
 
     camera_entity: str | None = None
     capture_entity: str | None = None
 
 
-@dataclass
-class DashboardEntities:
+class DashboardEntities(BaseModel):
     """All entities for the dashboard, grouped by device."""
+
+    model_config = ConfigDict(frozen=False)
 
     alarm_entity: str | None = None
     capture_all_entity: str | None = None
     force_arm_entity: str | None = None
     force_arm_cancel_entity: str | None = None
-    cameras: dict[str, CameraGroup] = field(
-        default_factory=lambda: dict[str, CameraGroup]()
-    )
+    cameras: dict[str, CameraGroup] = Field(default_factory=dict)
+
+
+# --- Lovelace card TypedDicts (narrow, covers the shapes we emit) ---
+#
+# These do NOT replace HA's Lovelace schema — they just make typos in
+# keys ("entiy" vs "entity") a pyright error instead of a silent bug.
+
+
+class _TapAction(TypedDict):
+    action: Literal["toggle", "more-info", "navigate", "none"]
+
+
+class _StateCondition(TypedDict, total=False):
+    condition: Literal["state"]
+    entity: str
+    state: str
+    state_not: str
+
+
+class PictureEntityCard(TypedDict):
+    type: Literal["picture-entity"]
+    entity: str
+    show_name: bool
+    show_state: bool
+    camera_view: Literal["auto", "live"]
+
+
+class TileCard(TypedDict, total=False):
+    type: Literal["tile"]
+    entity: str
+    name: str
+    icon: str
+    color: str
+    vertical: bool
+    hide_state: bool
+    tap_action: _TapAction
+
+
+class MarkdownCard(TypedDict):
+    type: Literal["markdown"]
+    content: str
+
+
+class AlarmPanelCard(TypedDict):
+    type: Literal["alarm-panel"]
+    entity: str
+    name: str
+    states: list[str]
+
+
+class VerticalStackCard(TypedDict):
+    type: Literal["vertical-stack"]
+    cards: list[LovelaceCard]
+
+
+class ConditionalCard(TypedDict):
+    type: Literal["conditional"]
+    conditions: list[_StateCondition]
+    card: LovelaceCard
+
+
+class GridSection(TypedDict):
+    type: Literal["grid"]
+    column_span: int
+    cards: list[LovelaceCard]
+
+
+# Union of all card shapes we emit.
+LovelaceCard = (
+    PictureEntityCard
+    | TileCard
+    | MarkdownCard
+    | AlarmPanelCard
+    | VerticalStackCard
+    | ConditionalCard
+    | GridSection
+)
+
+
+class SectionsView(TypedDict):
+    title: str
+    path: str
+    icon: str
+    type: Literal["sections"]
+    max_columns: int
+    sections: list[GridSection]
+
+
+class LovelaceConfig(TypedDict):
+    views: list[SectionsView]
+
+
+# --- Panel register / unregister ---
 
 
 def async_register_dashboard(hass: HomeAssistant) -> None:
@@ -116,7 +212,6 @@ async def _setup_dashboard_internal(
         _LOGGER.debug("Lovelace not loaded, skipping dashboard setup")
         return
 
-    # Create the storage-backed dashboard if it doesn't exist
     lovelace_config = lovelace_data.dashboards.get(DASHBOARD_URL)
     if not isinstance(lovelace_config, LovelaceStorage):
         lovelace_config = LovelaceStorage(hass, {
@@ -130,13 +225,14 @@ async def _setup_dashboard_internal(
         lovelace_data.dashboards[DASHBOARD_URL] = lovelace_config
         _LOGGER.info("Created dashboard storage for '%s'", DASHBOARD_URL)
 
-    # Discover entities and write config
     entities = _discover_entities(hass, config_entry_id)
     if entities.alarm_entity is None:
         return
 
     config = _build_config(entities)
-    await lovelace_config.async_save(config)
+    # HA Lovelace storage accepts a plain dict; our TypedDict is a
+    # compile-time shape, so cast at the boundary.
+    await lovelace_config.async_save(cast("dict[str, Any]", config))
     _LOGGER.info(
         "Dashboard updated: alarm + %d cameras", len(entities.cameras)
     )
@@ -176,144 +272,144 @@ def _discover_entities(
     return result
 
 
-def _build_config(entities: DashboardEntities) -> dict[str, Any]:
+def _build_config(entities: DashboardEntities) -> LovelaceConfig:
     """Build the Lovelace dashboard configuration."""
     assert entities.alarm_entity is not None
 
-    camera_cards: list[dict[str, Any]] = []
+    camera_cards: list[LovelaceCard] = []
     for group in sorted(
         entities.cameras.values(), key=lambda g: g.camera_entity or ""
     ):
         if group.camera_entity is None:
             continue
 
-        stack: list[dict[str, Any]] = [
-            {
-                "type": "picture-entity",
-                "entity": group.camera_entity,
-                "show_name": True,
-                "show_state": False,
-                "camera_view": "auto",
-            },
+        stack: list[LovelaceCard] = [
+            PictureEntityCard(
+                type="picture-entity",
+                entity=group.camera_entity,
+                show_name=True,
+                show_state=False,
+                camera_view="auto",
+            ),
         ]
         if group.capture_entity is not None:
-            stack.append({
-                "type": "tile",
-                "entity": group.capture_entity,
-                "name": "Capture",
-                "icon": "mdi:camera",
-                "vertical": False,
-                "hide_state": True,
-                "tap_action": {"action": "toggle"},
-            })
+            stack.append(TileCard(
+                type="tile",
+                entity=group.capture_entity,
+                name="Capture",
+                icon="mdi:camera",
+                vertical=False,
+                hide_state=True,
+                tap_action=_TapAction(action="toggle"),
+            ))
 
-        camera_cards.append({
-            "type": "vertical-stack",
-            "cards": stack,
-        })
+        camera_cards.append(VerticalStackCard(
+            type="vertical-stack",
+            cards=stack,
+        ))
 
-    left_cards: list[dict[str, Any]] = []
+    left_cards: list[LovelaceCard] = []
 
     # Alert banner — appears only when arming was blocked by open zones
     if entities.force_arm_entity is not None:
-        left_cards.append({
-            "type": "conditional",
-            "conditions": [{
+        left_cards.append(ConditionalCard(
+            type="conditional",
+            conditions=[{
                 "condition": "state",
                 "entity": entities.force_arm_entity,
                 "state_not": "unavailable",
             }],
-            "card": {
-                "type": "markdown",
-                "content": (
+            card=MarkdownCard(
+                type="markdown",
+                content=(
                     "## ⚠️ Arming blocked\n"
                     "Open zones detected. **Force Arm** to bypass or **Cancel**."
                 ),
-            },
-        })
+            ),
+        ))
 
-    left_cards.append({
-        "type": "alarm-panel",
-        "entity": entities.alarm_entity,
-        "name": "Alarm",
-        "states": ["arm_home", "arm_away"],
-    })
+    left_cards.append(AlarmPanelCard(
+        type="alarm-panel",
+        entity=entities.alarm_entity,
+        name="Alarm",
+        states=["arm_home", "arm_away"],
+    ))
 
     # Force-arm buttons — hidden when unavailable (no open zones)
     if entities.force_arm_entity is not None:
-        left_cards.append({
-            "type": "conditional",
-            "conditions": [{
+        left_cards.append(ConditionalCard(
+            type="conditional",
+            conditions=[{
                 "condition": "state",
                 "entity": entities.force_arm_entity,
                 "state_not": "unavailable",
             }],
-            "card": {
-                "type": "tile",
-                "entity": entities.force_arm_entity,
-                "name": "Force Arm",
-                "icon": "mdi:shield-alert",
-                "color": "orange",
-                "vertical": False,
-                "hide_state": True,
-                "tap_action": {"action": "toggle"},
-            },
-        })
+            card=TileCard(
+                type="tile",
+                entity=entities.force_arm_entity,
+                name="Force Arm",
+                icon="mdi:shield-alert",
+                color="orange",
+                vertical=False,
+                hide_state=True,
+                tap_action=_TapAction(action="toggle"),
+            ),
+        ))
     if entities.force_arm_cancel_entity is not None:
-        left_cards.append({
-            "type": "conditional",
-            "conditions": [{
+        left_cards.append(ConditionalCard(
+            type="conditional",
+            conditions=[{
                 "condition": "state",
                 "entity": entities.force_arm_cancel_entity,
                 "state_not": "unavailable",
             }],
-            "card": {
-                "type": "tile",
-                "entity": entities.force_arm_cancel_entity,
-                "name": "Cancel",
-                "icon": "mdi:shield-off-outline",
-                "color": "red",
-                "vertical": False,
-                "hide_state": True,
-                "tap_action": {"action": "toggle"},
-            },
-        })
+            card=TileCard(
+                type="tile",
+                entity=entities.force_arm_cancel_entity,
+                name="Cancel",
+                icon="mdi:shield-off-outline",
+                color="red",
+                vertical=False,
+                hide_state=True,
+                tap_action=_TapAction(action="toggle"),
+            ),
+        ))
 
     if entities.capture_all_entity is not None:
-        left_cards.append({
-            "type": "tile",
-            "entity": entities.capture_all_entity,
-            "name": "Capture All",
-            "icon": "mdi:camera-burst",
-            "vertical": False,
-            "hide_state": True,
-            "tap_action": {"action": "toggle"},
-        })
+        left_cards.append(TileCard(
+            type="tile",
+            entity=entities.capture_all_entity,
+            name="Capture All",
+            icon="mdi:camera-burst",
+            vertical=False,
+            hide_state=True,
+            tap_action=_TapAction(action="toggle"),
+        ))
 
-    sections: list[dict[str, Any]] = [
-        {
-            "type": "grid",
-            "column_span": 1,
-            "cards": left_cards,
-        },
+    sections: list[GridSection] = [
+        GridSection(
+            type="grid",
+            column_span=1,
+            cards=left_cards,
+        ),
     ]
 
     if camera_cards:
-        sections.append({
-            "type": "grid",
-            "column_span": 3,
-            "cards": camera_cards,
-        })
+        sections.append(GridSection(
+            type="grid",
+            column_span=3,
+            cards=camera_cards,
+        ))
 
-    return {
-        "views": [
-            {
-                "title": DASHBOARD_TITLE,
-                "path": "default",
-                "icon": DASHBOARD_ICON,
-                "type": "sections",
-                "max_columns": 4,
-                "sections": sections,
-            }
+    return LovelaceConfig(
+        views=[
+            SectionsView(
+                title=DASHBOARD_TITLE,
+                path="default",
+                icon=DASHBOARD_ICON,
+                type="sections",
+                max_columns=4,
+                sections=sections,
+            )
         ]
-    }
+    )
