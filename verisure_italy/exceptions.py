@@ -72,6 +72,17 @@ class UnexpectedStateError(VerisureError):
         self.proto_code = proto_code
 
 
+class SameStateError(VerisureError):
+    """Requested transition is a no-op — panel already in the target state.
+
+    Benign race: the entity called arm/disarm with a stale view of the
+    panel's current state, but by the time the resolver runs, the client's
+    `_last_proto` has caught up and already matches the target. Caller
+    should log at debug, refresh the entity state, and return — this is
+    NOT a failure and MUST NOT emit a failure notification.
+    """
+
+
 class StateNotObservedError(VerisureError):
     """No xSStatus observation yet — arm/disarm requires a known current state.
 

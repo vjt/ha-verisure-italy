@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from .exceptions import UnsupportedCommandError
+from .exceptions import SameStateError, UnsupportedCommandError
 from .models import (
     PANEL_FAMILIES,
     AlarmState,
@@ -109,12 +109,17 @@ class CommandResolver(BaseModel):
     def resolve(self, *, target: AlarmState, current: AlarmState) -> ArmCommand:
         """Return the ArmCommand for current -> target.
 
-        Raises ValueError (bad transition) or UnsupportedCommandError (missing service).
+        Raises:
+          SameStateError — `current == target`, no mutation needed (benign).
+          ValueError — unsupported transition / unknown panel (programming error).
+          UnsupportedCommandError — panel lacks the required active service.
         """
         if self.panel not in PANEL_FAMILIES:
             raise ValueError(f"Unknown panel {self.panel!r}")
         if target == current:
-            raise ValueError("current == target — no command needed")
+            raise SameStateError(
+                f"Panel already in target state {target}. No command needed."
+            )
 
         family = PANEL_FAMILIES[self.panel]
         command = self._pick_command(target=target, current=current, family=family)

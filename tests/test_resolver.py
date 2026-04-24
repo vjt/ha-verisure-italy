@@ -169,8 +169,9 @@ def test_base_arm_service_required_for_every_arm_variant() -> None:
 # --- Degenerate ---
 
 def test_noop_when_target_equals_current() -> None:
+    from verisure_italy.exceptions import SameStateError
     r = _r("SDVECU", _SDVECU_SERVICES)
-    with pytest.raises(ValueError, match="current == target"):
+    with pytest.raises(SameStateError, match="already in target state"):
         r.resolve(target=_OFF, current=_OFF)
 
 

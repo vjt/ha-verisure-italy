@@ -10,15 +10,17 @@ and the three primary _STATE_MAP values (DISARMED, ARMED_HOME, ARMED_AWAY).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.components.alarm_control_panel import AlarmControlPanelState
 
 from custom_components.verisure_italy.alarm_control_panel import _STATE_MAP
-from verisure_italy.exceptions import UnsupportedPanelError
+from verisure_italy.exceptions import SameStateError, UnsupportedPanelError
 from verisure_italy.models import (
     SUPPORTED_PANELS,
     AlarmState,
@@ -26,6 +28,12 @@ from verisure_italy.models import (
     InteriorMode,
     PerimeterMode,
 )
+
+
+@asynccontextmanager
+async def _noop_suppress():
+    """Stand-in for coordinator.suppress_updates() in unit tests."""
+    yield
 
 
 def _make_installation(panel: str) -> Installation:
@@ -340,3 +348,65 @@ class TestAsyncArmRefusesArmedToArmed:
             await entity.async_alarm_arm_away()
 
         coordinator.async_arm.assert_not_called()
+
+
+def _wire_mutation_entity(panel: str):
+    """Prepare an entity + mocked coordinator for mutation-path tests.
+
+    The mutation paths pick up `_arm_lock`, `_check_panel_supported`'s
+    SUPPORTED_PANELS fast-path, `coordinator.suppress_updates()`, and
+    `coordinator.async_arm/disarm`. Wire just those, nothing else.
+    """
+    entity, coordinator = _make_panel_entity(panel)
+    entity._arm_lock = asyncio.Lock()  # type: ignore[attr-defined]
+    entity._attr_alarm_state = AlarmControlPanelState.DISARMED  # type: ignore[attr-defined]
+    entity.async_write_ha_state = MagicMock()  # type: ignore[attr-defined]
+    entity._update_alarm_state = MagicMock()  # type: ignore[attr-defined]
+    coordinator.suppress_updates = _noop_suppress
+    coordinator.async_request_refresh = AsyncMock()
+    return entity, coordinator
+
+
+class TestSameStateBenignRace:
+    """M15 — SameStateError from resolver is treated as a benign no-op."""
+
+    async def test_arm_home_same_state_is_no_op(self, caplog):
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        coordinator.async_arm = AsyncMock(
+            side_effect=SameStateError("already in target state"),
+        )
+
+        with caplog.at_level(
+            logging.INFO,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            await entity.async_alarm_arm_home()
+
+        coordinator.async_arm.assert_awaited_once()
+        entity._update_alarm_state.assert_called()
+        assert any(
+            "no-op" in r.message.lower() for r in caplog.records
+        )
+        # No failure-notification side-effects
+        for call in entity.hass.services.async_call.call_args_list:
+            args = call.args
+            assert args[:2] != ("persistent_notification", "create")
+
+    async def test_disarm_same_state_is_no_op(self, caplog):
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        entity._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY  # type: ignore[attr-defined]
+        coordinator.async_disarm = AsyncMock(
+            side_effect=SameStateError("already disarmed"),
+        )
+
+        with caplog.at_level(
+            logging.INFO,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            await entity.async_alarm_disarm()
+
+        coordinator.async_disarm.assert_awaited_once()
+        entity._update_alarm_state.assert_called()
+        assert any(
+            "no-op" in r.message.lower() for r in caplog.records
+        )

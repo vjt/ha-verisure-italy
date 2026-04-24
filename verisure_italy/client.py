@@ -33,6 +33,7 @@ from .exceptions import (
     ImageCaptureError,
     OperationFailedError,
     OperationTimeoutError,
+    SameStateError,
     SessionExpiredError,
     StateNotObservedError,
     TwoFactorRequiredError,
@@ -893,9 +894,9 @@ class VerisureClient:
         Every VerisureError raised from this method is first reported via
         `_log_failure`, which emits a single ERROR-level BEGIN/END block
         with the diagnostic context (panel, family, command, services,
-        proto, error). ValueError from the resolver (e.g. current == target)
-        is a programmer error and deliberately NOT reported — those come
-        from caller misuse, not panel failure.
+        proto, error). Exceptions: SameStateError (benign race — panel
+        already in target state) and ValueError (unsupported transition,
+        programmer error) pass through without a failure report.
         """
         await self._ensure_auth(installation)
 
@@ -988,11 +989,14 @@ class VerisureClient:
                 requestId="",
                 error=None,
             )
+        except SameStateError:
+            # Benign no-op race: panel already in target state. No
+            # failure report — caller will log debug + refresh.
+            raise
         except VerisureError as exc:
-            # Only VerisureError subclasses get a failure report. ValueError
-            # from the resolver (current == target, cross-perimeter guard)
-            # is a caller misuse bug, not a panel failure — let it surface
-            # raw to the caller so the mistake is visible.
+            # Real failures get the diagnostic report block. ValueError
+            # from the resolver (unknown panel, cross-perimeter guard)
+            # is a caller misuse bug — surfaces raw, no report.
             self._log_failure(
                 operation="arm",
                 installation=installation,
@@ -1128,10 +1132,9 @@ class VerisureClient:
 
         Every VerisureError raised from this method is first reported via
         `_log_failure`, emitting a single ERROR-level BEGIN/END block with
-        diagnostic context. ValueError from the resolver (disarm-from-disarmed)
-        is a caller bug and deliberately NOT reported — the HA entity layer
-        already short-circuits that case, so a ValueError here means a direct
-        API caller misuse we want to see raw.
+        diagnostic context. Exceptions: SameStateError (benign race —
+        panel already disarmed) and ValueError (unsupported transition,
+        programmer error) pass through without a failure report.
         """
         await self._ensure_auth(installation)
 
@@ -1146,11 +1149,12 @@ class VerisureClient:
             target = AlarmState(
                 interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
             )
-            # If current == target (already at target state), resolver raises
-            # ValueError. This is intentional — disarm-from-disarmed is a
-            # caller bug, not a silent no-op. HA's alarm panel guards this
-            # at the entity layer in async_alarm_disarm / _async_arm (skip
-            # when self._attr_alarm_state already matches target).
+            # If current == target (already disarmed), resolver raises
+            # SameStateError — a benign race. HA's alarm panel catches
+            # it at the entity layer, logs debug, refreshes state, and
+            # returns without firing a failure notification. Direct API
+            # callers may see it surface: the exception message is
+            # self-explanatory.
             command = resolver.resolve(target=target, current=current_state)
 
             _LOGGER.debug(
@@ -1211,6 +1215,9 @@ class VerisureClient:
                 requestId="",
                 error=None,
             )
+        except SameStateError:
+            # Benign no-op race: panel already disarmed. No failure report.
+            raise
         except VerisureError as exc:
             self._log_failure(
                 operation="disarm",

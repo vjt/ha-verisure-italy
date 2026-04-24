@@ -24,6 +24,7 @@ from pydantic import ValidationError
 from verisure_italy import (
     OperationFailedError,
     OperationTimeoutError,
+    SameStateError,
     UnsupportedPanelError,
     VerisureError,
     run_probe,
@@ -284,6 +285,19 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
             try:
                 await self.coordinator.async_arm(target)
+            except SameStateError:
+                # Benign no-op: panel already in target state (race the
+                # entity's `_attr_alarm_state` check lost against a poll
+                # that already observed the target). With M3 the window
+                # is closed for background polls, but a direct service
+                # call that bypassed the entity guard could still hit it.
+                _LOGGER.info(
+                    "Arm-to-%s is a no-op — panel already in target state",
+                    mode,
+                )
+                self._update_alarm_state()
+                self.async_write_ha_state()
+                return
             except ArmingExceptionError as exc:
                 zones = ", ".join(e.alias for e in exc.exceptions)
                 _LOGGER.warning(
@@ -340,6 +354,11 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
             try:
                 await self.coordinator.async_disarm()
+            except SameStateError:
+                _LOGGER.info("Disarm is a no-op — panel already disarmed")
+                self._update_alarm_state()
+                self.async_write_ha_state()
+                return
             except (OperationFailedError, OperationTimeoutError) as exc:
                 self._update_alarm_state()
                 _LOGGER.error("Disarm failed: %s", exc.message)
@@ -391,6 +410,15 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                     force_arming_remote_id=ctx.reference_id,
                     suid=ctx.suid,
                 )
+            except SameStateError:
+                # Panel already in target state — treat as success.
+                _LOGGER.info(
+                    "Force-arm is a no-op — panel already in target state"
+                )
+                self._clear_force_context()
+                self._update_alarm_state()
+                self.async_write_ha_state()
+                return
             except (OperationFailedError, OperationTimeoutError) as exc:
                 self._clear_force_context()
                 self._update_alarm_state()
