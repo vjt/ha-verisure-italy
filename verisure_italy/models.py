@@ -125,12 +125,17 @@ class ArmCommand(StrEnum):
     ARM_NIGHT = "ARMNIGHT1"
     ARM_NIGHT_PERIMETER = "ARMNIGHT1PERI1"
 
-    # Transitions — from an armed interior mode to another interior mode
-    ARM_TOTAL_FROM_PARTIAL_NIGHT = "ARMINTFPART1"
+    # Transitions — from an armed interior mode to another interior mode.
+    # ARM_TOTAL_FROM_ARMED_INTERIOR covers DAY/PARTIAL/NIGHT→TOTAL (web
+    # resolver collapses all three into one transition command).
+    ARM_TOTAL_FROM_ARMED_INTERIOR = "ARMINTFPART1"
     ARM_PARTIAL_FROM_TOTAL = "ARMPARTFINTDAY1"
     ARM_NIGHT_FROM_TOTAL = "ARMPARTFINTNIGHT1"
 
-    # Annex + interior/exterior alternates
+    # Annex + interior/exterior alternates.
+    # ARM_INTERIOR_EXTERIOR (ARMINTEXT1) is the Spain-WAF-safe alias for
+    # ARM1PERI1 per the web bundle. Acceptance on Italian panels is
+    # unconfirmed — not currently emitted by CommandResolver.
     ARM_ANNEX = "ARMANNEX1"
     ARM_INTERIOR_EXTERIOR = "ARMINTEXT1"
 

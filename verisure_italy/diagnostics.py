@@ -29,7 +29,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from .models import PANEL_FAMILIES, ArmCommand, Installation, ServiceRequest
 
@@ -201,7 +201,7 @@ def _client_version() -> str:
 
 def format_failure_report(
     *,
-    operation: str,
+    operation: Literal["arm", "disarm"],
     installation: Installation,
     command: ArmCommand | None,
     active_services: frozenset[ServiceRequest],

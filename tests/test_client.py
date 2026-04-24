@@ -1806,5 +1806,8 @@ class TestArmDisarmFailureReports:
         assert "error_type: UnsupportedCommandError" in records[0].message
         # command_selected is N/A because the resolver raised before returning one.
         assert "command_selected: N/A" in records[0].message
+        # active_services list must be present in the report — it's the key
+        # diagnostic for why a capability check refused the command.
+        assert "active_services: [" in records[0].message
         # No arm mutation hit the network.
         assert not _has_call_with_operation(mock_api, "xSArmPanel")

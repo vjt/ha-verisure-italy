@@ -18,6 +18,7 @@ import secrets
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from functools import partial
+from typing import Literal
 
 import jwt
 from aiohttp import ClientConnectorError, ClientSession
@@ -263,7 +264,7 @@ class VerisureClient:
     def _log_failure(
         self,
         *,
-        operation: str,
+        operation: Literal["arm", "disarm"],
         installation: Installation,
         command: ArmCommand | None,
         error: VerisureError,
@@ -274,6 +275,10 @@ class VerisureClient:
         construction (hashed numinst, no names/addresses/tokens) and can be
         pasted verbatim into a GitHub issue.
         """
+        # Empty frozenset is the correct pre-auth fallback for reporting —
+        # not a silent-degradation bypass; we want the failure dump even if
+        # the cache hasn't been populated yet (e.g. an error during the
+        # first service fetch itself).
         active = self._services_cache.get(installation.number, frozenset())
         report = format_failure_report(
             operation=operation,

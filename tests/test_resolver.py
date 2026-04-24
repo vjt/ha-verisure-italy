@@ -86,7 +86,7 @@ def test_transition_partial_to_total_uses_intfpart() -> None:
     r = _r("SDVECU", _SDVECU_SERVICES)
     # Going from PARTIAL (currently armed interior) to TOTAL → ARMINTFPART1.
     out = r.resolve(target=_TOTAL, current=_PARTIAL)
-    assert out == ArmCommand.ARM_TOTAL_FROM_PARTIAL_NIGHT
+    assert out == ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR
 
 
 def test_transition_total_to_partial_uses_partfint_day() -> None:

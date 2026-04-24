@@ -44,7 +44,7 @@ _COMMAND_REQUIRES: dict[ArmCommand, frozenset[ServiceRequest]] = {
     # Panels that expose ARMINTFPART / ARMPARTFINT as *standalone* services
     # (e.g. SDVFAST) satisfy this check via ARM / ARMDAY respectively —
     # both sets appear in their active_services.
-    ArmCommand.ARM_TOTAL_FROM_PARTIAL_NIGHT: frozenset({ServiceRequest.ARM}),
+    ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR: frozenset({ServiceRequest.ARM}),
     ArmCommand.ARM_PARTIAL_FROM_TOTAL: frozenset({ServiceRequest.ARMDAY}),
     ArmCommand.ARM_NIGHT_FROM_TOTAL: frozenset({ServiceRequest.ARMDAY}),
     ArmCommand.ARM_ANNEX: frozenset({ServiceRequest.ARMANNEX}),
@@ -128,7 +128,7 @@ class CommandResolver:
             and current.perimeter == target.perimeter
         ):
             if target.interior == InteriorMode.TOTAL:
-                return ArmCommand.ARM_TOTAL_FROM_PARTIAL_NIGHT
+                return ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR
             if current.interior == InteriorMode.TOTAL and target.interior == InteriorMode.PARTIAL:
                 return ArmCommand.ARM_PARTIAL_FROM_TOTAL
             if current.interior == InteriorMode.TOTAL:  # PARTIAL case already handled
