@@ -1,29 +1,27 @@
-"""Read-only diagnostic probe for a Verisure installation.
+"""Read-only diagnostics for a Verisure installation.
 
-`run_probe(client, installation)` dumps every field the Verisure
-GraphQL API declares about a panel's capabilities — services (with
-their per-panel attributes), device list, and current alarm state.
-Output is used to figure out what commands an unknown panel accepts
-without sending anything to it.
+Two responsibilities, one module, shared PII-redaction guarantees:
 
-**Strictly read-only.** The probe only issues queries that the mobile
-app runs passively on startup:
-  - xSInstallations (indirectly, via the caller supplying the model)
-  - xSSrv          (service list + attributes + capabilities JWT)
-  - xSDeviceList   (raw device dump)
-  - xSStatus       (server-cached alarm status, no panel ping)
+1. `run_probe(client, installation)` — dumps every field the Verisure
+   GraphQL API declares about a panel's capabilities (services +
+   attributes + devices + current alarm status). Async; issues only
+   read-only queries (xSSrv, xSDeviceList, xSStatus) — nothing that
+   pings the panel or shows up in the timeline. Output is intended
+   for copy-paste into GitHub issues when adding support for an
+   unknown panel type.
 
-No arm/disarm, no xSCheckAlarm (which IS a panel ping and shows up
-in the timeline).
+2. `format_failure_report(...)` — pure sync formatter over pre-parsed
+   types. Produces a BEGIN/END-marker-wrapped block summarising an
+   arm/disarm failure for a single ERROR log line. Same cut-marker
+   convention as run_probe so users can copy-paste the block verbatim
+   into a bug report.
 
-PII is redacted at the boundary. `numinst` becomes an 8-char sha256
-prefix; names, addresses, phone numbers, device serials, JWT tokens,
-and reference IDs are dropped entirely. What remains is structural
-capability data — panel code, service IDs, request strings, and any
-attributes the API declares.
-
-The redaction function is pure and unit-tested. A unit test asserts
-every sensitive field is absent from a fixture-generated probe.
+Both outputs are PII-safe by construction. `numinst` is replaced by
+an 8-char sha256 prefix; names, addresses, phone numbers, device
+serials, JWT tokens, and reference IDs are never included. The
+`_PII_FIELDS` set + `assert_redacted()` act as belt-and-braces for
+the probe path; the failure report redacts structurally by only
+serialising a fixed, whitelisted set of fields.
 """
 
 from __future__ import annotations
@@ -33,9 +31,11 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from .models import PANEL_FAMILIES, ArmCommand, Installation, ServiceRequest
+
 if TYPE_CHECKING:
     from .client import VerisureClient
-    from .models import Installation
+    from .exceptions import VerisureError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -186,3 +186,69 @@ def assert_redacted(probe: ProbeDict) -> None:
                 _walk(item, f"{path}[{i}]")
 
     _walk(probe, "")
+
+
+# ---------------------------------------------------------------------------
+# Failure report — pure sync formatter, fixed whitelist of fields, PII-safe.
+# ---------------------------------------------------------------------------
+
+
+def _client_version() -> str:
+    """Read the client version lazily to avoid module-init import cycles."""
+    from . import __version__
+    return __version__
+
+
+def format_failure_report(
+    *,
+    operation: str,
+    installation: Installation,
+    command: ArmCommand | None,
+    active_services: frozenset[ServiceRequest],
+    current_proto: str,
+    error: VerisureError,
+) -> str:
+    """Format a structured failure report wrapped in BEGIN/END cut markers.
+
+    Intended for a single ERROR-level log on arm/disarm failure paths. The
+    marker convention matches `run_probe` output — users can copy the block
+    verbatim into a GitHub issue. All fields are PII-safe: panel code +
+    family + services + proto + command + error details only.
+
+    `operation` must be one of "arm" / "disarm". `command` may be None if
+    the failure occurred before the resolver picked a command. `current_proto`
+    may be "" if no state has been observed.
+
+    Returns the formatted multi-line string. Does no IO.
+    """
+    op = operation.upper()
+    begin = f"=== VERISURE {op} FAILURE BEGIN ==="
+    end = f"=== VERISURE {op} FAILURE END ==="
+
+    family = PANEL_FAMILIES.get(installation.panel)
+    family_str = family.value.upper() if family is not None else "UNKNOWN"
+
+    services_sorted = ", ".join(sorted(s.value for s in active_services))
+
+    command_str = command.value if command is not None else "N/A"
+
+    # Where possible pull error_code off OperationFailedError etc.
+    error_code = getattr(error, "error_code", None)
+    error_code_str = repr(error_code) if error_code is not None else "null"
+
+    lines = [
+        begin,
+        f"client_version: {_client_version()}",
+        f"timestamp: {datetime.now(tz=UTC).isoformat()}",
+        f"panel: {installation.panel}",
+        f"family: {family_str}",
+        f"numinst_hash: {_hash_numinst(installation.number)}",
+        f"current_proto: {current_proto!r}",
+        f"command_selected: {command_str}",
+        f"active_services: [{services_sorted}]",
+        f"error_type: {type(error).__name__}",
+        f"error_code: {error_code_str}",
+        f"error_message: {error.message}",
+        end,
+    ]
+    return "\n".join(lines)

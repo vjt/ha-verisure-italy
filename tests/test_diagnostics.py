@@ -1,8 +1,9 @@
-"""Probe module tests.
+"""Tests for the diagnostics module — probe (existing) + failure report (new).
 
-Assert schema, redaction, and happy-path parsing. These tests are the
-backstop against probe output leaking PII — if any sensitive field
-appears in the redaction assertion, it's a release-blocking bug.
+Assert schema, redaction, happy-path parsing for run_probe(); plus the
+structural / PII-safety guarantees of format_failure_report().
+If any sensitive field appears in a redaction assertion, it's a
+release-blocking bug.
 """
 
 from __future__ import annotations
@@ -17,13 +18,23 @@ from aiohttp import ClientSession
 from aioresponses import aioresponses
 
 from verisure_italy.client import API_URL, VerisureClient
-from verisure_italy.models import Installation
-from verisure_italy.probe import (
+from verisure_italy.diagnostics import (
     _PII_FIELDS,
     PROBE_SCHEMA_VERSION,
     _hash_numinst,
     assert_redacted,
+    format_failure_report,
     run_probe,
+)
+from verisure_italy.exceptions import (
+    OperationFailedError,
+    UnexpectedStateError,
+    UnsupportedCommandError,
+)
+from verisure_italy.models import (
+    ArmCommand,
+    Installation,
+    ServiceRequest,
 )
 
 INSTALLATION = Installation(
@@ -358,3 +369,171 @@ class TestSDVECUReferenceFixture:
     def test_no_leaked_jwts(self):
         text = json.dumps(self._load())
         assert "eyJ" not in text, "JWT prefix leaked in fixture"
+
+
+# -------- format_failure_report tests --------
+
+
+def _installation(panel: str = "SDVFAST", numinst: str = "1234567") -> Installation:
+    return Installation.model_validate({
+        "numinst": numinst,
+        "alias": "Casa",
+        "panel": panel,
+        "type": "HOME",
+        "name": "Secret",
+        "surname": "Person",
+        "address": "Via Privata 1",
+        "city": "Roma",
+        "postcode": "00100",
+        "province": "RM",
+        "email": "secret@test.it",
+        "phone": "+390000000000",
+    })
+
+
+def test_failure_report_has_begin_and_end_markers() -> None:
+    report = format_failure_report(
+        operation="arm",
+        installation=_installation(),
+        command=ArmCommand.ARM_TOTAL_PERIMETER,
+        active_services=frozenset({ServiceRequest.ARM, ServiceRequest.DARM}),
+        current_proto="D",
+        error=OperationFailedError(
+            "panel rejected",
+            error_code="alarm-manager.timeout",
+            error_type="BLOCKING",
+        ),
+    )
+    assert "=== VERISURE ARM FAILURE BEGIN ===" in report
+    assert "=== VERISURE ARM FAILURE END ===" in report
+
+
+def test_failure_report_disarm_marker() -> None:
+    report = format_failure_report(
+        operation="disarm",
+        installation=_installation(panel="SDVECU"),
+        command=ArmCommand.DISARM_ALL,
+        active_services=frozenset({ServiceRequest.DARM, ServiceRequest.PERI}),
+        current_proto="A",
+        error=OperationFailedError("boom", error_code=None, error_type=None),
+    )
+    assert "=== VERISURE DISARM FAILURE BEGIN ===" in report
+    assert "=== VERISURE DISARM FAILURE END ===" in report
+
+
+def test_failure_report_contains_required_fields() -> None:
+    report = format_failure_report(
+        operation="arm",
+        installation=_installation(panel="SDVFAST"),
+        command=ArmCommand.ARM_TOTAL,
+        active_services=frozenset({
+            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
+        }),
+        current_proto="D",
+        error=OperationFailedError("timeout", error_code="AM.42", error_type="BLOCKING"),
+    )
+    # required keys
+    for key in (
+        "client_version",
+        "timestamp",
+        "panel: SDVFAST",
+        "family:",
+        "numinst_hash:",
+        "current_proto: 'D'",
+        "command_selected: ARM1",
+        "active_services:",
+        "error_type: OperationFailedError",
+        "error_code:",
+        "error_message:",
+    ):
+        assert key in report, f"Missing {key!r}: {report}"
+
+
+def test_failure_report_redacts_pii() -> None:
+    report = format_failure_report(
+        operation="arm",
+        installation=_installation(
+            panel="SDVFAST",
+            numinst="1234567",
+        ),
+        command=ArmCommand.ARM_TOTAL,
+        active_services=frozenset({ServiceRequest.ARM}),
+        current_proto="D",
+        error=OperationFailedError("boom", error_code=None, error_type=None),
+    )
+    # Raw numinst MUST NOT leak
+    assert "1234567" not in report
+    # None of the installation-level PII fields should appear.
+    # Note: the 2-char province code "RM" is intentionally omitted — it
+    # would collide with the substring "ARM" in the operation marker
+    # ("=== VERISURE ARM FAILURE BEGIN ==="). The province field is
+    # never emitted by the formatter anyway; the other leaks below
+    # catch the real PII values.
+    for leak in (
+        "Secret", "Person", "Via Privata 1",
+        "Roma", "00100", "secret@test.it", "+390000000000",
+    ):
+        assert leak not in report, f"PII leak: {leak!r}"
+
+
+def test_failure_report_handles_none_command() -> None:
+    """If the failure occurs BEFORE the resolver picks a command, command=None is valid."""
+    report = format_failure_report(
+        operation="arm",
+        installation=_installation(),
+        command=None,
+        active_services=frozenset(),
+        current_proto="",
+        error=UnexpectedStateError("X"),
+    )
+    assert "command_selected: N/A" in report
+    assert "error_type: UnexpectedStateError" in report
+
+
+def test_failure_report_handles_unknown_panel_family() -> None:
+    """Unknown panel codes should render 'family: UNKNOWN', not crash."""
+    report = format_failure_report(
+        operation="arm",
+        installation=_installation(panel="MYSTERY_PANEL"),
+        command=None,
+        active_services=frozenset(),
+        current_proto="D",
+        error=OperationFailedError("nope", error_code=None, error_type=None),
+    )
+    assert "family: UNKNOWN" in report
+
+
+def test_failure_report_active_services_are_sorted() -> None:
+    """Sorted list for deterministic output (easier to diff across reports)."""
+    report = format_failure_report(
+        operation="arm",
+        installation=_installation(),
+        command=ArmCommand.ARM_TOTAL,
+        active_services=frozenset({
+            ServiceRequest.PERI, ServiceRequest.ARM, ServiceRequest.DARM,
+        }),
+        current_proto="D",
+        error=OperationFailedError("x", error_code=None, error_type=None),
+    )
+    # Alphabetical: ARM, DARM, PERI
+    assert "active_services: [ARM, DARM, PERI]" in report
+
+
+def test_failure_report_unsupported_command_error_includes_missing_services() -> None:
+    """UnsupportedCommandError carries context we want surfaced in the report."""
+    err = UnsupportedCommandError(
+        command=ArmCommand.ARM_TOTAL_PERIMETER,
+        panel="SDVFAST",
+        missing_services=frozenset({ServiceRequest.PERI}),
+    )
+    report = format_failure_report(
+        operation="arm",
+        installation=_installation(panel="SDVFAST"),
+        command=ArmCommand.ARM_TOTAL_PERIMETER,
+        active_services=frozenset({ServiceRequest.ARM, ServiceRequest.DARM}),
+        current_proto="D",
+        error=err,
+    )
+    assert "error_type: UnsupportedCommandError" in report
+    # The exception's own message mentions missing services; should flow through
+    assert "PERI" in report

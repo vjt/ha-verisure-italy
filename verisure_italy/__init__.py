@@ -3,6 +3,7 @@
 __version__ = "0.8.3"
 
 from .client import VerisureClient, generate_device_id, generate_uuid
+from .diagnostics import run_probe
 from .exceptions import (
     APIConnectionError,
     APIResponseError,
@@ -51,7 +52,6 @@ from .models import (
     active_services,
     parse_proto_code,
 )
-from .probe import run_probe
 
 __all__ = [
     "CAMERA_DEVICE_TYPES",

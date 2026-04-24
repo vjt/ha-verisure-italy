@@ -33,8 +33,8 @@ from pydantic import BaseModel
 
 from . import __version__
 from .client import VerisureClient, generate_device_id, generate_uuid
+from .diagnostics import run_probe
 from .exceptions import AuthenticationError, TwoFactorRequiredError, VerisureError
-from .probe import run_probe
 
 if TYPE_CHECKING:
     from .models import Installation
