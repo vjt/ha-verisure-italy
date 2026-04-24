@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .models import ZoneException
+    from .models import ArmCommand, ServiceRequest, ZoneException
 
 
 class VerisureError(Exception):
@@ -134,3 +134,29 @@ class ArmingExceptionError(VerisureError):
         self.reference_id = reference_id
         self.suid = suid
         self.exceptions = exceptions
+
+
+class UnsupportedCommandError(VerisureError):
+    """The panel's active services don't support the requested command.
+
+    Raised by CommandResolver before any mutation is sent. The command
+    would be rejected by the panel anyway — we surface the refusal
+    locally with diagnostic context (which services are missing)
+    instead of paying a round-trip + deciphering the API error.
+    """
+
+    def __init__(
+        self,
+        *,
+        command: ArmCommand,
+        panel: str,
+        missing_services: frozenset[ServiceRequest],
+    ) -> None:
+        self.command = command
+        self.panel = panel
+        self.missing_services = missing_services
+        missing = ", ".join(sorted(s.value for s in missing_services))
+        super().__init__(
+            f"Panel {panel!r} cannot honour {command.value!r}: "
+            f"missing active service(s): {missing}"
+        )

@@ -490,3 +490,21 @@ class RequestImagesStatusResult(BaseModel):
     msg: str | None = None
     numinst: str | None = None
     status: str | None = None
+
+
+def active_services(services: list[Service]) -> frozenset[ServiceRequest]:
+    """Return the set of ServiceRequest codes active on the panel.
+
+    Inputs are parsed Service objects (from xSSrv). Unknown request
+    strings (IMG, EST, CAMERAS, …) are dropped — the set reports only
+    the codes the resolver knows how to consume.
+    """
+    known: set[ServiceRequest] = set()
+    for svc in services:
+        if not svc.active:
+            continue
+        try:
+            known.add(ServiceRequest(svc.request))
+        except ValueError:
+            continue
+    return frozenset(known)

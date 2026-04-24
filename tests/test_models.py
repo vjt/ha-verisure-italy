@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from verisure_italy.exceptions import UnexpectedStateError
+from verisure_italy.exceptions import UnexpectedStateError, UnsupportedCommandError
 from verisure_italy.models import (
     PANEL_FAMILIES,
     PROTO_TO_STATE,
@@ -17,8 +17,10 @@ from verisure_italy.models import (
     PanelFamily,
     PerimeterMode,
     ProtoCode,
+    Service,
     ServiceRequest,
     ZoneException,
+    active_services,
     parse_proto_code,
 )
 
@@ -248,3 +250,43 @@ def test_service_request_values() -> None:
     assert ServiceRequest.DARMANNEX == "DARMANNEX"
     assert ServiceRequest.ARMINTFPART == "ARMINTFPART"
     assert ServiceRequest.ARMPARTFINT == "ARMPARTFINT"
+
+
+def _svc(request: str, *, active: bool) -> Service:
+    return Service.model_validate({
+        "idService": 0,
+        "active": active,
+        "visible": True,
+        "request": request,
+    })
+
+
+def test_active_services_returns_only_active_known_requests() -> None:
+    services = [
+        _svc("ARM", active=True),
+        _svc("DARM", active=True),
+        _svc("PERI", active=False),
+        _svc("IMG", active=True),  # not in ServiceRequest — ignored
+    ]
+    assert active_services(services) == frozenset({
+        ServiceRequest.ARM,
+        ServiceRequest.DARM,
+    })
+
+
+def test_active_services_empty_input() -> None:
+    assert active_services([]) == frozenset()
+
+
+def test_unsupported_command_error_carries_context() -> None:
+    err = UnsupportedCommandError(
+        command=ArmCommand.ARM_TOTAL_PERIMETER,
+        panel="SDVFAST",
+        missing_services=frozenset({ServiceRequest.PERI}),
+    )
+    assert err.command is ArmCommand.ARM_TOTAL_PERIMETER
+    assert err.panel == "SDVFAST"
+    assert ServiceRequest.PERI in err.missing_services
+    # Message must mention both the panel and the command for the log.
+    assert "SDVFAST" in str(err)
+    assert "ARM1PERI1" in str(err)
