@@ -900,6 +900,7 @@ class TestArm:
 class TestDisarm:
     async def test_success(self, mock_api, client):
         _authenticate(client)
+        client.set_last_proto("A")  # Armed total+peri — a realistic disarm scenario.
 
         mock_api.post(API_URL, body=_disarm_panel_response())
         mock_api.post(API_URL, body=_disarm_status_complete())
@@ -913,6 +914,7 @@ class TestDisarm:
 
     async def test_with_pending_polls(self, mock_api, client):
         _authenticate(client)
+        client.set_last_proto("A")  # Armed — must be non-disarmed to resolve command.
 
         mock_api.post(API_URL, body=_disarm_panel_response())
         mock_api.post(API_URL, body=_disarm_status_pending())
@@ -924,6 +926,7 @@ class TestDisarm:
 
     async def test_rejected_by_panel(self, mock_api, client):
         _authenticate(client)
+        client.set_last_proto("A")  # Armed — resolver must resolve before HTTP call.
 
         mock_api.post(API_URL, body=_disarm_panel_rejected())
 
@@ -933,6 +936,7 @@ class TestDisarm:
     async def test_panel_error_during_poll(self, mock_api, client):
         """Panel accepts request but returns ERROR during poll (e.g. no permission)."""
         _authenticate(client)
+        client.set_last_proto("A")  # Armed — resolver must resolve before HTTP call.
 
         mock_api.post(API_URL, body=_disarm_panel_response())
         mock_api.post(API_URL, body=json.dumps({
@@ -1380,6 +1384,7 @@ class TestUnknownProtoCode:
     async def test_unknown_proto_in_disarm_result(self, mock_api, client):
         """disarm() result with unknown proto raises on .proto_code access."""
         _authenticate(client)
+        client.set_last_proto("A")  # Armed — resolver must resolve before HTTP call.
         mock_api.post(API_URL, body=_disarm_panel_response())
         mock_api.post(API_URL, body=json.dumps({
             "data": {
@@ -1582,3 +1587,65 @@ class TestArmResolverWireIn:
             await client.arm(INSTALLATION, target)
 
         assert not _has_call_with_operation(mock_api, "xSArmPanel")
+
+
+# ---------------------------------------------------------------------------
+# CommandResolver wire-in — disarm() picks DARM1 vs DARM1DARMPERI
+# ---------------------------------------------------------------------------
+
+
+class TestDisarmResolverWireIn:
+    """Disarm path uses CommandResolver to pick DARM1 vs DARM1DARMPERI."""
+
+    async def test_disarm_sdvfast_sends_darm1_not_darm1darmperi(
+        self, mock_api, client,
+    ):
+        """Interior-only panel: DARM1 regardless of apparent proto state."""
+        _authenticate(client)
+        # SDVFAST — interior-only panel, no PERI service active.
+        sdvfast_installation = INSTALLATION.model_copy(update={"panel": "SDVFAST"})
+        client._services_cache[INSTALLATION.number] = frozenset({
+            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
+            ServiceRequest.ARMNIGHT, ServiceRequest.ARMINTFPART,
+            ServiceRequest.ARMPARTFINT,
+        })
+        # Even if _last_proto is "T" (total) — no perimeter possible on this family.
+        client.set_last_proto("T")
+        mock_api.post(API_URL, body=_disarm_panel_response())
+        mock_api.post(API_URL, body=_disarm_status_complete())
+
+        await client.disarm(sdvfast_installation)
+
+        disarm_call = _find_call_with_operation(mock_api, "xSDisarmPanel")
+        body = disarm_call.kwargs["json"]
+        assert body["variables"]["request"] == "DARM1"
+
+    async def test_disarm_sdvecu_from_total_peri_sends_disarm_all(
+        self, mock_api, client,
+    ):
+        """Peri-capable panel arming total+peri: DARM1DARMPERI."""
+        _authenticate(client)
+        client.set_last_proto("A")  # total + peri (SDVECU)
+        mock_api.post(API_URL, body=_disarm_panel_response())
+        mock_api.post(API_URL, body=_disarm_status_complete())
+
+        await client.disarm(INSTALLATION)
+
+        disarm_call = _find_call_with_operation(mock_api, "xSDisarmPanel")
+        body = disarm_call.kwargs["json"]
+        assert body["variables"]["request"] == "DARM1DARMPERI"
+
+    async def test_disarm_sdvecu_from_total_only_sends_darm1(
+        self, mock_api, client,
+    ):
+        """Peri-capable panel, but perimeter currently OFF: DARM1 is enough."""
+        _authenticate(client)
+        client.set_last_proto("T")  # total only, perimeter OFF
+        mock_api.post(API_URL, body=_disarm_panel_response())
+        mock_api.post(API_URL, body=_disarm_status_complete())
+
+        await client.disarm(INSTALLATION)
+
+        disarm_call = _find_call_with_operation(mock_api, "xSDisarmPanel")
+        body = disarm_call.kwargs["json"]
+        assert body["variables"]["request"] == "DARM1"

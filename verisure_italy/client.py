@@ -70,9 +70,11 @@ from .models import (
     DisarmResult,
     GeneralStatus,
     Installation,
+    InteriorMode,
     LoginResponse,
     OperationResult,
     OtpPhone,
+    PerimeterMode,
     RawDevice,
     Service,
     ServiceRequest,
@@ -1057,8 +1059,21 @@ class VerisureClient:
 
         Returns DisarmResult or raises OperationTimeoutError/OperationFailedError.
         """
-        command = ArmCommand.DISARM_ALL
         await self._ensure_auth(installation)
+
+        active = await self._active_services_cached(installation)
+        resolver = CommandResolver(
+            panel=installation.panel,
+            active_services=active,
+        )
+        current_state = self._current_alarm_state()
+        target = AlarmState(
+            interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
+        )
+        # If the panel is already disarmed, resolver raises ValueError.
+        # Callers must check state before invoking disarm (HA's alarm
+        # panel already does — it never disarms from the DISARMED state).
+        command = resolver.resolve(target=target, current=current_state)
 
         _LOGGER.debug(
             "disarm: command=%s panel=%s currentStatus=%r",
