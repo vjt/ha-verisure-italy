@@ -67,6 +67,10 @@ class VerisureCamera(  # type: ignore[reportIncompatibleVariableOverride]
         camera: CameraDevice,
     ) -> None:
         super().__init__(coordinator)
+        # BaseCoordinatorEntity.__init__ does NOT call super().__init__() —
+        # it just assigns `self.coordinator`. So MRO alone does not reach
+        # Camera.__init__(), which sets _cache/stream/access_tokens and is
+        # required for Camera's HTTP handlers. Explicit call is load-bearing.
         Camera.__init__(self)
         self._camera = camera
         self._last_image_timestamp: str | None = None
