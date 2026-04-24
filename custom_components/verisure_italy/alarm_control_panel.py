@@ -6,6 +6,7 @@ import asyncio
 import datetime
 import json
 import logging
+import time
 
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
@@ -456,14 +457,20 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             await self._dismiss_notification()
             self.async_write_ha_state()
 
+            started_at = time.monotonic()
             try:
                 await self.coordinator.async_arm(
                     ctx.target,
                     force_arming_remote_id=ctx.reference_id,
                     suid=ctx.suid,
                 )
-            except SameStateError:
+            except SameStateError as exc:
                 # Panel already in target state — treat as success.
+                self._log_force_arm_audit(
+                    ctx=ctx, started_at=started_at, result="noop",
+                    error_class=type(exc).__name__,
+                    error_message=exc.message,
+                )
                 _LOGGER.info(
                     "Force-arm is a no-op — panel already in target state"
                 )
@@ -476,6 +483,11 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 # Clear the stale context token (reference_id/suid are
                 # consumed server-side whether or not we got confirmation)
                 # and show UNKNOWN until refresh resolves.
+                self._log_force_arm_audit(
+                    ctx=ctx, started_at=started_at, result="timeout",
+                    error_class=type(exc).__name__,
+                    error_message=exc.message,
+                )
                 self._clear_force_context()
                 self._attr_alarm_state = None
                 _LOGGER.error(
@@ -486,6 +498,11 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 )
                 self.async_write_ha_state()
             except OperationFailedError as exc:
+                self._log_force_arm_audit(
+                    ctx=ctx, started_at=started_at, result="failure",
+                    error_class=type(exc).__name__,
+                    error_message=exc.message,
+                )
                 self._clear_force_context()
                 self._update_alarm_state()
                 _LOGGER.error("Force arm failed: %s", exc.message)
@@ -497,9 +514,14 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self.async_write_ha_state()
                 return
             except (VerisureError, ValidationError) as exc:
+                msg = exc.message if isinstance(exc, VerisureError) else str(exc)
+                self._log_force_arm_audit(
+                    ctx=ctx, started_at=started_at, result="failure",
+                    error_class=type(exc).__name__,
+                    error_message=msg,
+                )
                 self._clear_force_context()
                 self._update_alarm_state()
-                msg = exc.message if isinstance(exc, VerisureError) else str(exc)
                 _LOGGER.error("Force arm failed (unexpected): %s", msg)
                 await self._notify_operation_failed(
                     "Force arm", msg, marker_operation="ARM",
@@ -507,6 +529,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self.async_write_ha_state()
                 return
             else:
+                self._log_force_arm_audit(
+                    ctx=ctx, started_at=started_at, result="success",
+                )
                 _LOGGER.info("Force-armed successfully, bypassed: %s", zones)
                 self._expire_force_context()
 
@@ -603,6 +628,53 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         self._cancel_force_context_timer()
         self.coordinator.force_context = None
         self._update_force_attributes()
+
+    def _log_force_arm_audit(
+        self,
+        *,
+        ctx: ForceArmContext,
+        started_at: float,
+        result: str,
+        error_class: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        """Emit one structured line per force-arm attempt.
+
+        CLAUDE.md requires an audit trail for every arm/disarm action;
+        force-arm is the most security-sensitive mutation (bypassing open
+        zones) so we log every outcome — success, no-op, timeout, failure
+        — as a single JSON line with a stable `FORCE_ARM_AUDIT` prefix
+        that grep / log pipelines can key on.
+
+        Fields:
+          reference_id, suid — Verisure-internal tokens (no end-user PII).
+          target             — human-readable target AlarmState.
+          mode               — the string the entity used (armed_home / armed_away).
+          zones              — aliases of the zones we were bypassing.
+          proto_before       — ProtoCode reported by the last poll.
+          duration_ms        — monotonic clock delta (includes poll-wait).
+          result             — success | noop | timeout | failure.
+          error_class, error_message — present only on non-success.
+        """
+        audit: dict[str, object] = {
+            "event": "force_arm_attempt",
+            "reference_id": ctx.reference_id,
+            "suid": ctx.suid,
+            "mode": ctx.mode,
+            "target": (
+                f"interior={ctx.target.interior.value},"
+                f"perimeter={ctx.target.perimeter.value}"
+            ),
+            "zones": [e.alias for e in ctx.exceptions],
+            "proto_before": self.coordinator.data.proto_code.value,
+            "duration_ms": int((time.monotonic() - started_at) * 1000),
+            "result": result,
+        }
+        if error_class is not None:
+            audit["error_class"] = error_class
+        if error_message is not None:
+            audit["error_message"] = error_message
+        _LOGGER.info("FORCE_ARM_AUDIT %s", json.dumps(audit, sort_keys=True))
 
     def _notification_id(self) -> str:
         return (

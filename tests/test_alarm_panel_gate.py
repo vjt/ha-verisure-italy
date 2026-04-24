@@ -365,6 +365,7 @@ def _wire_mutation_entity(panel: str):
     entity, coordinator = _make_panel_entity(panel)
     entity._arm_lock = asyncio.Lock()  # type: ignore[attr-defined]
     entity._attr_alarm_state = AlarmControlPanelState.DISARMED  # type: ignore[attr-defined]
+    entity._force_context_timer = None  # type: ignore[attr-defined]
     entity.async_write_ha_state = MagicMock()  # type: ignore[attr-defined]
     entity._update_alarm_state = MagicMock()  # type: ignore[attr-defined]
     coordinator.suppress_updates = _noop_suppress
@@ -549,3 +550,109 @@ class TestFailSecureOnTimeout:
 
         assert entity._attr_alarm_state is None
         coordinator.async_request_refresh.assert_awaited_once()
+
+
+class TestForceArmAudit:
+    """M17 — every force-arm attempt emits a structured audit line."""
+
+    def _wire(self):
+        import datetime as _dt
+
+        from custom_components.verisure_italy.coordinator import (
+            ForceArmContext,
+            VerisureStatusData,
+        )
+        from verisure_italy.models import ProtoCode, ZoneException
+
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        ctx = ForceArmContext(
+            reference_id="ref-123",
+            suid="suid-456",
+            mode="armed_home",
+            target=AlarmState(
+                interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+            ),
+            exceptions=[
+                ZoneException(
+                    status="open",
+                    deviceType="door",
+                    alias="FrontDoor",
+                ),
+            ],
+            created_at=_dt.datetime.now(_dt.UTC),
+        )
+        coordinator.force_context = ctx
+        coordinator.data = VerisureStatusData(
+            alarm_state=AlarmState(
+                interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
+            ),
+            proto_code=ProtoCode.DISARMED,
+            timestamp="2026-01-01T00:00:00",
+            exceptions=[],
+        )
+        return entity, coordinator, ctx
+
+    def _parse_audit(self, caplog):
+        for r in caplog.records:
+            if "FORCE_ARM_AUDIT" in r.message:
+                payload = r.message.split("FORCE_ARM_AUDIT ", 1)[1]
+                return json.loads(payload)
+        return None
+
+    async def test_success_audit(self, caplog):
+        entity, coordinator, _ctx = self._wire()
+        coordinator.async_arm = AsyncMock()
+
+        with caplog.at_level(
+            logging.INFO,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            await entity.async_force_arm()
+
+        audit = self._parse_audit(caplog)
+        assert audit is not None
+        assert audit["result"] == "success"
+        assert audit["reference_id"] == "ref-123"
+        assert audit["suid"] == "suid-456"
+        assert audit["mode"] == "armed_home"
+        assert audit["zones"] == ["FrontDoor"]
+        assert audit["proto_before"] == "D"
+        assert "duration_ms" in audit
+        assert "error_class" not in audit
+
+    async def test_timeout_audit(self, caplog):
+        entity, coordinator, _ctx = self._wire()
+        coordinator.async_arm = AsyncMock(
+            side_effect=OperationTimeoutError("took too long"),
+        )
+
+        with caplog.at_level(
+            logging.INFO,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            await entity.async_force_arm()
+
+        audit = self._parse_audit(caplog)
+        assert audit is not None
+        assert audit["result"] == "timeout"
+        assert audit["error_class"] == "OperationTimeoutError"
+        assert "took too long" in audit["error_message"]
+
+    async def test_failure_audit(self, caplog):
+        entity, coordinator, _ctx = self._wire()
+        coordinator.async_arm = AsyncMock(
+            side_effect=OperationFailedError(
+                "rejected", error_code="106", error_type=None,
+            ),
+        )
+
+        with caplog.at_level(
+            logging.INFO,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            await entity.async_force_arm()
+
+        audit = self._parse_audit(caplog)
+        assert audit is not None
+        assert audit["result"] == "failure"
+        assert audit["error_class"] == "OperationFailedError"
