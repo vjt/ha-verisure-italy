@@ -277,7 +277,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         if not await self._check_panel_supported("arm"):
             return  # _check_panel_supported raises; defensive belt-and-braces
 
-        async with self._arm_lock:
+        async with self._arm_lock, self.coordinator.suppress_updates():
             _LOGGER.info("Arming %s (target: %s)", mode, target)
             self._attr_alarm_state = AlarmControlPanelState.ARMING
             self.async_write_ha_state()
@@ -333,7 +333,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         if not await self._check_panel_supported("disarm"):
             return
 
-        async with self._arm_lock:
+        async with self._arm_lock, self.coordinator.suppress_updates():
             _LOGGER.info("Disarming alarm")
             self._attr_alarm_state = AlarmControlPanelState.DISARMING
             self.async_write_ha_state()
@@ -377,7 +377,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
         zones = ", ".join(e.alias for e in ctx.exceptions)
 
-        async with self._arm_lock:
+        async with self._arm_lock, self.coordinator.suppress_updates():
             _LOGGER.info(
                 "Force-arming with %d bypassed zone(s): %s",
                 len(ctx.exceptions), zones,

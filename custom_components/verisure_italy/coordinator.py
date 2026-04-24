@@ -6,8 +6,12 @@ import asyncio
 import base64
 import io
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -174,6 +178,14 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         # Force-arm context — shared between alarm entity and force-arm buttons
         self.force_context: ForceArmContext | None = None
 
+        # Updates-suppressed flag. True while an arm/disarm mutation is in
+        # flight. Prevents a background poll from overwriting the ARMING /
+        # DISARMING transition state with a stale snapshot of the panel
+        # (the panel takes seconds to move, our poll is every 5s). Entered
+        # via the `suppress_updates()` context manager — paired with the
+        # entity's `_arm_lock` so the whole arm call is race-free end-to-end.
+        self._updates_suppressed: bool = False
+
         # Set by VerisureAlarmPanel.__init__ — used by force-arm buttons
         self.alarm_entity: ForceArmable | None = None
 
@@ -185,6 +197,39 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         self.camera_entities.clear()
         self.alarm_entity = None
         await super().async_shutdown()
+
+    @asynccontextmanager
+    async def suppress_updates(self) -> AsyncIterator[None]:
+        """Suppress background polls while a mutation is in flight.
+
+        Use with `async with` around arm/disarm calls — composable with
+        the entity's arm-lock via `async with lock, coord.suppress_updates():`.
+        While active, `_async_update_data` returns the cached snapshot
+        instead of hitting the client — so a 5s-interval poll can't race
+        the panel's multi-second transition and overwrite the ARMING /
+        DISARMING placeholder state with stale data.
+
+        Requires `self.data is not None` (first refresh already done).
+        `async_config_entry_first_refresh()` runs in `async_setup_entry`
+        before any entity exists, so this invariant holds by construction
+        — anything else is a programming error.
+        """
+        # DataUpdateCoordinator types `self.data` as non-None, but in
+        # practice it starts as None and only gets populated by the first
+        # refresh. The check below is a real runtime invariant — pyright
+        # sees HA's (optimistic) annotation and flags it as unnecessary.
+        if self.data is None:  # type: ignore[reportUnnecessaryComparison]
+            raise RuntimeError(
+                "suppress_updates() called before first refresh — "
+                "nothing to serve as cached snapshot"
+            )
+        if self._updates_suppressed:
+            raise RuntimeError("suppress_updates() is not re-entrant")
+        self._updates_suppressed = True
+        try:
+            yield
+        finally:
+            self._updates_suppressed = False
 
     def notify_camera_entities(self) -> None:
         """Notify camera entities that images have been updated."""
@@ -234,6 +279,13 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
 
     async def _async_update_data(self) -> VerisureStatusData:
         """Poll xSStatus for current alarm state."""
+        if self._updates_suppressed:
+            # Mutation (arm/disarm) in flight — serve cached snapshot.
+            # The invariant `self.data is not None` is enforced by
+            # suppress_updates() itself.
+            assert self.data is not None
+            _LOGGER.debug("Poll suppressed — serving cached snapshot")
+            return self.data
         try:
             status: GeneralStatus = await self.client.get_general_status(
                 self.installation
