@@ -102,17 +102,25 @@ stateDiagram-v2
 
 ## State Suppression During Operations
 
-The alarm entity uses two guards to prevent coordinator updates from
-causing spurious state transitions:
+Two layered guards prevent a background poll from racing a user-driven
+mutation. The entity-layer lock stops the update-handler from writing
+stale state; the coordinator-layer flag stops the poll itself from
+even fetching fresh data (so no stale snapshot is ever committed to
+`coordinator.data` mid-transition).
 
-| Guard | When active | Effect |
-|-------|-------------|--------|
-| `_arm_in_progress` | During arm/disarm/force-arm API calls | Coordinator update handler returns immediately — no state write |
-| `force_context` | Between arming exception and force-arm/cancel/expiry | Coordinator update handler skips `_update_alarm_state()` |
+| Guard | Where | When active | Effect |
+|-------|-------|-------------|--------|
+| `_arm_lock` | alarm entity | Around every arm/disarm/force-arm call | `_handle_coordinator_update()` returns early — no state write |
+| `suppress_updates()` | coordinator | Same scope as `_arm_lock` (paired via `async with self._arm_lock, self.coordinator.suppress_updates():`) | `_async_update_data()` short-circuits to cached snapshot — the client isn't called at all |
 
 Without these, the coordinator's 5-second poll could read the panel's
 real state (e.g. DISARMED) during an arm operation and write it,
 causing a visible state flicker and triggering automations.
+
+`force_context` (a separate piece of state on the coordinator) is
+not a guard — it's a data carrier for the 120s window between an
+`ArmingExceptionError` and the user's decision (force-arm or cancel).
+Its lifecycle is described below.
 
 ## Force Context Lifecycle
 
@@ -215,10 +223,11 @@ correctness over convenience.
 | Scenario | Behavior |
 |----------|----------|
 | Unknown alarm state | `UnexpectedStateError` + notification. Never defaults to DISARMED. |
-| Arm/disarm timeout | `OperationTimeoutError`. Previous state assumed still active. |
+| Arm/disarm timeout | `OperationTimeoutError`. Entity state goes UNKNOWN and a forced refresh resolves it from the real panel — we do NOT guess the prior state. (`OperationFailedError`, where the panel explicitly rejected the command, is unambiguous and does revert to prior.) |
 | Poll failure | `UpdateFailed`. Last known state preserved. |
 | Force context expired | Reverts to coordinator data. Buttons disappear. |
-| Unexpected exception in arm flow | `_arm_in_progress` cleared in `finally`. State recovers on next poll. |
+| Panel armed via another path | Stale `force_context` auto-evicts on the next coordinator update (any non-DISARMED observation clears the pending token so a stale `reference_id` can't fire). |
+| Unexpected exception in arm flow | `_arm_lock` + `suppress_updates()` released by the `async with` block. State recovers on the post-release `async_request_refresh()`. |
 
 ### Credential handling
 

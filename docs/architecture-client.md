@@ -184,8 +184,12 @@ VerisureError
 ├── APIConnectionError         # Network failure
 ├── WAFBlockedError            # Incapsula WAF block
 ├── UnexpectedStateError       # Unknown proto code (SECURITY)
+├── SameStateError             # Benign race — panel already in target state
+├── StateNotObservedError      # Arm/disarm before first xSStatus
 ├── OperationTimeoutError      # Arm/disarm poll timeout
 ├── OperationFailedError       # Panel rejected operation
+├── UnsupportedPanelError      # Panel not on SUPPORTED_PANELS allowlist
+├── UnsupportedCommandError    # Panel's active services lack the command
 ├── ImageCaptureError          # Capture timeout / invalid data
 └── ArmingExceptionError       # Open zones (has reference_id, suid, zones)
 ```
@@ -197,7 +201,7 @@ notifications.
 ## Security Properties
 
 - **No silent failures.** Unknown proto codes crash with `UnexpectedStateError`, not a default state. If the alarm reports something we don't understand, a human gets notified.
-- **Fail-secure.** `OperationTimeoutError` means "we don't know if it worked." Callers must assume the previous state is still active.
+- **Fail-secure.** `OperationTimeoutError` means "we don't know if it worked." The HA alarm entity responds by going UNKNOWN and requesting a forced refresh — it does NOT silently revert to the prior state. Direct client callers should do the same.
 - **Parse at the boundary.** All API responses are parsed into Pydantic models immediately. `ValidationError` inside = bug in Verisure's API. No dicts or `Any` past the HTTP layer.
 - **No credentials in memory longer than needed.** Password is used for login only, not stored after token acquisition.
 - **Token refresh is atomic.** `asyncio.Lock` prevents concurrent refresh races that could leave the client in an inconsistent auth state.

@@ -8,7 +8,7 @@ Backlog for ha-verisure. Prune aggressively — completed items go in
 `CHANGELOG.md`, not here. Keep context on pending items so the next
 session can pick them up cold.
 
-Updated: 2026-04-24.
+Updated: 2026-04-24 (post-v0.9.1 hardening release).
 
 ## Immediate
 
@@ -56,6 +56,15 @@ Updated: 2026-04-24.
 - **Higher-resolution camera images** — all `xSRequestImages` output
   is 640×352 LOW. Worth revisiting if Verisure exposes a different
   endpoint.
+- **M7 — client → HA model-leak boundary** (deferred from 2026-04-24
+  codebase review). Some Pydantic models from `verisure_italy.models`
+  are passed into HA entity state attributes / extra_state_attributes
+  unwrapped (`ZoneException` in the force-context attributes is the
+  clearest case). Long-term we want a dedicated "integration-facing"
+  view type that the entity layer constructs from the client model.
+  Needs a design pass — the current leak is harmless but makes the
+  boundary harder to enforce on future changes. See
+  `docs/reviews/2026-04-24-codebase-review.md` section M7.
 
 ## Observation
 
