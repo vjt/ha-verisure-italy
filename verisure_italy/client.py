@@ -61,7 +61,6 @@ from .models import (
     CAMERA_IMAGE_DEVICE_TYPE,
     CAMERA_IMAGE_MEDIA_TYPE,
     CAMERA_IMAGE_RESOLUTION,
-    STATE_TO_COMMAND,
     AlarmState,
     ArmCommand,
     ArmResult,
@@ -69,9 +68,11 @@ from .models import (
     DisarmResult,
     GeneralStatus,
     Installation,
+    InteriorMode,
     LoginResponse,
     OperationResult,
     OtpPhone,
+    PerimeterMode,
     RawDevice,
     Service,
     Thumbnail,
@@ -140,6 +141,22 @@ _SENSITIVE_VAR_KEYS: frozenset[str] = frozenset({
 PollFn = Callable[[Installation, str, int], Awaitable[OperationResult]]
 GraphQLVars = dict[str, str | int | bool | list[int]]
 GraphQLContent = dict[str, str | GraphQLVars]
+
+# TODO(task 4): replaced by CommandResolver.
+_LEGACY_STATE_TO_COMMAND: dict[AlarmState, ArmCommand] = {
+    AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF):
+        ArmCommand.DISARM_ALL,
+    AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.ON):
+        ArmCommand.ARM_PERIMETER,
+    AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF):
+        ArmCommand.ARM_PARTIAL,
+    AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON):
+        ArmCommand.ARM_PARTIAL_PERIMETER,
+    AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF):
+        ArmCommand.ARM_TOTAL,
+    AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON):
+        ArmCommand.ARM_TOTAL_PERIMETER,
+}
 
 
 def _sanitize_vars(variables: GraphQLVars | None) -> dict[str, str | int | bool | list[int]]:
@@ -807,7 +824,7 @@ class VerisureClient:
         allowForcing). Caller can retry with force_arming_remote_id + suid
         from the exception to override.
         """
-        command = STATE_TO_COMMAND[target_state]
+        command = _LEGACY_STATE_TO_COMMAND[target_state]
         await self._ensure_auth(installation)
 
         _LOGGER.debug(

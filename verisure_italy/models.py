@@ -105,29 +105,56 @@ def parse_proto_code(code: str) -> ProtoCode:
 class ArmCommand(StrEnum):
     """API command strings for arming/disarming.
 
-    These are the values sent in the `request` field of xSArmPanel
-    and xSDisarmPanel GraphQL mutations.
+    Full wire vocabulary extracted from the Verisure web bundle
+    (see docs/findings/arm-command-vocabulary.md). The server
+    rejects unknown values as a GraphQL enum error before the
+    panel is touched.
     """
 
+    # Disarm
     DISARM = "DARM1"
-    ARM_PARTIAL = "ARMDAY1"
-    ARM_TOTAL = "ARM1"
-    ARM_PERIMETER = "PERI1"
-    ARM_TOTAL_PERIMETER = "ARM1PERI1"
-    ARM_PARTIAL_PERIMETER = "ARMDAY1PERI1"
     DISARM_ALL = "DARM1DARMPERI"
+    DISARM_PERIMETER = "DARMPERI"
+    DISARM_ANNEX = "DARMANNEX1"
+
+    # Arm — from disarmed
+    ARM_TOTAL = "ARM1"
+    ARM_TOTAL_PERIMETER = "ARM1PERI1"
+    ARM_PARTIAL = "ARMDAY1"
+    ARM_PARTIAL_PERIMETER = "ARMDAY1PERI1"
+    ARM_NIGHT = "ARMNIGHT1"
+    ARM_NIGHT_PERIMETER = "ARMNIGHT1PERI1"
+
+    # Transitions — from an armed interior mode to another interior mode
+    ARM_TOTAL_FROM_PARTIAL_NIGHT = "ARMINTFPART1"
+    ARM_PARTIAL_FROM_TOTAL = "ARMPARTFINTDAY1"
+    ARM_NIGHT_FROM_TOTAL = "ARMPARTFINTNIGHT1"
+
+    # Annex + interior/exterior alternates
+    ARM_ANNEX = "ARMANNEX1"
+    ARM_INTERIOR_EXTERIOR = "ARMINTEXT1"
+
+    # Perimeter only
+    ARM_PERIMETER = "PERI1"
 
 
-# Map each target AlarmState to the command that reaches it.
-# Only states we can actively transition TO are mapped here.
-STATE_TO_COMMAND: dict[AlarmState, ArmCommand] = {
-    PROTO_TO_STATE[ProtoCode.DISARMED]: ArmCommand.DISARM_ALL,
-    PROTO_TO_STATE[ProtoCode.PERIMETER_ONLY]: ArmCommand.ARM_PERIMETER,
-    PROTO_TO_STATE[ProtoCode.PARTIAL]: ArmCommand.ARM_PARTIAL,
-    PROTO_TO_STATE[ProtoCode.PARTIAL_PERIMETER]: ArmCommand.ARM_PARTIAL_PERIMETER,
-    PROTO_TO_STATE[ProtoCode.TOTAL]: ArmCommand.ARM_TOTAL,
-    PROTO_TO_STATE[ProtoCode.TOTAL_PERIMETER]: ArmCommand.ARM_TOTAL_PERIMETER,
-}
+class ServiceRequest(StrEnum):
+    """Values of Service.request from xSSrv that gate arm/disarm commands.
+
+    Each ArmCommand requires at least one of these services to be
+    active=true for the panel to honour it. The mapping lives in
+    verisure_italy/resolver.py (added in a later task).
+    """
+
+    ARM = "ARM"
+    DARM = "DARM"
+    ARMDAY = "ARMDAY"
+    ARMNIGHT = "ARMNIGHT"
+    PERI = "PERI"
+    ARMANNEX = "ARMANNEX"
+    DARMANNEX = "DARMANNEX"
+    ARMINTFPART = "ARMINTFPART"
+    ARMPARTFINT = "ARMPARTFINT"
 
 
 # ---------------------------------------------------------------------------

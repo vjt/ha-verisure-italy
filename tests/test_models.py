@@ -7,7 +7,6 @@ from verisure_italy.exceptions import UnexpectedStateError
 from verisure_italy.models import (
     PANEL_FAMILIES,
     PROTO_TO_STATE,
-    STATE_TO_COMMAND,
     STATE_TO_PROTO,
     SUPPORTED_PANELS,
     AlarmState,
@@ -18,6 +17,7 @@ from verisure_italy.models import (
     PanelFamily,
     PerimeterMode,
     ProtoCode,
+    ServiceRequest,
     ZoneException,
     parse_proto_code,
 )
@@ -57,11 +57,6 @@ class TestAlarmStateModel:
 
         for code, state in PROTO_TO_STATE.items():
             assert STATE_TO_PROTO[state] == code
-
-    def test_every_state_has_a_command(self) -> None:
-        """Every reachable state has a command to get there."""
-        for state in PROTO_TO_STATE.values():
-            assert state in STATE_TO_COMMAND, f"No command for state {state}"
 
     def test_disarmed_state(self) -> None:
         state = PROTO_TO_STATE[ProtoCode.DISARMED]
@@ -199,22 +194,6 @@ class TestGeneralStatusExceptions:
         assert result.exceptions == []
 
 
-class TestArmCommands:
-    """Arm commands map correctly to target states."""
-
-    def test_disarm_command(self) -> None:
-        disarmed = PROTO_TO_STATE[ProtoCode.DISARMED]
-        assert STATE_TO_COMMAND[disarmed] == ArmCommand.DISARM_ALL
-
-    def test_total_perimeter_command(self) -> None:
-        state = PROTO_TO_STATE[ProtoCode.TOTAL_PERIMETER]
-        assert STATE_TO_COMMAND[state] == ArmCommand.ARM_TOTAL_PERIMETER
-
-    def test_partial_perimeter_command(self) -> None:
-        state = PROTO_TO_STATE[ProtoCode.PARTIAL_PERIMETER]
-        assert STATE_TO_COMMAND[state] == ArmCommand.ARM_PARTIAL_PERIMETER
-
-
 class TestPanelFamilies:
     """Panel roster + family classifier from the Verisure web bundle."""
 
@@ -234,3 +213,38 @@ class TestPanelFamilies:
     def test_supported_panels_frozen(self) -> None:
         assert isinstance(SUPPORTED_PANELS, frozenset)
         assert len(SUPPORTED_PANELS) == 8
+
+
+def test_arm_command_covers_full_wire_vocabulary() -> None:
+    expected = {
+        "DARM1",
+        "DARM1DARMPERI",
+        "DARMPERI",
+        "DARMANNEX1",
+        "ARM1",
+        "ARM1PERI1",
+        "ARMDAY1",
+        "ARMDAY1PERI1",
+        "ARMNIGHT1",
+        "ARMNIGHT1PERI1",
+        "ARMINTFPART1",
+        "ARMPARTFINTDAY1",
+        "ARMPARTFINTNIGHT1",
+        "ARMANNEX1",
+        "ARMINTEXT1",
+        "PERI1",
+    }
+    assert {c.value for c in ArmCommand} == expected
+
+
+def test_service_request_values() -> None:
+    # Must match the strings in Service.request from xSSrv.
+    assert ServiceRequest.ARM == "ARM"
+    assert ServiceRequest.DARM == "DARM"
+    assert ServiceRequest.ARMDAY == "ARMDAY"
+    assert ServiceRequest.ARMNIGHT == "ARMNIGHT"
+    assert ServiceRequest.PERI == "PERI"
+    assert ServiceRequest.ARMANNEX == "ARMANNEX"
+    assert ServiceRequest.DARMANNEX == "DARMANNEX"
+    assert ServiceRequest.ARMINTFPART == "ARMINTFPART"
+    assert ServiceRequest.ARMPARTFINT == "ARMPARTFINT"
