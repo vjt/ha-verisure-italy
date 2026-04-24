@@ -53,9 +53,19 @@ _COMMAND_REQUIRES: dict[ArmCommand, frozenset[ServiceRequest]] = {
     ArmCommand.ARM_PARTIAL_PERIMETER: frozenset({ServiceRequest.ARM}),
     ArmCommand.ARM_NIGHT: frozenset({ServiceRequest.ARM, ServiceRequest.ARMNIGHT}),
     ArmCommand.ARM_NIGHT_PERIMETER: frozenset({ServiceRequest.ARM, ServiceRequest.ARMNIGHT}),
-    ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR: frozenset({ServiceRequest.ARM}),
-    ArmCommand.ARM_PARTIAL_FROM_TOTAL: frozenset({ServiceRequest.ARM}),
-    ArmCommand.ARM_NIGHT_FROM_TOTAL: frozenset({ServiceRequest.ARM, ServiceRequest.ARMNIGHT}),
+    # Single-step transition commands — only SDVFAST-family panels expose
+    # the ARMINTFPART / ARMPARTFINT services. SDVECU responds
+    # "Request ARMPARTFINTDAY1 is not valid for Central Unit" if sent
+    # blind; hence the explicit sub-capability gate.
+    ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR: frozenset({
+        ServiceRequest.ARM, ServiceRequest.ARMINTFPART,
+    }),
+    ArmCommand.ARM_PARTIAL_FROM_TOTAL: frozenset({
+        ServiceRequest.ARM, ServiceRequest.ARMPARTFINT,
+    }),
+    ArmCommand.ARM_NIGHT_FROM_TOTAL: frozenset({
+        ServiceRequest.ARM, ServiceRequest.ARMPARTFINT, ServiceRequest.ARMNIGHT,
+    }),
     ArmCommand.ARM_ANNEX: frozenset({ServiceRequest.ARM, ServiceRequest.ARMANNEX}),
     ArmCommand.ARM_INTERIOR_EXTERIOR: frozenset({ServiceRequest.ARM}),
     ArmCommand.ARM_PERIMETER: frozenset({ServiceRequest.ARM}),
@@ -144,18 +154,36 @@ class CommandResolver:
                 f"Disarm first, then arm to the target state."
             )
 
-        # Armed → armed interior-mode transition (same-side transitions)
+        # Armed → armed interior-mode transition (same perimeter, different
+        # interior). Single-step transition commands only work on panels
+        # that expose ARMINTFPART / ARMPARTFINT as active services
+        # (SDVFAST family). SDVECU rejects ARMPARTFINTDAY1 etc. with
+        # "Request not valid for Central Unit". For SDVECU we fall
+        # through to the normal arm-from-disarmed command below — this
+        # matches the pre-v0.9.0 behaviour that worked in production for
+        # months (target-only lookup via the old STATE_TO_COMMAND dict).
         if (
             current.interior != InteriorMode.OFF
             and current.interior != target.interior
             and current.perimeter == target.perimeter
         ):
-            if target.interior == InteriorMode.TOTAL:
+            if (
+                target.interior == InteriorMode.TOTAL
+                and ServiceRequest.ARMINTFPART in self.active_services
+            ):
                 return ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR
-            if current.interior == InteriorMode.TOTAL and target.interior == InteriorMode.PARTIAL:
+            if (
+                current.interior == InteriorMode.TOTAL
+                and target.interior == InteriorMode.PARTIAL
+                and ServiceRequest.ARMPARTFINT in self.active_services
+            ):
                 return ArmCommand.ARM_PARTIAL_FROM_TOTAL
-            if current.interior == InteriorMode.TOTAL:  # PARTIAL case already handled
+            if (
+                current.interior == InteriorMode.TOTAL
+                and ServiceRequest.ARMPARTFINT in self.active_services
+            ):
                 return ArmCommand.ARM_NIGHT_FROM_TOTAL
+            # Otherwise fall through to the arm-from-disarmed match block.
 
         # Arm from disarmed
         match (target.interior, target.perimeter):

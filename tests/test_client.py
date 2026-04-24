@@ -1506,11 +1506,17 @@ class TestValidateDevice:
 class TestArmResolverWireIn:
     """Arm path uses CommandResolver with current state from _last_proto."""
 
-    async def test_arm_total_from_partial_uses_transition_command(
+    async def test_arm_total_from_partial_uses_transition_command_on_sdvfast(
         self, mock_api, client,
     ):
-        """Arming TOTAL while currently PARTIAL sends ARMINTFPART1, not ARM1."""
+        """SDVFAST has ARMINTFPART active → single-step transition to TOTAL."""
         _authenticate(client)
+        sdvfast_installation = INSTALLATION.model_copy(update={"panel": "SDVFAST"})
+        client._services_cache[INSTALLATION.number] = frozenset({
+            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
+            ServiceRequest.ARMNIGHT, ServiceRequest.ARMINTFPART,
+            ServiceRequest.ARMPARTFINT,
+        })
         client.set_last_proto("P")  # currently PARTIAL interior
         mock_api.post(API_URL, body=_arm_panel_response())
         mock_api.post(API_URL, body=_arm_status_complete("T"))
@@ -1518,12 +1524,34 @@ class TestArmResolverWireIn:
         target = AlarmState(
             interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
         )
-        result = await client.arm(INSTALLATION, target)
+        result = await client.arm(sdvfast_installation, target)
 
         arm_call = _find_call_with_operation(mock_api, "xSArmPanel")
         body = arm_call.kwargs["json"]
         assert body["variables"]["request"] == "ARMINTFPART1"
         assert result.proto_code == ProtoCode.TOTAL
+
+    async def test_sdvecu_total_peri_to_partial_peri_sends_armday1peri1(
+        self, mock_api, client,
+    ):
+        """Live-observed regression: SDVECU rejects ARMPARTFINTDAY1.
+
+        Resolver must fall through to the target-only ARMDAY1PERI1 path
+        because SDVECU doesn't expose ARMPARTFINT as an active service.
+        """
+        _authenticate(client)
+        client.set_last_proto("A")  # currently TOTAL + PERI
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_complete("B"))
+
+        target = AlarmState(
+            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+        )
+        await client.arm(INSTALLATION, target)
+
+        arm_call = _find_call_with_operation(mock_api, "xSArmPanel")
+        body = arm_call.kwargs["json"]
+        assert body["variables"]["request"] == "ARMDAY1PERI1"
 
     async def test_arm_total_perimeter_from_off_uses_base_command(
         self, mock_api, client,

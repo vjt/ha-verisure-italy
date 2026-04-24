@@ -85,19 +85,44 @@ def test_arm_partial_from_off_interior_only() -> None:
     assert r.resolve(target=_PARTIAL, current=_OFF) == ArmCommand.ARM_PARTIAL
 
 
-# --- Armed-to-armed transitions (decoded bundle behaviour) ---
+# --- Armed-to-armed transitions ---
+#
+# Single-step transition commands (ARMPARTFINTDAY1 etc.) are only emitted
+# when the panel exposes the relevant service. SDVECU doesn't list
+# ARMINTFPART / ARMPARTFINT in xSSrv and rejects those commands on the
+# wire with "Request not valid for Central Unit"; for SDVECU we fall
+# through to the target-only arm command (which IS accepted).
 
-def test_transition_partial_to_total_uses_intfpart() -> None:
-    r = _r("SDVECU", _SDVECU_SERVICES)
-    # Going from PARTIAL (currently armed interior) to TOTAL → ARMINTFPART1.
+def test_sdvfast_transition_partial_to_total_uses_intfpart() -> None:
+    """SDVFAST has ARMINTFPART active → single-step transition."""
+    r = _r("SDVFAST", _SDVFAST_SERVICES)
     out = r.resolve(target=_TOTAL, current=_PARTIAL)
     assert out == ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR
 
 
-def test_transition_total_to_partial_uses_partfint_day() -> None:
-    r = _r("SDVECU", _SDVECU_SERVICES)
+def test_sdvfast_transition_total_to_partial_uses_partfint_day() -> None:
+    """SDVFAST has ARMPARTFINT active → single-step transition."""
+    r = _r("SDVFAST", _SDVFAST_SERVICES)
     out = r.resolve(target=_PARTIAL, current=_TOTAL)
     assert out == ArmCommand.ARM_PARTIAL_FROM_TOTAL
+
+
+def test_sdvecu_partial_to_total_falls_through_to_arm_total() -> None:
+    """SDVECU without ARMINTFPART service → target-only ARM_TOTAL."""
+    r = _r("SDVECU", _SDVECU_SERVICES)
+    out = r.resolve(target=_TOTAL, current=_PARTIAL)
+    assert out == ArmCommand.ARM_TOTAL
+
+
+def test_sdvecu_total_peri_to_partial_peri_uses_arm_partial_peri() -> None:
+    """Live-observed regression: SDVECU rejects ARMPARTFINTDAY1.
+
+    Resolver must fall through to ARMDAY1PERI1 (ARM_PARTIAL_PERIMETER),
+    which SDVECU accepts — matches pre-v0.9.0 behaviour.
+    """
+    r = _r("SDVECU", _SDVECU_SERVICES)
+    out = r.resolve(target=_PARTIAL_PERI, current=_TOTAL_PERI)
+    assert out == ArmCommand.ARM_PARTIAL_PERIMETER
 
 
 # --- Perimeter-only (SDVECU only) ---
