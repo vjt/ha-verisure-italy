@@ -8,8 +8,8 @@ Backlog for ha-verisure. Prune aggressively — completed items go in
 `CHANGELOG.md`, not here. Keep context on pending items so the next
 session can pick them up cold.
 
-Updated: 2026-04-24 (post-v0.9.2 + todo cleanup: merged xSActV2 items,
-reworded Issue #1 and #3, dropped HA 2026.4 monitoring).
+Updated: 2026-04-24 (Issue #3 closed — alan210874 confirmed v0.9.2
+fixes SDVFAST arm; first-reporter bug arc complete).
 
 ## Immediate
 
@@ -23,15 +23,6 @@ reworded Issue #1 and #3, dropped HA 2026.4 monitoring).
   `VERISURE ARM FAILURE BEGIN` block lands, use it to identify the
   panel + any missing service gate. Reference:
   `docs/findings/arm-command-vocabulary.md`.
-- **Issue #3 v0.9.2 retest confirmation (alan210874, SDVFAST)** —
-  v0.9.1 surfaced `UnsupportedCommandError: ARMDAY1PERI1 missing
-  PERI` on their panel; root cause was the entity-layer hard-coded
-  perimeter target, fixed in v0.9.2 by panel-family-aware arm targets
-  (see CP04 S2). v0.9.2 comment posted 2026-04-24 asking for a
-  HACS update + arm_home/arm_away retest. On success: close. On a
-  new `VERISURE ARM FAILURE BEGIN` block: identify any remaining
-  SDVFAST-specific quirk.
-
 ## High
 
 - **xSActV2 observability** — the alarm timeline query is reverse-
