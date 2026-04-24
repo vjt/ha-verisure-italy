@@ -73,6 +73,20 @@ assert _STATE_MAP.keys() == set(PROTO_TO_STATE.values()), (
 
 _NOTIFICATION_ID_PREFIX = f"{DOMAIN}.arming_exception"
 
+# Persistent-notification body shown when arm/disarm fails. Points users at
+# the BEGIN/END marker block emitted by verisure_italy.client._log_failure —
+# pasting that block into a GitHub issue gives the maintainer a
+# fully-diagnosable, PII-safe trace without any further back-and-forth.
+_OPERATION_FAILED_NOTIFICATION_TEMPLATE = (
+    "{operation} failed: {message}\n\n"
+    "For help, open a new issue at\n"
+    "https://github.com/vjt/ha-verisure-italy/issues\n"
+    "and paste the block between\n"
+    "`=== VERISURE {op_upper} FAILURE BEGIN ===` and\n"
+    "`=== VERISURE {op_upper} FAILURE END ===`\n"
+    "from your Home Assistant log."
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -249,14 +263,18 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             except (OperationFailedError, OperationTimeoutError) as exc:
                 self._update_alarm_state()
                 _LOGGER.error("Arm failed: %s", exc.message)
-                await self._notify_operation_failed("Arm", exc.message)
+                await self._notify_operation_failed(
+                    "Arm", exc.message, marker_operation="ARM",
+                )
                 self.async_write_ha_state()
                 return
             except (VerisureError, ValidationError) as exc:
                 self._update_alarm_state()
                 msg = exc.message if isinstance(exc, VerisureError) else str(exc)
                 _LOGGER.error("Arm failed (unexpected): %s", msg)
-                await self._notify_operation_failed("Arm", msg)
+                await self._notify_operation_failed(
+                    "Arm", msg, marker_operation="ARM",
+                )
                 self.async_write_ha_state()
                 return
 
@@ -287,14 +305,18 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             except (OperationFailedError, OperationTimeoutError) as exc:
                 self._update_alarm_state()
                 _LOGGER.error("Disarm failed: %s", exc.message)
-                await self._notify_operation_failed("Disarm", exc.message)
+                await self._notify_operation_failed(
+                    "Disarm", exc.message, marker_operation="DISARM",
+                )
                 self.async_write_ha_state()
                 return
             except (VerisureError, ValidationError) as exc:
                 self._update_alarm_state()
                 msg = exc.message if isinstance(exc, VerisureError) else str(exc)
                 _LOGGER.error("Disarm failed (unexpected): %s", msg)
-                await self._notify_operation_failed("Disarm", msg)
+                await self._notify_operation_failed(
+                    "Disarm", msg, marker_operation="DISARM",
+                )
                 self.async_write_ha_state()
                 return
 
@@ -335,7 +357,11 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self._clear_force_context()
                 self._update_alarm_state()
                 _LOGGER.error("Force arm failed: %s", exc.message)
-                await self._notify_operation_failed("Force arm", exc.message)
+                # Client-level operation is still "arm" — the marker block
+                # in the log reads VERISURE ARM FAILURE BEGIN, not "FORCE ARM".
+                await self._notify_operation_failed(
+                    "Force arm", exc.message, marker_operation="ARM",
+                )
                 self.async_write_ha_state()
                 return
             except (VerisureError, ValidationError) as exc:
@@ -343,7 +369,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self._update_alarm_state()
                 msg = exc.message if isinstance(exc, VerisureError) else str(exc)
                 _LOGGER.error("Force arm failed (unexpected): %s", msg)
-                await self._notify_operation_failed("Force arm", msg)
+                await self._notify_operation_failed(
+                    "Force arm", msg, marker_operation="ARM",
+                )
                 self.async_write_ha_state()
                 return
 
@@ -466,13 +494,35 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             {"notification_id": self._notification_id()},
         )
 
-    async def _notify_operation_failed(self, operation: str, message: str) -> None:
-        """Create a persistent notification about a failed operation."""
+    async def _notify_operation_failed(
+        self,
+        operation: str,
+        message: str,
+        *,
+        marker_operation: str,
+    ) -> None:
+        """Create a persistent notification about a failed operation.
+
+        `operation` is the human-facing label ("Arm", "Disarm", "Force arm").
+        `marker_operation` is the uppercase client-level operation the user
+        will see inside the log ("ARM" or "DISARM"). They differ for "Force
+        arm" — the client-level block still says VERISURE ARM FAILURE BEGIN
+        because the underlying client call is `arm()`.
+
+        The body points the user at the BEGIN/END marker block written by
+        the client layer and asks them to paste it into a new GitHub issue.
+        The block is PII-safe; the user can copy-paste verbatim.
+        """
+        body = _OPERATION_FAILED_NOTIFICATION_TEMPLATE.format(
+            operation=operation,
+            message=message,
+            op_upper=marker_operation,
+        )
         await self.hass.services.async_call(
             "persistent_notification",
             "create",
             {
-                "message": f"{operation} failed: {message}",
+                "message": body,
                 "title": f"Verisure Italy — {operation} Failed",
                 "notification_id": f"{DOMAIN}.operation_failed",
             },

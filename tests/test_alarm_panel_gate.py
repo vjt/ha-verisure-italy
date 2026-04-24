@@ -190,3 +190,36 @@ def test_primary_state_map_partial_perimeter_is_armed_home() -> None:
 def test_primary_state_map_total_perimeter_is_armed_away() -> None:
     state = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
     assert _STATE_MAP[state] == AlarmControlPanelState.ARMED_AWAY
+
+
+# ---------------------------------------------------------------------------
+# _OPERATION_FAILED_NOTIFICATION_TEMPLATE — points at marker block + GH issue
+# ---------------------------------------------------------------------------
+
+
+def test_operation_failed_template_points_at_marker_block_arm() -> None:
+    """Notification text must mention the BEGIN/END marker + GH issue link."""
+    from custom_components.verisure_italy.alarm_control_panel import (
+        _OPERATION_FAILED_NOTIFICATION_TEMPLATE,
+    )
+
+    text = _OPERATION_FAILED_NOTIFICATION_TEMPLATE.format(
+        operation="Arm", message="Panel busy", op_upper="ARM",
+    )
+    assert "VERISURE ARM FAILURE BEGIN" in text
+    assert "VERISURE ARM FAILURE END" in text
+    assert "github.com/vjt/ha-verisure-italy/issues" in text
+    assert "Panel busy" in text
+
+
+def test_operation_failed_template_points_at_marker_block_disarm() -> None:
+    """Template covers DISARM path too (op_upper is substituted)."""
+    from custom_components.verisure_italy.alarm_control_panel import (
+        _OPERATION_FAILED_NOTIFICATION_TEMPLATE,
+    )
+
+    text = _OPERATION_FAILED_NOTIFICATION_TEMPLATE.format(
+        operation="Disarm", message="timeout", op_upper="DISARM",
+    )
+    assert "VERISURE DISARM FAILURE BEGIN" in text
+    assert "VERISURE DISARM FAILURE END" in text

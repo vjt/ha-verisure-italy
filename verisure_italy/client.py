@@ -23,6 +23,7 @@ import jwt
 from aiohttp import ClientConnectorError, ClientSession
 from pydantic import ValidationError
 
+from .diagnostics import format_failure_report
 from .exceptions import (
     APIConnectionError,
     APIResponseError,
@@ -34,6 +35,7 @@ from .exceptions import (
     SessionExpiredError,
     StateNotObservedError,
     TwoFactorRequiredError,
+    VerisureError,
     WAFBlockedError,
 )
 from .graphql import (
@@ -257,6 +259,31 @@ class VerisureClient:
                 "fetch xSStatus before arm/disarm."
             )
         return PROTO_TO_STATE[parse_proto_code(self._last_proto)]
+
+    def _log_failure(
+        self,
+        *,
+        operation: str,
+        installation: Installation,
+        command: ArmCommand | None,
+        error: VerisureError,
+    ) -> None:
+        """Emit a structured BEGIN/END-marker failure report at ERROR level.
+
+        Single emit site for arm/disarm failures. The block is PII-safe by
+        construction (hashed numinst, no names/addresses/tokens) and can be
+        pasted verbatim into a GitHub issue.
+        """
+        active = self._services_cache.get(installation.number, frozenset())
+        report = format_failure_report(
+            operation=operation,
+            installation=installation,
+            command=command,
+            active_services=active,
+            current_proto=self._last_proto,
+            error=error,
+        )
+        _LOGGER.error("%s", report)
 
     async def _active_services_cached(
         self, installation: Installation,
@@ -857,87 +884,117 @@ class VerisureClient:
         Raises UnsupportedCommandError if the panel's active services do
         not honour the command needed to reach target_state — refused
         locally with zero bytes sent to the panel.
+
+        Every VerisureError raised from this method is first reported via
+        `_log_failure`, which emits a single ERROR-level BEGIN/END block
+        with the diagnostic context (panel, family, command, services,
+        proto, error). ValueError from the resolver (e.g. current == target)
+        is a programmer error and deliberately NOT reported — those come
+        from caller misuse, not panel failure.
         """
         await self._ensure_auth(installation)
 
-        active = await self._active_services_cached(installation)
-        resolver = CommandResolver(
-            panel=installation.panel,
-            active_services=active,
-        )
-        current_state = self._current_alarm_state()
-        command = resolver.resolve(target=target_state, current=current_state)
-
-        _LOGGER.debug(
-            "arm: target=%s command=%s panel=%s currentStatus=%r "
-            "force_arming_remote_id=%r suid=%r",
-            target_state, command.value, installation.panel,
-            self._last_proto, force_arming_remote_id, suid,
-        )
-
-        variables: GraphQLVars = {
-            "request": command.value,
-            "numinst": installation.number,
-            "panel": installation.panel,
-            "currentStatus": self._last_proto,
-        }
-        if force_arming_remote_id is not None:
-            variables["forceArmingRemoteId"] = force_arming_remote_id
-        if suid is not None:
-            variables["suid"] = suid
-
-        content: GraphQLContent = {
-            "operationName": "xSArmPanel",
-            "variables": variables,
-            "query": ARM_PANEL_MUTATION,
-        }
-        response_text = await self._execute(
-            content, "xSArmPanel", installation
-        )
-        envelope = ArmPanelEnvelope.model_validate_json(response_text)
-        arm_resp = envelope.data.xSArmPanel
-
-        _LOGGER.debug(
-            "arm: panel accepted command res=%s msg=%r referenceId=%s",
-            arm_resp.res, arm_resp.msg, arm_resp.reference_id,
-        )
-
-        if arm_resp.res != "OK":
-            raise OperationFailedError(
-                f"Arm rejected: {arm_resp.msg}",
-                error_code=None,
-                error_type=None,
+        # `command` is kept alive outside the resolver.resolve() call so
+        # that if resolve() itself raises (UnsupportedCommandError,
+        # StateNotObservedError), the failure report shows
+        # command_selected: N/A rather than referring to a stale value.
+        command: ArmCommand | None = None
+        try:
+            active = await self._active_services_cached(installation)
+            resolver = CommandResolver(
+                panel=installation.panel,
+                active_services=active,
+            )
+            current_state = self._current_alarm_state()
+            command = resolver.resolve(
+                target=target_state, current=current_state,
             )
 
-        poll_fn = partial(
-            self._check_arm_status_once,
-            command=command,
-            force_arming_remote_id=force_arming_remote_id,
-        )
-        result = await self._poll_operation(
-            installation, arm_resp.reference_id, poll_fn
-        )
-
-        # Poll completed successfully — proto fields must be present.
-        # If they're None after a non-WAIT, non-ERROR result, the API
-        # returned something unexpected and we crash loud.
-        if result.protom_response is None or result.protom_response_data is None:
-            raise APIResponseError(
-                "Arm completed but response missing proto fields",
-                http_status=None,
+            _LOGGER.debug(
+                "arm: target=%s command=%s panel=%s currentStatus=%r "
+                "force_arming_remote_id=%r suid=%r",
+                target_state, command.value, installation.panel,
+                self._last_proto, force_arming_remote_id, suid,
             )
 
-        self._update_last_proto(result.protom_response, source="arm")
-        return ArmResult(
-            res=result.res,
-            msg=result.msg,
-            status=result.status,
-            numinst=result.numinst,
-            protomResponse=result.protom_response,
-            protomResponseDate=result.protom_response_data,
-            requestId="",
-            error=None,
-        )
+            variables: GraphQLVars = {
+                "request": command.value,
+                "numinst": installation.number,
+                "panel": installation.panel,
+                "currentStatus": self._last_proto,
+            }
+            if force_arming_remote_id is not None:
+                variables["forceArmingRemoteId"] = force_arming_remote_id
+            if suid is not None:
+                variables["suid"] = suid
+
+            content: GraphQLContent = {
+                "operationName": "xSArmPanel",
+                "variables": variables,
+                "query": ARM_PANEL_MUTATION,
+            }
+            response_text = await self._execute(
+                content, "xSArmPanel", installation
+            )
+            envelope = ArmPanelEnvelope.model_validate_json(response_text)
+            arm_resp = envelope.data.xSArmPanel
+
+            _LOGGER.debug(
+                "arm: panel accepted command res=%s msg=%r referenceId=%s",
+                arm_resp.res, arm_resp.msg, arm_resp.reference_id,
+            )
+
+            if arm_resp.res != "OK":
+                raise OperationFailedError(
+                    f"Arm rejected: {arm_resp.msg}",
+                    error_code=None,
+                    error_type=None,
+                )
+
+            poll_fn = partial(
+                self._check_arm_status_once,
+                command=command,
+                force_arming_remote_id=force_arming_remote_id,
+            )
+            result = await self._poll_operation(
+                installation, arm_resp.reference_id, poll_fn
+            )
+
+            # Poll completed successfully — proto fields must be present.
+            # If they're None after a non-WAIT, non-ERROR result, the API
+            # returned something unexpected and we crash loud.
+            if (
+                result.protom_response is None
+                or result.protom_response_data is None
+            ):
+                raise APIResponseError(
+                    "Arm completed but response missing proto fields",
+                    http_status=None,
+                )
+
+            self._update_last_proto(result.protom_response, source="arm")
+            return ArmResult(
+                res=result.res,
+                msg=result.msg,
+                status=result.status,
+                numinst=result.numinst,
+                protomResponse=result.protom_response,
+                protomResponseDate=result.protom_response_data,
+                requestId="",
+                error=None,
+            )
+        except VerisureError as exc:
+            # Only VerisureError subclasses get a failure report. ValueError
+            # from the resolver (current == target, cross-perimeter guard)
+            # is a caller misuse bug, not a panel failure — let it surface
+            # raw to the caller so the mistake is visible.
+            self._log_failure(
+                operation="arm",
+                installation=installation,
+                command=command,
+                error=exc,
+            )
+            raise
 
     async def _check_arm_status_once(
         self,
@@ -1063,78 +1120,100 @@ class VerisureClient:
         """Disarm the alarm completely. Polls until complete.
 
         Returns DisarmResult or raises OperationTimeoutError/OperationFailedError.
+
+        Every VerisureError raised from this method is first reported via
+        `_log_failure`, emitting a single ERROR-level BEGIN/END block with
+        diagnostic context. ValueError from the resolver (disarm-from-disarmed)
+        is a caller bug and deliberately NOT reported — the HA entity layer
+        already short-circuits that case, so a ValueError here means a direct
+        API caller misuse we want to see raw.
         """
         await self._ensure_auth(installation)
 
-        active = await self._active_services_cached(installation)
-        resolver = CommandResolver(
-            panel=installation.panel,
-            active_services=active,
-        )
-        current_state = self._current_alarm_state()
-        target = AlarmState(
-            interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
-        )
-        # If current == target (already at target state), resolver raises
-        # ValueError. This is intentional — disarm-from-disarmed is a
-        # caller bug, not a silent no-op. HA's alarm panel guards this
-        # at the entity layer in async_alarm_disarm / _async_arm (skip
-        # when self._attr_alarm_state already matches target).
-        command = resolver.resolve(target=target, current=current_state)
+        command: ArmCommand | None = None
+        try:
+            active = await self._active_services_cached(installation)
+            resolver = CommandResolver(
+                panel=installation.panel,
+                active_services=active,
+            )
+            current_state = self._current_alarm_state()
+            target = AlarmState(
+                interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
+            )
+            # If current == target (already at target state), resolver raises
+            # ValueError. This is intentional — disarm-from-disarmed is a
+            # caller bug, not a silent no-op. HA's alarm panel guards this
+            # at the entity layer in async_alarm_disarm / _async_arm (skip
+            # when self._attr_alarm_state already matches target).
+            command = resolver.resolve(target=target, current=current_state)
 
-        _LOGGER.debug(
-            "disarm: command=%s panel=%s currentStatus=%r",
-            command.value, installation.panel, self._last_proto,
-        )
-
-        content: GraphQLContent = {
-            "operationName": "xSDisarmPanel",
-            "variables": {
-                "request": command.value,
-                "numinst": installation.number,
-                "panel": installation.panel,
-            },
-            "query": DISARM_PANEL_MUTATION,
-        }
-        response_text = await self._execute(
-            content, "xSDisarmPanel", installation
-        )
-        envelope = DisarmPanelEnvelope.model_validate_json(response_text)
-        disarm_resp = envelope.data.xSDisarmPanel
-
-        _LOGGER.debug(
-            "disarm: panel accepted command res=%s msg=%r referenceId=%s",
-            disarm_resp.res, disarm_resp.msg, disarm_resp.reference_id,
-        )
-
-        if disarm_resp.res != "OK":
-            raise OperationFailedError(
-                f"Disarm rejected: {disarm_resp.msg}",
-                error_code=None,
-                error_type=None,
+            _LOGGER.debug(
+                "disarm: command=%s panel=%s currentStatus=%r",
+                command.value, installation.panel, self._last_proto,
             )
 
-        poll_fn = partial(self._check_disarm_status_once, command=command)
-        result = await self._poll_operation(
-            installation, disarm_resp.reference_id, poll_fn
-        )
+            content: GraphQLContent = {
+                "operationName": "xSDisarmPanel",
+                "variables": {
+                    "request": command.value,
+                    "numinst": installation.number,
+                    "panel": installation.panel,
+                },
+                "query": DISARM_PANEL_MUTATION,
+            }
+            response_text = await self._execute(
+                content, "xSDisarmPanel", installation
+            )
+            envelope = DisarmPanelEnvelope.model_validate_json(response_text)
+            disarm_resp = envelope.data.xSDisarmPanel
 
-        if result.protom_response is None or result.protom_response_data is None:
-            raise APIResponseError(
-                "Disarm completed but response missing proto fields",
-                http_status=None,
+            _LOGGER.debug(
+                "disarm: panel accepted command res=%s msg=%r referenceId=%s",
+                disarm_resp.res, disarm_resp.msg, disarm_resp.reference_id,
             )
 
-        self._update_last_proto(result.protom_response, source="disarm")
-        return DisarmResult(
-            res=result.res,
-            msg=result.msg,
-            numinst=result.numinst,
-            protomResponse=result.protom_response,
-            protomResponseDate=result.protom_response_data,
-            requestId="",
-            error=None,
-        )
+            if disarm_resp.res != "OK":
+                raise OperationFailedError(
+                    f"Disarm rejected: {disarm_resp.msg}",
+                    error_code=None,
+                    error_type=None,
+                )
+
+            poll_fn = partial(
+                self._check_disarm_status_once, command=command,
+            )
+            result = await self._poll_operation(
+                installation, disarm_resp.reference_id, poll_fn
+            )
+
+            if (
+                result.protom_response is None
+                or result.protom_response_data is None
+            ):
+                raise APIResponseError(
+                    "Disarm completed but response missing proto fields",
+                    http_status=None,
+                )
+
+            self._update_last_proto(result.protom_response, source="disarm")
+            return DisarmResult(
+                res=result.res,
+                msg=result.msg,
+                numinst=result.numinst,
+                protomResponse=result.protom_response,
+                protomResponseDate=result.protom_response_data,
+                requestId="",
+                error=None,
+            )
+        except VerisureError as exc:
+            self._log_failure(
+                operation="disarm",
+                installation=installation,
+                command=command,
+                error=exc,
+            )
+            raise
 
     async def _check_disarm_status_once(
         self,

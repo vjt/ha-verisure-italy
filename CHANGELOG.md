@@ -23,6 +23,16 @@
   panel roster + full `ArmCodeRequest` / `DisarmCodeRequest` enums +
   decoded target→command resolver. Run before each release to catch
   upstream API drift.
+- Structured failure reports on arm/disarm errors. On failure, a single
+  ERROR-level log entry is emitted wrapped in `=== VERISURE ARM FAILURE
+  BEGIN ===` / `=== VERISURE ARM FAILURE END ===` (or `DISARM`) markers.
+  The block contains panel, family, hashed numinst, current proto,
+  selected command, active services, and the exception type/code/message.
+  HA notifications now direct users to copy-paste this block into a new
+  GitHub issue for diagnostics. PII-safe by construction.
+- `format_failure_report()` added to `verisure_italy.diagnostics` (which
+  now also hosts the existing `run_probe`); `verisure_italy/probe.py`
+  was merged into `diagnostics.py`.
 - HA entity layer short-circuits redundant arm/disarm presses at the
   entity layer (DEBUG log) instead of paying a round-trip or raising.
 

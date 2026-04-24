@@ -6,6 +6,7 @@ detection, polling, state management.
 """
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
@@ -26,6 +27,7 @@ from verisure_italy.exceptions import (
     StateNotObservedError,
     TwoFactorRequiredError,
     UnexpectedStateError,
+    UnsupportedCommandError,
     WAFBlockedError,
 )
 from verisure_italy.models import (
@@ -1714,3 +1716,95 @@ class TestServicesCache:
 
         # After the refresh, the cache for this installation must be gone.
         assert INSTALLATION.number not in client._services_cache
+
+
+# ---------------------------------------------------------------------------
+# Arm/disarm failure reports — single structured ERROR log on every failure
+# ---------------------------------------------------------------------------
+
+
+class TestArmDisarmFailureReports:
+    """Arm/disarm emit a single structured failure report on error paths."""
+
+    async def test_arm_failure_emits_marker_block(
+        self, mock_api, client, caplog,
+    ):
+        """On OperationFailedError the client logs one BEGIN/END block at ERROR."""
+        _authenticate(client)
+        client.set_last_proto("D")
+        mock_api.post(API_URL, body=_arm_panel_rejected())
+        target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
+
+        with (
+            caplog.at_level(logging.ERROR, logger="verisure_italy.client"),
+            pytest.raises(OperationFailedError),
+        ):
+            await client.arm(INSTALLATION, target)
+
+        records = [
+            r for r in caplog.records if "VERISURE ARM FAILURE BEGIN" in r.message
+        ]
+        assert len(records) == 1
+        block = records[0].message
+        assert "VERISURE ARM FAILURE END" in block
+        assert "panel: SDVECU" in block
+        assert "command_selected: ARM1PERI1" in block
+        assert "error_type: OperationFailedError" in block
+
+    async def test_disarm_failure_emits_marker_block(
+        self, mock_api, client, caplog,
+    ):
+        _authenticate(client)
+        client.set_last_proto("A")
+        # Force a panel rejection on disarm.
+        mock_api.post(API_URL, body=json.dumps({
+            "data": {
+                "xSDisarmPanel": {
+                    "res": "ERROR", "msg": "Panel busy", "referenceId": "",
+                }
+            }
+        }))
+
+        with (
+            caplog.at_level(logging.ERROR, logger="verisure_italy.client"),
+            pytest.raises(OperationFailedError),
+        ):
+            await client.disarm(INSTALLATION)
+
+        records = [
+            r for r in caplog.records
+            if "VERISURE DISARM FAILURE BEGIN" in r.message
+        ]
+        assert len(records) == 1
+        assert "command_selected: DARM1DARMPERI" in records[0].message
+
+    async def test_arm_unsupported_command_emits_block_before_http(
+        self, mock_api, client, caplog,
+    ):
+        """UnsupportedCommandError raises PRE-HTTP; the block must still log."""
+        _authenticate(client)
+        sdvfast_installation = INSTALLATION.model_copy(update={"panel": "SDVFAST"})
+        client._services_cache[INSTALLATION.number] = frozenset({
+            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
+            ServiceRequest.ARMNIGHT, ServiceRequest.ARMINTFPART,
+            ServiceRequest.ARMPARTFINT,
+        })
+        client.set_last_proto("D")
+        target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
+
+        with (
+            caplog.at_level(logging.ERROR, logger="verisure_italy.client"),
+            pytest.raises(UnsupportedCommandError),
+        ):
+            await client.arm(sdvfast_installation, target)
+
+        records = [
+            r for r in caplog.records if "VERISURE ARM FAILURE BEGIN" in r.message
+        ]
+        assert len(records) == 1
+        assert "panel: SDVFAST" in records[0].message
+        assert "error_type: UnsupportedCommandError" in records[0].message
+        # command_selected is N/A because the resolver raised before returning one.
+        assert "command_selected: N/A" in records[0].message
+        # No arm mutation hit the network.
+        assert not _has_call_with_operation(mock_api, "xSArmPanel")
