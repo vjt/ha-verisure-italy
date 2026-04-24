@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.9.2 — 2026-04-24
+
+Bug-fix release for Issue #3 (SDVFAST panel, `alan210874`). Every
+arm/disarm button errored on `INTERIOR_ONLY`-family panels (SDVFAST,
+SDVFSW): the entity layer hard-coded `PARTIAL/ON` and `TOTAL/ON` as
+arm targets, so the resolver picked perimeter-inclusive commands
+(`ARMDAY1PERI1`, `ARM1PERI1`) that the family gate correctly
+rejected as unsupported on panels without perimeter sensors.
+
+### Fixes
+
+- **Panel-family-aware HA state mapping.** Arm targets and the
+  reverse `AlarmState → AlarmControlPanelState` map are now keyed by
+  `PanelFamily`. `PERI_CAPABLE` panels keep the existing
+  `PARTIAL/ON` and `TOTAL/ON` targets; `INTERIOR_ONLY` panels
+  collapse to `PARTIAL/OFF` and `TOTAL/OFF`, matching the Verisure
+  IT web app (which emits `ARMDAY1` / `ARM1`, not the `PERI1`
+  variants, on these panels). Proto codes `P` / `T` received from
+  `INTERIOR_ONLY` panels now surface as `ARMED_HOME` / `ARMED_AWAY`
+  rather than the semantically-wrong `ARMED_CUSTOM_BYPASS`.
+- **Fail-secure on family-impossible states.** Perimeter-involving
+  states are absent from the `INTERIOR_ONLY` reverse map by design —
+  a panel returning one (shouldn't happen; sensor hardware isn't
+  present) raises `KeyError` and crashes loud per the CLAUDE.md
+  fail-secure contract.
+- **No changes to the client, resolver, or models.** The fix is
+  scoped entirely to the HA entity layer; `verisure_italy/` is
+  byte-identical to 0.9.1 aside from the version bump.
+
+### Validation
+
+Full live E2E cycle on SDVECU (PERI_CAPABLE) — disarm → arm_home →
+disarm → arm_away → disarm — confirms no regression on the
+maintainer's panel. SDVFAST / SDVFSW validation pending on reporter
+side; Issue #3 will stay open until confirmed.
+
 ## 0.9.1 — 2026-04-24
 
 Hardening release. Follow-up to the 0.9.0 full codebase review (34
