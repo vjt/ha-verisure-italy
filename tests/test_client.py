@@ -33,6 +33,7 @@ from verisure_italy.models import (
     InteriorMode,
     PerimeterMode,
     ProtoCode,
+    ServiceRequest,
 )
 
 # ---------------------------------------------------------------------------
@@ -106,7 +107,12 @@ def client(http_session: ClientSession) -> VerisureClient:
 
 
 def _authenticate(client: VerisureClient) -> None:
-    """Pre-populate auth state so operation tests skip the login flow."""
+    """Pre-populate auth state so operation tests skip the login flow.
+
+    Also seeds the services cache with the live-observed SDVECU active
+    services so arm/disarm tests don't need to register an xSSrv mock
+    before the arm/disarm mutation.
+    """
     token = _make_jwt(60)
     client._auth_token = token
     client._auth_token_exp = datetime.now(tz=UTC) + timedelta(hours=1)
@@ -115,6 +121,21 @@ def _authenticate(client: VerisureClient) -> None:
     cap_token = _make_jwt(60)
     client._capabilities[INSTALLATION.number] = cap_token
     client._capabilities_exp[INSTALLATION.number] = datetime.now(tz=UTC) + timedelta(hours=1)
+
+    # SDVECU active services, live-verified on panel 1234567.
+    client._services_cache[INSTALLATION.number] = frozenset({
+        ServiceRequest.ARM,
+        ServiceRequest.DARM,
+        ServiceRequest.ARMDAY,
+        ServiceRequest.ARMNIGHT,
+        ServiceRequest.PERI,
+    })
+
+    # Realistic current-state observation — the coordinator polls
+    # xSStatus at startup before any arm/disarm is dispatched. Tests
+    # that want to model a specific current state should override this
+    # via client.set_last_proto("X") after _authenticate().
+    client.set_last_proto("D")
 
 
 # ---------------------------------------------------------------------------
@@ -485,6 +506,35 @@ def _error_generic(message: str = "Something went wrong") -> str:
     })
 
 
+def _find_call_with_operation(mock_api: aioresponses, op_name: str):
+    """Return the most-recent aioresponses RequestCall whose GraphQL
+    operationName matches op_name, or raise AssertionError.
+    """
+    matches: list = []
+    for call_list in mock_api.requests.values():
+        for call in call_list:
+            body = call.kwargs.get("json")
+            if not isinstance(body, dict):
+                continue
+            if body.get("operationName") == op_name:
+                matches.append(call)
+    if not matches:
+        raise AssertionError(
+            f"No aioresponses call found with operationName={op_name!r}"
+        )
+    return matches[-1]
+
+
+def _has_call_with_operation(mock_api: aioresponses, op_name: str) -> bool:
+    """True if any recorded aioresponses request has the given operationName."""
+    for call_list in mock_api.requests.values():
+        for call in call_list:
+            body = call.kwargs.get("json")
+            if isinstance(body, dict) and body.get("operationName") == op_name:
+                return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Authentication tests
 # ---------------------------------------------------------------------------
@@ -834,7 +884,8 @@ class TestArm:
 
     async def test_updates_last_proto(self, mock_api, client):
         _authenticate(client)
-        assert client._last_proto == ""
+        # _authenticate seeds _last_proto="D" (disarmed baseline).
+        assert client._last_proto == "D"
 
         target = AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON)
         mock_api.post(API_URL, body=_arm_panel_response())
@@ -1437,3 +1488,96 @@ class TestValidateDevice:
             await client.validate_device("otp-hash", "wrong-code")
 
 
+# ---------------------------------------------------------------------------
+# CommandResolver wire-in — arm() picks commands from current state + services
+# ---------------------------------------------------------------------------
+
+
+class TestArmResolverWireIn:
+    """Arm path uses CommandResolver with current state from _last_proto."""
+
+    async def test_arm_total_from_partial_uses_transition_command(
+        self, mock_api, client,
+    ):
+        """Arming TOTAL while currently PARTIAL sends ARMINTFPART1, not ARM1."""
+        _authenticate(client)
+        client.set_last_proto("P")  # currently PARTIAL interior
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_complete("T"))
+
+        target = AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+        )
+        result = await client.arm(INSTALLATION, target)
+
+        arm_call = _find_call_with_operation(mock_api, "xSArmPanel")
+        body = arm_call.kwargs["json"]
+        assert body["variables"]["request"] == "ARMINTFPART1"
+        assert result.proto_code == ProtoCode.TOTAL
+
+    async def test_arm_total_perimeter_from_off_uses_base_command(
+        self, mock_api, client,
+    ):
+        """Arming TOTAL+PERI from disarmed sends ARM1PERI1."""
+        _authenticate(client)
+        client.set_last_proto("D")
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_complete("A"))
+
+        target = AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON,
+        )
+        await client.arm(INSTALLATION, target)
+
+        arm_call = _find_call_with_operation(mock_api, "xSArmPanel")
+        body = arm_call.kwargs["json"]
+        assert body["variables"]["request"] == "ARM1PERI1"
+
+    async def test_arm_refuses_peri_target_on_interior_only_panel(
+        self, mock_api, client,
+    ):
+        """SDVFAST can't do perimeter arm — refuse locally, zero bytes sent."""
+        from verisure_italy.exceptions import UnsupportedCommandError
+
+        _authenticate(client)
+        # Swap to an interior-only panel
+        sdvfast_installation = INSTALLATION.model_copy(
+            update={"panel": "SDVFAST"}
+        )
+        # Seed SDVFAST's actual active services (no PERI)
+        client._services_cache[INSTALLATION.number] = frozenset({
+            ServiceRequest.ARM,
+            ServiceRequest.DARM,
+            ServiceRequest.ARMDAY,
+            ServiceRequest.ARMNIGHT,
+            ServiceRequest.ARMINTFPART,
+            ServiceRequest.ARMPARTFINT,
+        })
+        client.set_last_proto("D")
+
+        target = AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON,
+        )
+        with pytest.raises(UnsupportedCommandError) as exc:
+            await client.arm(sdvfast_installation, target)
+
+        assert ServiceRequest.PERI in exc.value.missing_services
+        # Zero bytes sent to the panel — no xSArmPanel mutation posted.
+        assert not _has_call_with_operation(mock_api, "xSArmPanel")
+
+    async def test_arm_without_current_state_raises(
+        self, mock_api, client,
+    ):
+        """No _last_proto observation yet — arm refuses, no HTTP call."""
+        _authenticate(client)
+        # Undo the _authenticate seeding — simulate a freshly-started
+        # client that hasn't yet polled xSStatus.
+        client._last_proto = ""
+
+        target = AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON,
+        )
+        with pytest.raises(RuntimeError, match="no current-state observation"):
+            await client.arm(INSTALLATION, target)
+
+        assert not _has_call_with_operation(mock_api, "xSArmPanel")

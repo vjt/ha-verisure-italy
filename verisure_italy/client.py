@@ -61,6 +61,7 @@ from .models import (
     CAMERA_IMAGE_DEVICE_TYPE,
     CAMERA_IMAGE_MEDIA_TYPE,
     CAMERA_IMAGE_RESOLUTION,
+    PROTO_TO_STATE,
     AlarmState,
     ArmCommand,
     ArmResult,
@@ -68,16 +69,18 @@ from .models import (
     DisarmResult,
     GeneralStatus,
     Installation,
-    InteriorMode,
     LoginResponse,
     OperationResult,
     OtpPhone,
-    PerimeterMode,
     RawDevice,
     Service,
+    ServiceRequest,
     Thumbnail,
     ZoneException,
+    active_services,
+    parse_proto_code,
 )
+from .resolver import CommandResolver
 from .responses import (
     ArmPanelEnvelope,
     ArmStatusEnvelope,
@@ -142,22 +145,6 @@ PollFn = Callable[[Installation, str, int], Awaitable[OperationResult]]
 GraphQLVars = dict[str, str | int | bool | list[int]]
 GraphQLContent = dict[str, str | GraphQLVars]
 
-# TODO(task 4): replaced by CommandResolver.
-_LEGACY_STATE_TO_COMMAND: dict[AlarmState, ArmCommand] = {
-    AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF):
-        ArmCommand.DISARM_ALL,
-    AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.ON):
-        ArmCommand.ARM_PERIMETER,
-    AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF):
-        ArmCommand.ARM_PARTIAL,
-    AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON):
-        ArmCommand.ARM_PARTIAL_PERIMETER,
-    AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF):
-        ArmCommand.ARM_TOTAL,
-    AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON):
-        ArmCommand.ARM_TOTAL_PERIMETER,
-}
-
 
 def _sanitize_vars(variables: GraphQLVars | None) -> dict[str, str | int | bool | list[int]]:
     """Return a copy of GraphQL variables safe to write to debug logs."""
@@ -216,6 +203,7 @@ class VerisureClient:
 
         self._capabilities: dict[str, str] = {}
         self._capabilities_exp: dict[str, datetime] = {}
+        self._services_cache: dict[str, frozenset[ServiceRequest]] = {}
         self._last_proto: str = ""
         self._apollo_operation_id: str = secrets.token_hex(64)
         self._auth_lock = asyncio.Lock()
@@ -250,6 +238,41 @@ class VerisureClient:
                 self._last_proto, proto_code, source,
             )
         self._last_proto = proto_code
+
+    def _current_alarm_state(self) -> AlarmState:
+        """Return the client's tracked current state as an AlarmState.
+
+        Returns the AlarmState derived from _last_proto. Raises
+        UnexpectedStateError if _last_proto is a non-empty string but
+        not a valid ProtoCode. Raises RuntimeError if no proto has been
+        observed yet — arm/disarm requires a known current state to pick
+        transition commands.
+        """
+        if not self._last_proto:
+            raise RuntimeError(
+                "Client has no current-state observation yet — "
+                "fetch xSStatus before arm/disarm."
+            )
+        return PROTO_TO_STATE[parse_proto_code(self._last_proto)]
+
+    async def _active_services_cached(
+        self, installation: Installation,
+    ) -> frozenset[ServiceRequest]:
+        """Return the installation's active services, fetching + caching on miss.
+
+        Returns the frozenset of active ServiceRequest codes. Services
+        are static for an installation; cache is populated once per
+        session. Tests seed this cache directly via
+        `client._services_cache[installation.number] = ...` to skip the
+        xSSrv round-trip before arm/disarm.
+        """
+        cached = self._services_cache.get(installation.number)
+        if cached is not None:
+            return cached
+        services = await self.get_services(installation)
+        active = active_services(services)
+        self._services_cache[installation.number] = active
+        return active
 
     # -------------------------------------------------------------------
     # HTTP transport — returns raw response text, never dicts
@@ -823,9 +846,19 @@ class VerisureClient:
         Raises ArmingExceptionError if open zones detected (NON_BLOCKING with
         allowForcing). Caller can retry with force_arming_remote_id + suid
         from the exception to override.
+        Raises UnsupportedCommandError if the panel's active services do
+        not honour the command needed to reach target_state — refused
+        locally with zero bytes sent to the panel.
         """
-        command = _LEGACY_STATE_TO_COMMAND[target_state]
         await self._ensure_auth(installation)
+
+        active = await self._active_services_cached(installation)
+        resolver = CommandResolver(
+            panel=installation.panel,
+            active_services=active,
+        )
+        current_state = self._current_alarm_state()
+        command = resolver.resolve(target=target_state, current=current_state)
 
         _LOGGER.debug(
             "arm: target=%s command=%s panel=%s currentStatus=%r "
