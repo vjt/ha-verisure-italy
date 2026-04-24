@@ -32,6 +32,7 @@ from .exceptions import (
     OperationFailedError,
     OperationTimeoutError,
     SessionExpiredError,
+    StateNotObservedError,
     TwoFactorRequiredError,
     WAFBlockedError,
 )
@@ -244,12 +245,12 @@ class VerisureClient:
 
         Returns the AlarmState derived from _last_proto. Raises
         UnexpectedStateError if _last_proto is a non-empty string but
-        not a valid ProtoCode. Raises RuntimeError if no proto has been
-        observed yet — arm/disarm requires a known current state to pick
-        transition commands.
+        not a valid ProtoCode. Raises StateNotObservedError if no proto
+        has been observed yet — arm/disarm requires a known current state
+        to pick transition commands.
         """
         if not self._last_proto:
-            raise RuntimeError(
+            raise StateNotObservedError(
                 "Client has no current-state observation yet — "
                 "fetch xSStatus before arm/disarm."
             )

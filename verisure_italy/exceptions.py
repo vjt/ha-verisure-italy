@@ -72,6 +72,19 @@ class UnexpectedStateError(VerisureError):
         self.proto_code = proto_code
 
 
+class StateNotObservedError(VerisureError):
+    """No xSStatus observation yet — arm/disarm requires a known current state.
+
+    The resolver selects armed→armed transition commands (ARMINTFPART1,
+    ARMPARTFINTDAY1, ARMPARTFINTNIGHT1) based on the CURRENT alarm
+    state. Until the client has seen at least one xSStatus response,
+    we don't know the current state and cannot safely pick a command.
+
+    Usually transient: the HA coordinator polls xSStatus on setup
+    before any arm/disarm can be dispatched.
+    """
+
+
 class OperationTimeoutError(VerisureError):
     """Arm/disarm operation did not complete within the timeout.
 

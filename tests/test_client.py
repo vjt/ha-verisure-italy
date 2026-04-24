@@ -23,6 +23,7 @@ from verisure_italy.exceptions import (
     OperationFailedError,
     OperationTimeoutError,
     SessionExpiredError,
+    StateNotObservedError,
     TwoFactorRequiredError,
     UnexpectedStateError,
     WAFBlockedError,
@@ -1577,7 +1578,7 @@ class TestArmResolverWireIn:
         target = AlarmState(
             interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON,
         )
-        with pytest.raises(RuntimeError, match="no current-state observation"):
+        with pytest.raises(StateNotObservedError, match="no current-state observation"):
             await client.arm(INSTALLATION, target)
 
         assert not _has_call_with_operation(mock_api, "xSArmPanel")
