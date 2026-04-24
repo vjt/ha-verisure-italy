@@ -12,12 +12,13 @@ Updated: 2026-04-20.
 
 ## Immediate
 
-- **CENT panel command map (issue #1)** — blocked on reporter's probe.
-  When it arrives: inspect `services[*].attributes` for command strings;
-  if absent (likely, per SDVECU finding), move to mitmproxy capture on
-  the Android Verisure app. Add `PANEL_COMMAND_MAPS[CENT]`, extend
-  `SUPPORTED_PANELS`. Reference: `docs/findings/panel-types.md`,
-  `docs/findings/panel-SDVECU-probe.json` (SDVECU has `ARM.attributes: []`).
+- **CENT panel (issue #1)** — blocked on reporter's probe.
+  When it arrives: inspect `installation.panel` to classify family
+  (peri-capable vs interior-only) and read `services[].active` to
+  determine capability set. Add panel to `SUPPORTED_PANELS` +
+  `PANEL_FAMILIES`; `CommandResolver` handles command routing via the
+  active-service capability filter. Reference: `docs/findings/panel-types.md`,
+  `docs/findings/arm-command-vocabulary.md`.
 
 ## High
 

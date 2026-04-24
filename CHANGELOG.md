@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.9.0 — 2026-04-24
+
+### Added
+- Support for all 8 Italian Verisure panel types: `SDVECU`, `SDVECUD`,
+  `SDVECUW`, `SDVECU-D`, `SDVECU-W`, `MODPRO`, `SDVFAST`, `SDVFSW`.
+  Classification (peri-capable vs interior-only) is encoded in
+  `PANEL_FAMILIES`. See `docs/findings/arm-command-vocabulary.md`.
+- `CommandResolver` — panel-aware, current-state-aware, capability-gated
+  command selection. Matches the decoded Verisure web resolver.
+- `ArmCommand` extended with the full wire vocabulary (`ARMINTFPART1`,
+  `ARMPARTFINTDAY1`, `ARMPARTFINTNIGHT1`, `ARMNIGHT1`, `ARMANNEX1`,
+  `DARMANNEX1`, `ARMINTEXT1`, `DARMPERI`).
+- `ServiceRequest` enum + `active_services()` helper for capability gating.
+- `StateNotObservedError` — raised when arm/disarm is attempted before
+  the first `xSStatus` observation (integration reload race; surfaces
+  as a visible HA notification instead of an unhandled traceback).
+- `UnsupportedCommandError` — raised before any HTTP call when the
+  panel's active services don't cover the requested command.
+- Automation script `scripts/dissect-web-bundle.sh` — auto-detects the
+  latest Verisure web bundle version, downloads it, and prints the
+  panel roster + full `ArmCodeRequest` / `DisarmCodeRequest` enums +
+  decoded target→command resolver. Run before each release to catch
+  upstream API drift.
+- HA entity layer short-circuits redundant arm/disarm presses at the
+  entity layer (DEBUG log) instead of paying a round-trip or raising.
+
+### Changed
+- `client.arm()` / `client.disarm()` consult `CommandResolver` instead
+  of a static lookup. `disarm()` no longer hardcodes `DARM1DARMPERI` —
+  interior-only panels correctly get `DARM1`.
+- Active services are fetched from `xSSrv` once per session and cached
+  per installation; previously they would have been re-fetched on every
+  arm/disarm. Cache invalidates on capabilities-token rotation.
+
+### Removed
+- `STATE_TO_COMMAND` (replaced by `CommandResolver`).
+- `tests/test_state_mapping.py` (coverage moved to `tests/test_resolver.py`
+  and the primary `_STATE_MAP` asserts in `tests/test_alarm_panel_gate.py`).
+
+### Fixed
+- #3 — SDVFAST panel: no longer refused at the supported-panel gate;
+  commands route correctly through the capability filter. First live
+  arm/disarm from a SDVFAST user will confirm the proto response codes
+  (fail-secure on unknown codes — crash loud, no silent defaults).
+
 ## 0.8.5 — 2026-04-20
 
 Reliability — recover from server-side session invalidation (Mode C).

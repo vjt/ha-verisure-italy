@@ -9,26 +9,37 @@ panels raise `UnsupportedPanelError` on arm/disarm — no command is sent.
 
 | Panel    | Notes |
 |----------|-------|
-| `SDVECU` | Developer's own panel. Command map in `STATE_TO_COMMAND` (DARM1, ARM1, ARM1PERI1, ARMDAY1PERI1, DARM1DARMPERI). Reference probe at [`panel-SDVECU-probe.json`](panel-SDVECU-probe.json). |
+| `SDVECU` | Developer's own panel. Commands resolved via `CommandResolver` + active-service gating (DARM1, ARM1, ARM1PERI1, ARMDAY1PERI1, DARM1DARMPERI). Reference probe at [`panel-SDVECU-probe.json`](panel-SDVECU-probe.json). |
 
 ## Adding a New Panel
 
-We won't guess commands. The workflow is:
+**Superseded 2026-04-24.** The web-bundle dissection (see
+[`arm-command-vocabulary.md`](arm-command-vocabulary.md)) enumerates
+all 8 API-recognised panel types and the full enum of valid
+arm/disarm wire values directly from `customers.verisure.it`'s JS
+bundle. The reporter-side mitmproxy step is no longer needed for
+string discovery.
 
-1. **Reporter runs the probe** (either the CLI or upgrades and reads
-   the HA log — see issue template).
-2. **Reporter attaches the probe JSON** to a GitHub issue.
-3. We inspect the probe's `services` (especially any `attributes`
-   arrays) and the full `devices` list to figure out what subset of
-   services the panel supports and whether the API declares the exact
-   request strings for arm/disarm.
-4. If attributes don't carry the strings (they don't on SDVECU — the
-   ARM service has `attributes: []`), the next step is a mobile-app
-   HTTP capture (mitmproxy on the Android device → hit Arm/Disarm →
-   read the `request` value from the real mutation). That gives the
-   exact strings to commit as `PANEL_COMMAND_MAPS[PANEL]`.
-5. Patch: add command map, add panel to `SUPPORTED_PANELS`, commit a
-   redacted probe as `panel-<NAME>-probe.json`.
+Current workflow:
+
+1. **Reporter attaches probe JSON** (CLI or HA log) to a GitHub issue.
+2. We read `installation.panel` and cross-reference the panel roster
+   in [`arm-command-vocabulary.md`](arm-command-vocabulary.md) to
+   classify the family (peri-capable vs not).
+3. We read `services[].active` to determine which enum members the
+   panel accepts (e.g. SDVFAST has `PERI.active=false` → perimeter
+   variants rejected).
+4. Patch: add panel to `SUPPORTED_PANELS`, ensure the command
+   resolver branches correctly for that panel's active-service set,
+   commit a redacted probe as `panel-<NAME>-probe.json`.
+5. **First live confirmation** still required before claiming
+   support: reporter performs one disarm → we match the resulting
+   proto response code against `PROTO_TO_STATE`. Unknown codes crash
+   loud (fail-secure).
+
+Re-run [`scripts/dissect-web-bundle.sh`](../../scripts/dissect-web-bundle.sh)
+before each release to catch upstream drift (new panel codes, new
+enum members, resolver changes).
 
 ## Probe Contents (schema v1)
 
