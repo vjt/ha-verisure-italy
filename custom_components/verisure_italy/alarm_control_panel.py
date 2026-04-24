@@ -505,12 +505,15 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             if self.coordinator.force_context is None:
                 return  # already cleared by user action
             _LOGGER.info("Force context expired after 2 minutes")
-            self.coordinator.force_context = None
-            self._force_context_timer = None
-            self._update_force_attributes()
+            # Timer fires long after any arm/disarm completed; fresh
+            # coordinator data is already there, so notifying listeners
+            # immediately is safe (unlike the silent `_expire_force_context`
+            # used in success paths). Route through `_clear_force_context`
+            # for one source of truth on "clear + notify"; write+dismiss
+            # are timer-specific and stay here.
+            self._clear_force_context()
             self._update_alarm_state()
             self.async_write_ha_state()
-            self.coordinator.async_update_listeners()
             await self._dismiss_notification()
 
         def _on_force_context_expired(_now: datetime.datetime) -> None:
