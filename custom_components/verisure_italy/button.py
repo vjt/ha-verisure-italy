@@ -21,6 +21,12 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# All button classes below inherit from CoordinatorEntity[VerisureCoordinator]
+# AND ButtonEntity. Both bases declare overlapping _attr_* class vars with
+# variance-incompatible types. Python's C3 linearization resolves the override
+# correctly at runtime; pyright strict cannot see it, hence the per-class
+# `# type: ignore[reportIncompatibleVariableOverride]`.
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

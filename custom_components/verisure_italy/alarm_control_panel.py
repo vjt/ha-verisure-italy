@@ -98,6 +98,9 @@ async def async_setup_entry(
     async_add_entities([VerisureAlarmPanel(coordinator)])
 
 
+# Ignore justification — CoordinatorEntity and AlarmControlPanelEntity both
+# declare _attr_* class vars with variance-incompatible types. C3 linearization
+# resolves the override correctly at runtime; pyright strict cannot see it.
 class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
     CoordinatorEntity[VerisureCoordinator], AlarmControlPanelEntity
 ):

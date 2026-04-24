@@ -50,6 +50,9 @@ async def async_setup_entry(
     )
 
 
+# Ignore justification — CoordinatorEntity and Camera both declare _attr_*
+# class vars with variance-incompatible types. C3 linearization resolves the
+# override correctly at runtime; pyright strict cannot see it.
 class VerisureCamera(  # type: ignore[reportIncompatibleVariableOverride]
     CoordinatorEntity[VerisureCoordinator], Camera
 ):
