@@ -31,6 +31,7 @@ from verisure_italy.models import (
     AlarmState,
     Installation,
     InteriorMode,
+    PanelFamily,
     PerimeterMode,
 )
 
@@ -192,17 +193,17 @@ def test_supported_panels_has_exactly_the_roster_from_findings() -> None:
 
 def test_primary_state_map_disarmed() -> None:
     state = AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF)
-    assert _STATE_MAP[state] == AlarmControlPanelState.DISARMED
+    assert _STATE_MAP[PanelFamily.PERI_CAPABLE][state] == AlarmControlPanelState.DISARMED
 
 
 def test_primary_state_map_partial_perimeter_is_armed_home() -> None:
     state = AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON)
-    assert _STATE_MAP[state] == AlarmControlPanelState.ARMED_HOME
+    assert _STATE_MAP[PanelFamily.PERI_CAPABLE][state] == AlarmControlPanelState.ARMED_HOME
 
 
 def test_primary_state_map_total_perimeter_is_armed_away() -> None:
     state = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
-    assert _STATE_MAP[state] == AlarmControlPanelState.ARMED_AWAY
+    assert _STATE_MAP[PanelFamily.PERI_CAPABLE][state] == AlarmControlPanelState.ARMED_AWAY
 
 
 # ---------------------------------------------------------------------------
@@ -656,3 +657,167 @@ class TestForceArmAudit:
         assert audit is not None
         assert audit["result"] == "failure"
         assert audit["error_class"] == "OperationFailedError"
+
+
+# ---------------------------------------------------------------------------
+# Panel-family-aware arm targets + reverse state map (Issue #3)
+# ---------------------------------------------------------------------------
+#
+# INTERIOR_ONLY panels (SDVFAST, SDVFSW) have no perimeter sensors.
+# arm_home/arm_away must target PARTIAL/OFF and TOTAL/OFF — not the
+# PARTIAL/ON + TOTAL/ON used on PERI_CAPABLE panels — otherwise the
+# resolver picks a perimeter command and the family gate rejects it.
+# Proto `P`/`T` on INTERIOR_ONLY are the primary home/away states,
+# not CUSTOM_BYPASS. Proto codes E/A/B are impossible on these panels
+# and must crash loud (fail-secure) rather than silently degrade.
+
+
+class TestArmTargetsByFamily:
+    """arm_home/arm_away resolve the target AlarmState per panel family."""
+
+    async def test_arm_home_on_peri_capable_targets_partial_perimeter(self):
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        coordinator.async_arm = AsyncMock()
+
+        await entity.async_alarm_arm_home()
+
+        coordinator.async_arm.assert_awaited_once()
+        target = coordinator.async_arm.call_args.args[0]
+        assert target == AlarmState(
+            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+        )
+
+    async def test_arm_home_on_interior_only_targets_partial_off(self):
+        entity, coordinator = _wire_mutation_entity("SDVFAST")
+        coordinator.async_arm = AsyncMock()
+
+        await entity.async_alarm_arm_home()
+
+        coordinator.async_arm.assert_awaited_once()
+        target = coordinator.async_arm.call_args.args[0]
+        assert target == AlarmState(
+            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+        )
+
+    async def test_arm_away_on_peri_capable_targets_total_perimeter(self):
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        coordinator.async_arm = AsyncMock()
+
+        await entity.async_alarm_arm_away()
+
+        coordinator.async_arm.assert_awaited_once()
+        target = coordinator.async_arm.call_args.args[0]
+        assert target == AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON,
+        )
+
+    async def test_arm_away_on_interior_only_targets_total_off(self):
+        entity, coordinator = _wire_mutation_entity("SDVFSW")
+        coordinator.async_arm = AsyncMock()
+
+        await entity.async_alarm_arm_away()
+
+        coordinator.async_arm.assert_awaited_once()
+        target = coordinator.async_arm.call_args.args[0]
+        assert target == AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+        )
+
+
+class TestStateMapByFamily:
+    """_STATE_MAP reverse lookup honours panel family semantics."""
+
+    def test_interior_only_partial_off_is_armed_home(self):
+        state = AlarmState(
+            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+        )
+        assert (
+            _STATE_MAP[PanelFamily.INTERIOR_ONLY][state]
+            == AlarmControlPanelState.ARMED_HOME
+        )
+
+    def test_interior_only_total_off_is_armed_away(self):
+        state = AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+        )
+        assert (
+            _STATE_MAP[PanelFamily.INTERIOR_ONLY][state]
+            == AlarmControlPanelState.ARMED_AWAY
+        )
+
+    def test_interior_only_disarmed(self):
+        state = AlarmState(
+            interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
+        )
+        assert (
+            _STATE_MAP[PanelFamily.INTERIOR_ONLY][state]
+            == AlarmControlPanelState.DISARMED
+        )
+
+    def test_peri_capable_partial_off_is_custom_bypass(self):
+        """PERI_CAPABLE regression: proto P (interior-only) stays CUSTOM_BYPASS."""
+        state = AlarmState(
+            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+        )
+        assert (
+            _STATE_MAP[PanelFamily.PERI_CAPABLE][state]
+            == AlarmControlPanelState.ARMED_CUSTOM_BYPASS
+        )
+
+    def test_peri_capable_total_off_is_custom_bypass(self):
+        """PERI_CAPABLE regression: proto T (interior-only) stays CUSTOM_BYPASS."""
+        state = AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+        )
+        assert (
+            _STATE_MAP[PanelFamily.PERI_CAPABLE][state]
+            == AlarmControlPanelState.ARMED_CUSTOM_BYPASS
+        )
+
+    def test_interior_only_has_no_peri_states(self):
+        """Perimeter-involving states are impossible on INTERIOR_ONLY panels."""
+        peri_on = AlarmState(
+            interior=InteriorMode.OFF, perimeter=PerimeterMode.ON,
+        )
+        assert peri_on not in _STATE_MAP[PanelFamily.INTERIOR_ONLY]
+
+
+class TestUpdateAlarmStateByFamily:
+    """_update_alarm_state applies the family-specific reverse map."""
+
+    def _entity_with_state(self, panel: str, state: AlarmState):
+        entity, coordinator = _make_panel_entity(panel)
+        coordinator.data.alarm_state = state
+        coordinator.force_context = None
+        return entity
+
+    def test_proto_p_on_interior_only_is_armed_home(self):
+        entity = self._entity_with_state(
+            "SDVFAST",
+            AlarmState(
+                interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+            ),
+        )
+        entity._update_alarm_state()
+        assert entity._attr_alarm_state == AlarmControlPanelState.ARMED_HOME
+
+    def test_proto_t_on_interior_only_is_armed_away(self):
+        entity = self._entity_with_state(
+            "SDVFAST",
+            AlarmState(
+                interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+            ),
+        )
+        entity._update_alarm_state()
+        assert entity._attr_alarm_state == AlarmControlPanelState.ARMED_AWAY
+
+    def test_proto_b_on_interior_only_raises_key_error(self):
+        """Peri-involving proto on INTERIOR_ONLY panel = fail-secure crash."""
+        entity = self._entity_with_state(
+            "SDVFAST",
+            AlarmState(
+                interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+            ),
+        )
+        with pytest.raises(KeyError):
+            entity._update_alarm_state()

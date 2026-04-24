@@ -32,10 +32,12 @@ from verisure_italy import (
 )
 from verisure_italy.exceptions import ArmingExceptionError
 from verisure_italy.models import (
+    PANEL_FAMILIES,
     PROTO_TO_STATE,
     SUPPORTED_PANELS,
     AlarmState,
     InteriorMode,
+    PanelFamily,
     PerimeterMode,
     ProtoCode,
 )
@@ -46,31 +48,71 @@ from .coordinator import ForceArmContext, VerisureCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-# Canonical target states for arm actions
-_PARTIAL_PERIMETER = AlarmState(
-    interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON
-)
-_TOTAL_PERIMETER = AlarmState(
-    interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON
-)
+# Canonical arm targets per panel family.
+#
+# PERI_CAPABLE panels have perimeter sensors — arm_home/arm_away include
+# the perimeter axis. INTERIOR_ONLY panels (SDVFAST, SDVFSW) have no
+# perimeter — targeting PerimeterMode.ON would cause the resolver to pick
+# a perimeter command (ARMDAY1PERI1 / ARM1PERI1) that the family gate
+# correctly rejects. Mirrors the web-bundle behaviour: the IT web app
+# never emits PERI-suffixed commands on INTERIOR_ONLY panels.
+_ARM_TARGETS: dict[PanelFamily, dict[AlarmControlPanelState, AlarmState]] = {
+    PanelFamily.PERI_CAPABLE: {
+        AlarmControlPanelState.ARMED_HOME: AlarmState(
+            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON
+        ),
+        AlarmControlPanelState.ARMED_AWAY: AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON
+        ),
+    },
+    PanelFamily.INTERIOR_ONLY: {
+        AlarmControlPanelState.ARMED_HOME: AlarmState(
+            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF
+        ),
+        AlarmControlPanelState.ARMED_AWAY: AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF
+        ),
+    },
+}
+
 _DISARMED = AlarmState(
     interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF
 )
 
-# Map our AlarmState to HA AlarmControlPanelState
-_STATE_MAP: dict[AlarmState, AlarmControlPanelState] = {
-    _DISARMED: AlarmControlPanelState.DISARMED,
-    _PARTIAL_PERIMETER: AlarmControlPanelState.ARMED_HOME,
-    _TOTAL_PERIMETER: AlarmControlPanelState.ARMED_AWAY,
-    PROTO_TO_STATE[ProtoCode.PERIMETER_ONLY]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
-    PROTO_TO_STATE[ProtoCode.PARTIAL]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
-    PROTO_TO_STATE[ProtoCode.TOTAL]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
+# Reverse map: AlarmState -> HA AlarmControlPanelState, per panel family.
+# On INTERIOR_ONLY, perimeter-involving states are absent by design — a
+# panel returning one violates the family invariant and a KeyError here
+# is the fail-secure outcome.
+_STATE_MAP: dict[PanelFamily, dict[AlarmState, AlarmControlPanelState]] = {
+    PanelFamily.PERI_CAPABLE: {
+        _DISARMED: AlarmControlPanelState.DISARMED,
+        _ARM_TARGETS[PanelFamily.PERI_CAPABLE][AlarmControlPanelState.ARMED_HOME]:
+            AlarmControlPanelState.ARMED_HOME,
+        _ARM_TARGETS[PanelFamily.PERI_CAPABLE][AlarmControlPanelState.ARMED_AWAY]:
+            AlarmControlPanelState.ARMED_AWAY,
+        PROTO_TO_STATE[ProtoCode.PERIMETER_ONLY]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
+        PROTO_TO_STATE[ProtoCode.PARTIAL]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
+        PROTO_TO_STATE[ProtoCode.TOTAL]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
+    },
+    PanelFamily.INTERIOR_ONLY: {
+        _DISARMED: AlarmControlPanelState.DISARMED,
+        _ARM_TARGETS[PanelFamily.INTERIOR_ONLY][AlarmControlPanelState.ARMED_HOME]:
+            AlarmControlPanelState.ARMED_HOME,
+        _ARM_TARGETS[PanelFamily.INTERIOR_ONLY][AlarmControlPanelState.ARMED_AWAY]:
+            AlarmControlPanelState.ARMED_AWAY,
+    },
 }
 
-# Startup assertion: _STATE_MAP must cover all PROTO_TO_STATE values
-assert _STATE_MAP.keys() == set(PROTO_TO_STATE.values()), (
-    f"_STATE_MAP keys {set(_STATE_MAP.keys())} don't match "
-    f"PROTO_TO_STATE values {set(PROTO_TO_STATE.values())}"
+# Startup assertions. PERI_CAPABLE covers every proto-reachable AlarmState.
+# INTERIOR_ONLY covers only the perimeter-OFF subset; perimeter-ON states
+# are intentionally absent (impossible on those panels).
+assert _STATE_MAP[PanelFamily.PERI_CAPABLE].keys() == set(PROTO_TO_STATE.values()), (
+    f"_STATE_MAP[PERI_CAPABLE] keys {set(_STATE_MAP[PanelFamily.PERI_CAPABLE].keys())} "
+    f"don't match PROTO_TO_STATE values {set(PROTO_TO_STATE.values())}"
+)
+assert _STATE_MAP.keys() == set(PanelFamily), (
+    f"_STATE_MAP must cover every PanelFamily. Missing: "
+    f"{set(PanelFamily) - _STATE_MAP.keys()}"
 )
 
 _NOTIFICATION_ID_PREFIX = f"{DOMAIN}.arming_exception"
@@ -128,9 +170,15 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         self._force_context_timer: CALLBACK_TYPE | None = None
         self._update_alarm_state()
 
+    @property
+    def _panel_family(self) -> PanelFamily:
+        return PANEL_FAMILIES[self.coordinator.installation.panel]
+
     def _update_alarm_state(self) -> None:
         """Update _attr_alarm_state from coordinator data. Crashes on unknown state."""
-        self._attr_alarm_state = _STATE_MAP[self.coordinator.data.alarm_state]
+        self._attr_alarm_state = _STATE_MAP[self._panel_family][
+            self.coordinator.data.alarm_state
+        ]
         self._update_supported_features()
         self._update_force_attributes()
 
@@ -263,12 +311,14 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         )
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
-        """Arm partial + perimeter."""
-        await self._async_arm(_PARTIAL_PERIMETER, AlarmControlPanelState.ARMED_HOME, "armed_home")
+        """Arm partial; include perimeter on PERI_CAPABLE panels."""
+        target = _ARM_TARGETS[self._panel_family][AlarmControlPanelState.ARMED_HOME]
+        await self._async_arm(target, AlarmControlPanelState.ARMED_HOME, "armed_home")
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
-        """Arm total + perimeter."""
-        await self._async_arm(_TOTAL_PERIMETER, AlarmControlPanelState.ARMED_AWAY, "armed_away")
+        """Arm total; include perimeter on PERI_CAPABLE panels."""
+        target = _ARM_TARGETS[self._panel_family][AlarmControlPanelState.ARMED_AWAY]
+        await self._async_arm(target, AlarmControlPanelState.ARMED_AWAY, "armed_away")
 
     async def _async_arm(
         self,
