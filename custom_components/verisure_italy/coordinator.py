@@ -443,7 +443,10 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         except (
             APIConnectionError, APIResponseError,
             WAFBlockedError, SessionExpiredError,
-        ):
+        ) as err:
+            _LOGGER.debug(
+                "Thumbnail fetch failed for %s: %s", camera.name, err.message
+            )
             return
 
         if not thumbnail.id_signal or not thumbnail.signal_type:

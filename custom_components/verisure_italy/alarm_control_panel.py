@@ -200,7 +200,11 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 json.dumps(probe, indent=2, sort_keys=True),
             )
         except Exception:
-            # Probe failure must not mask the gate — log and continue to raise.
+            # Probe failure MUST NOT mask the gate: we still raise
+            # UnsupportedPanelError below. Any probe crash (network, pydantic,
+            # programming error) is logged for triage and swallowed so the
+            # refusal path stays reachable. Narrowing here would re-introduce
+            # the risk of an unsupported panel slipping past the gate.
             _LOGGER.exception("Probe failed for unsupported panel %r", panel)
 
         await self._notify_unsupported_panel(panel, action)

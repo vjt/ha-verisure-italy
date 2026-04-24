@@ -541,7 +541,7 @@ class VerisureClient:
         return headers
 
     def _generate_request_id(self) -> str:
-        now = datetime.now()
+        now = datetime.now(tz=UTC)
         return (
             f"OWA_______________{self._username}_______________"
             f"{now.year}{now.month}{now.day}{now.hour}"
@@ -639,7 +639,7 @@ class VerisureClient:
             raise AuthenticationError("Login returned null auth token")
 
         self._auth_token = result.hash
-        self._login_timestamp = int(datetime.now().timestamp() * 1000)
+        self._login_timestamp = int(datetime.now(tz=UTC).timestamp() * 1000)
         self._auth_token_exp = self._decode_jwt_expiry(self._auth_token)
 
         if result.refresh_token:
