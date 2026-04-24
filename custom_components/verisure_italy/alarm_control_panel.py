@@ -201,14 +201,23 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         """Arm partial + perimeter."""
-        await self._async_arm(_PARTIAL_PERIMETER, "armed_home")
+        await self._async_arm(_PARTIAL_PERIMETER, AlarmControlPanelState.ARMED_HOME, "armed_home")
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Arm total + perimeter."""
-        await self._async_arm(_TOTAL_PERIMETER, "armed_away")
+        await self._async_arm(_TOTAL_PERIMETER, AlarmControlPanelState.ARMED_AWAY, "armed_away")
 
-    async def _async_arm(self, target: AlarmState, mode: str) -> None:
+    async def _async_arm(
+        self,
+        target: AlarmState,
+        ha_state: AlarmControlPanelState,
+        mode: str,
+    ) -> None:
         """Execute arm operation with force-arm exception handling."""
+        if self._attr_alarm_state == ha_state:
+            _LOGGER.debug("Arm-to-%s ignored — already in that state", ha_state)
+            return
+
         if self._arm_lock.locked():
             _LOGGER.warning("Arm rejected — another operation in progress")
             return
@@ -257,6 +266,10 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         """Disarm the alarm."""
+        if self._attr_alarm_state == AlarmControlPanelState.DISARMED:
+            _LOGGER.debug("Disarm ignored — already disarmed")
+            return
+
         if self._arm_lock.locked():
             _LOGGER.warning("Disarm rejected — another operation in progress")
             return

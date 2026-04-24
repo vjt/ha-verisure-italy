@@ -1649,3 +1649,13 @@ class TestDisarmResolverWireIn:
         disarm_call = _find_call_with_operation(mock_api, "xSDisarmPanel")
         body = disarm_call.kwargs["json"]
         assert body["variables"]["request"] == "DARM1"
+
+    async def test_disarm_without_current_state_raises(
+        self, mock_api, client,
+    ):
+        """No _last_proto observation yet — disarm refuses, no HTTP call."""
+        _authenticate(client)
+        client._last_proto = ""
+        with pytest.raises(StateNotObservedError):
+            await client.disarm(INSTALLATION)
+        assert not _has_call_with_operation(mock_api, "xSDisarmPanel")

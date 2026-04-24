@@ -1070,9 +1070,11 @@ class VerisureClient:
         target = AlarmState(
             interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
         )
-        # If the panel is already disarmed, resolver raises ValueError.
-        # Callers must check state before invoking disarm (HA's alarm
-        # panel already does — it never disarms from the DISARMED state).
+        # If current == target (already at target state), resolver raises
+        # ValueError. This is intentional — disarm-from-disarmed is a
+        # caller bug, not a silent no-op. HA's alarm panel guards this
+        # at the entity layer in async_alarm_disarm / _async_arm (skip
+        # when self._attr_alarm_state already matches target).
         command = resolver.resolve(target=target, current=current_state)
 
         _LOGGER.debug(
