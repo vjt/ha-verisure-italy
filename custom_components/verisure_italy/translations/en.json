@@ -58,7 +58,9 @@
     },
     "error": {
       "invalid_auth": "Invalid username or password.",
-      "invalid_code": "Invalid SMS code. Please try again."
+      "invalid_code": "Invalid SMS code. Please try again.",
+      "cannot_connect": "Could not reach the Verisure API. Check your internet connection and try again.",
+      "unknown": "An unexpected error occurred. Check the Home Assistant log for details."
     }
   },
   "options": {

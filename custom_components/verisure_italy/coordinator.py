@@ -301,6 +301,17 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                 raise ConfigEntryAuthFailed(
                     f"Re-authentication failed: {err.message}"
                 ) from err
+            except (APIConnectionError, APIResponseError, WAFBlockedError) as err:
+                # Transient network error during re-login must NOT bubble out
+                # unhandled (DataUpdateCoordinator would log "Unexpected
+                # error" and give up). It's also NOT a credential-fault —
+                # mapping it to ConfigEntryAuthFailed would trigger HA's
+                # re-auth dialog even though the user's creds are fine.
+                # Treat as a transient update failure; the coordinator
+                # retries on the next poll interval.
+                raise UpdateFailed(
+                    f"Re-authentication network error: {err.message}"
+                ) from err
         except (AuthenticationError, TwoFactorRequiredError) as err:
             raise ConfigEntryAuthFailed(err.message) from err
         except (APIConnectionError, APIResponseError, WAFBlockedError) as err:
@@ -347,6 +358,14 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                 )
             except (APIConnectionError, APIResponseError, WAFBlockedError) as err:
                 _LOGGER.warning("Camera discovery failed: %s", err.message)
+                self.camera_devices = []
+            except ValidationError as err:
+                # Upstream camera listing schema drift — log and carry on
+                # with no cameras rather than crashing the alarm poll.
+                _LOGGER.warning(
+                    "Camera discovery returned a payload we can't parse: %s",
+                    err,
+                )
                 self.camera_devices = []
 
         proto = parse_proto_code(status.status)
@@ -552,6 +571,14 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             try:
                 ts = datetime.fromisoformat(thumbnail.timestamp)
             except ValueError:
+                # Upstream API change or corrupt payload: overlay a clock
+                # reading we CAN vouch for and surface the mismatch so
+                # we notice it in logs instead of silently drifting.
+                _LOGGER.warning(
+                    "Thumbnail timestamp %r from %s is not ISO-8601; "
+                    "overlaying local time instead",
+                    thumbnail.timestamp, camera.name,
+                )
                 ts = datetime.now()  # local time for overlay
             self.camera_timestamps[camera.zone_id] = thumbnail.timestamp
         else:

@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from pydantic import ValidationError
 
 from verisure_italy import (
     AuthenticationError,
@@ -17,6 +18,7 @@ from verisure_italy import (
     OtpPhone,
     TwoFactorRequiredError,
     VerisureClient,
+    VerisureError,
     generate_device_id,
     generate_uuid,
 )
@@ -99,6 +101,23 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_auth"
 
                 self._client = None
+            except VerisureError as err:
+                # APIConnectionError / APIResponseError / WAFBlockedError —
+                # transient or upstream issues that aren't credential-fault.
+                # Map to a form-level cannot_connect so the user retries
+                # instead of seeing a raw traceback.
+                _LOGGER.error(
+                    "Login network error: %s", err.message
+                )
+                errors["base"] = "cannot_connect"
+                self._client = None
+            except ValidationError as err:
+                # Upstream schema drift — API returned something we can't
+                # parse. Not credential-fault, not network. Surface generic
+                # "unknown" with a logged trace for maintainer triage.
+                _LOGGER.exception("Login response schema mismatch: %s", err)
+                errors["base"] = "unknown"
+                self._client = None
 
         return self.async_show_form(
             step_id="user",
@@ -160,6 +179,12 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             except AuthenticationError as err:
                 _LOGGER.error("2FA failed: %s", err.message)
                 errors["base"] = "invalid_code"
+            except VerisureError as err:
+                _LOGGER.error("2FA network error: %s", err.message)
+                errors["base"] = "cannot_connect"
+            except ValidationError as err:
+                _LOGGER.exception("2FA response schema mismatch: %s", err)
+                errors["base"] = "unknown"
 
         phone_display = self._selected_phone.phone if self._selected_phone else "unknown"
 
@@ -277,6 +302,14 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_auth"
 
                 self._client = None
+            except VerisureError as err:
+                _LOGGER.error("Reauth network error: %s", err.message)
+                errors["base"] = "cannot_connect"
+                self._client = None
+            except ValidationError as err:
+                _LOGGER.exception("Reauth response schema mismatch: %s", err)
+                errors["base"] = "unknown"
+                self._client = None
             else:
 
                 return self.async_update_reload_and_abort(
@@ -348,6 +381,12 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             except AuthenticationError as err:
                 _LOGGER.error("Reauth 2FA failed: %s", err.message)
                 errors["base"] = "invalid_code"
+            except VerisureError as err:
+                _LOGGER.error("Reauth 2FA network error: %s", err.message)
+                errors["base"] = "cannot_connect"
+            except ValidationError as err:
+                _LOGGER.exception("Reauth 2FA response schema mismatch: %s", err)
+                errors["base"] = "unknown"
             else:
 
                 return self.async_update_reload_and_abort(
@@ -400,6 +439,16 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Reconfigure auth failed: %s", err.message)
                 errors["base"] = "invalid_auth"
 
+                self._client = None
+            except VerisureError as err:
+                _LOGGER.error("Reconfigure network error: %s", err.message)
+                errors["base"] = "cannot_connect"
+                self._client = None
+            except ValidationError as err:
+                _LOGGER.exception(
+                    "Reconfigure response schema mismatch: %s", err,
+                )
+                errors["base"] = "unknown"
                 self._client = None
             else:
 
@@ -463,6 +512,14 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             except AuthenticationError as err:
                 _LOGGER.error("Reconfigure 2FA failed: %s", err.message)
                 errors["base"] = "invalid_code"
+            except VerisureError as err:
+                _LOGGER.error("Reconfigure 2FA network error: %s", err.message)
+                errors["base"] = "cannot_connect"
+            except ValidationError as err:
+                _LOGGER.exception(
+                    "Reconfigure 2FA response schema mismatch: %s", err,
+                )
+                errors["base"] = "unknown"
             else:
 
                 return self._update_entry(entry)
