@@ -156,15 +156,21 @@ def async_register_dashboard(hass: HomeAssistant) -> None:
 
 
 def async_unregister_dashboard(hass: HomeAssistant) -> None:
-    """Remove the Verisure panel from the sidebar."""
+    """Remove the Verisure panel from the sidebar.
+
+    Narrow catch: only expected failure modes from HA Lovelace internals.
+    Anything else is a real programming error and should surface.
+    """
     try:
         frontend.async_remove_panel(hass, DASHBOARD_URL)
         lovelace_data = hass.data.get(LOVELACE_DATA)
         if lovelace_data is not None:
             lovelace_data.dashboards.pop(DASHBOARD_URL, None)
         _LOGGER.debug("Unregistered panel '%s'", DASHBOARD_URL)
-    except Exception:
-        _LOGGER.exception("Dashboard cleanup failed — ignoring")
+    except (AttributeError, KeyError, TypeError):
+        _LOGGER.exception(
+            "Dashboard cleanup hit Lovelace API drift — ignoring"
+        )
 
 
 async def async_setup_dashboard(
@@ -179,7 +185,10 @@ async def async_setup_dashboard(
     """
     try:
         await _setup_dashboard_internal(hass, config_entry_id)
-    except Exception:
+    except (AttributeError, KeyError, TypeError, ImportError, OSError):
+        # Narrow catch: expected failure modes when Lovelace internals drift
+        # across HA versions. Any other exception (e.g., logic bugs in our
+        # own _build_config) is a real programming error — let it surface.
         _LOGGER.exception(
             "Dashboard setup failed — Lovelace internals may have changed. "
             "The integration works fine without the dashboard. "
