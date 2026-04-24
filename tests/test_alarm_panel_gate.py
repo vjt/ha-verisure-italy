@@ -410,3 +410,78 @@ class TestSameStateBenignRace:
         assert any(
             "no-op" in r.message.lower() for r in caplog.records
         )
+
+
+class TestHandleCoordinatorUpdateClearsStaleForceContext:
+    """M4 — force-arm context is dropped when the panel moves on."""
+
+    def _make_force_context(self):
+        import datetime as _dt
+
+        from custom_components.verisure_italy.coordinator import ForceArmContext
+        return ForceArmContext(
+            reference_id="ref-xxx", suid="suid-yyy", mode="armed_home",
+            target=AlarmState(
+                interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+            ),
+            exceptions=[],
+            created_at=_dt.datetime.now(_dt.UTC),
+        )
+
+    def _armed_home(self):
+        return AlarmState(
+            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+        )
+
+    def _disarmed(self):
+        return AlarmState(
+            interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
+        )
+
+    def test_stale_context_cleared_when_panel_armed(self, caplog):
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        # Ensure the parent CoordinatorEntity._handle_coordinator_update
+        # doesn't touch HA internals we haven't wired.
+        entity.async_write_ha_state = MagicMock()  # type: ignore[attr-defined]
+        entity._cancel_force_context_timer = MagicMock()  # type: ignore[attr-defined]
+        # Close the coroutine the entity schedules so we don't leak a
+        # "never awaited" warning; no need to actually run it.
+        entity.hass.async_create_task = lambda coro, name: coro.close()
+        coordinator.force_context = self._make_force_context()
+        coordinator.data.alarm_state = self._armed_home()
+        coordinator.async_update_listeners = MagicMock()
+
+        from unittest.mock import patch
+        with patch.object(
+            entity.__class__.__mro__[1],  # CoordinatorEntity
+            "_handle_coordinator_update",
+            return_value=None,
+        ), caplog.at_level(
+            logging.INFO,
+            logger="custom_components.verisure_italy.alarm_control_panel",
+        ):
+            entity._handle_coordinator_update()
+
+        assert coordinator.force_context is None
+        assert any(
+            "stale force-arm" in r.message.lower() for r in caplog.records
+        )
+
+    def test_context_kept_when_panel_still_disarmed(self):
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        entity.async_write_ha_state = MagicMock()  # type: ignore[attr-defined]
+        entity._cancel_force_context_timer = MagicMock()  # type: ignore[attr-defined]
+        ctx = self._make_force_context()
+        coordinator.force_context = ctx
+        coordinator.data.alarm_state = self._disarmed()
+        coordinator.async_update_listeners = MagicMock()
+
+        from unittest.mock import patch
+        with patch.object(
+            entity.__class__.__mro__[1],
+            "_handle_coordinator_update",
+            return_value=None,
+        ):
+            entity._handle_coordinator_update()
+
+        assert coordinator.force_context is ctx

@@ -173,6 +173,27 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             # don't write it again (avoids spurious state_changed events).
             return
 
+        # Clear stale force-arm context if the panel has moved away from
+        # DISARMED through any other path (user armed via the Verisure
+        # mobile app, another HA automation, an SMS-triggered arm, etc.)
+        # while our 120s context timer is still live. The stored
+        # reference_id / suid is scoped to that specific pending-arm
+        # attempt; once the panel is armed, pressing "Force Arm" with a
+        # stale token fails with an opaque error. Clearing now is the
+        # right UX: the arming goal has been achieved by another path.
+        if (
+            self.coordinator.force_context is not None
+            and self.coordinator.data.alarm_state != _DISARMED
+        ):
+            _LOGGER.info(
+                "Clearing stale force-arm context — panel no longer disarmed"
+            )
+            self._clear_force_context()
+            self.hass.async_create_task(
+                self._dismiss_notification(),
+                "verisure_italy_dismiss_stale_force_notification",
+            )
+
         # Always show the real panel state — even during force-arm.
         # The force-arm pending status is communicated through
         # extra_state_attributes, buttons, and notifications.
