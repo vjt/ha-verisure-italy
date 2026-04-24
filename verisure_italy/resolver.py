@@ -12,7 +12,7 @@ construct one per operation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict
 
 from .exceptions import UnsupportedCommandError
 from .models import (
@@ -86,8 +86,7 @@ _PERI_COMMANDS: frozenset[ArmCommand] = frozenset({
 })
 
 
-@dataclass(frozen=True)
-class CommandResolver:
+class CommandResolver(BaseModel):
     """Decide which ArmCommand reaches the target from the current state.
 
     Covers the interior x perimeter axis only. Out of scope:
@@ -101,6 +100,8 @@ class CommandResolver:
     These are routed by the caller with an explicit ArmCommand
     argument, not derived from AlarmState transitions.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     panel: str
     active_services: frozenset[ServiceRequest]
