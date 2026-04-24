@@ -55,12 +55,28 @@ _COMMAND_REQUIRES: dict[ArmCommand, frozenset[ServiceRequest]] = {
 
 @dataclass(frozen=True)
 class CommandResolver:
-    """Decide which ArmCommand reaches the target from the current state."""
+    """Decide which ArmCommand reaches the target from the current state.
+
+    Covers the interior x perimeter axis only. Out of scope:
+      - annex arm/disarm (ARM_ANNEX, DISARM_ANNEX)
+      - perimeter-only disarm (DISARM_PERIMETER)
+      - Spain-WAF-safe ARMINTEXT1 alias (ARM_INTERIOR_EXTERIOR)
+      - night mode (ARM_NIGHT, ARM_NIGHT_PERIMETER, ARM_NIGHT_FROM_TOTAL)
+        — InteriorMode has no NIGHT variant today; entries are parked
+        in `_COMMAND_REQUIRES` for future expansion.
+
+    These are routed by the caller with an explicit ArmCommand
+    argument, not derived from AlarmState transitions.
+    """
 
     panel: str
     active_services: frozenset[ServiceRequest]
 
     def resolve(self, *, target: AlarmState, current: AlarmState) -> ArmCommand:
+        """Return the ArmCommand for current -> target.
+
+        Raises ValueError (bad transition) or UnsupportedCommandError (missing service).
+        """
         if self.panel not in PANEL_FAMILIES:
             raise ValueError(f"Unknown panel {self.panel!r}")
         if target == current:
@@ -80,6 +96,7 @@ class CommandResolver:
         current: AlarmState,
         family: PanelFamily,
     ) -> ArmCommand:
+        """Return the ArmCommand for target; raises ValueError if the transition is unsupported."""
         # Disarm entirely
         if target.interior == InteriorMode.OFF and target.perimeter == PerimeterMode.OFF:
             if current.perimeter == PerimeterMode.ON:
@@ -89,6 +106,20 @@ class CommandResolver:
         # Perimeter-only arm (peri-capable only)
         if target.interior == InteriorMode.OFF and target.perimeter == PerimeterMode.ON:
             return ArmCommand.ARM_PERIMETER
+
+        # Reject cross-perimeter armed transitions explicitly.
+        # The web resolver keys transitions on interior mode alone;
+        # perimeter flips from an armed state aren't a defined
+        # single-command transition. Caller must disarm first.
+        if (
+            current.interior != InteriorMode.OFF
+            and current.perimeter != target.perimeter
+        ):
+            raise ValueError(
+                f"Cross-perimeter armed transition not supported: "
+                f"current={current}, target={target}. "
+                f"Disarm first, then arm to the target state."
+            )
 
         # Armed → armed interior-mode transition (same-side transitions)
         if (
@@ -123,6 +154,7 @@ class CommandResolver:
         )
 
     def _assert_supported(self, command: ArmCommand) -> None:
+        """Raise UnsupportedCommandError if command requires a service not in active_services."""
         required = _COMMAND_REQUIRES[command]
         missing = required - self.active_services
         if missing:

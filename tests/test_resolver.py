@@ -130,3 +130,35 @@ def test_unknown_panel_rejected() -> None:
     r = _r("TOTALLY_FAKE", _SDVECU_SERVICES)
     with pytest.raises(ValueError, match="TOTALLY_FAKE"):
         r.resolve(target=_TOTAL, current=_OFF)
+
+
+# --- Cross-perimeter armed transitions (security guard) ---
+
+def test_cross_peri_armed_to_armed_rejected() -> None:
+    """Cross-perimeter transition from any armed state must raise.
+
+    current=TOTAL_PERI → target=PARTIAL (perimeter OFF) previously
+    silently returned ARMDAY1 — applied to an armed panel, that's
+    the wrong wire command. Fail-secure: raise so the caller must
+    disarm first.
+    """
+    r = _r("SDVECU", _SDVECU_SERVICES)
+    with pytest.raises(ValueError, match="Cross-perimeter armed transition"):
+        r.resolve(target=_PARTIAL, current=_TOTAL_PERI)
+
+
+def test_cross_peri_from_partial_peri_to_total_rejected() -> None:
+    r = _r("SDVECU", _SDVECU_SERVICES)
+    with pytest.raises(ValueError, match="Cross-perimeter armed transition"):
+        r.resolve(target=_TOTAL, current=_PARTIAL_PERI)
+
+
+def test_cross_peri_from_peri_only_to_total_does_not_trigger() -> None:
+    """current=OFF/ON is NOT an armed interior; this branch must NOT fire.
+
+    Going from perimeter-only (interior OFF) to total arm is a
+    normal arm-from-disarmed path; returns ARM_TOTAL.
+    """
+    r = _r("SDVECU", _SDVECU_SERVICES)
+    out = r.resolve(target=_TOTAL, current=_PERI)
+    assert out == ArmCommand.ARM_TOTAL
