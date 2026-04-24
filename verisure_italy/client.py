@@ -746,6 +746,11 @@ class VerisureClient:
             srv.capabilities
         )
 
+        # Services might change if the installation is reconfigured; drop
+        # the per-installation services cache on every capabilities rotation
+        # so the next arm/disarm picks up the new active-service set.
+        self._services_cache.pop(installation.number, None)
+
         return srv.services
 
     # -------------------------------------------------------------------

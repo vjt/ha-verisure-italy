@@ -1659,3 +1659,58 @@ class TestDisarmResolverWireIn:
         with pytest.raises(StateNotObservedError):
             await client.disarm(INSTALLATION)
         assert not _has_call_with_operation(mock_api, "xSDisarmPanel")
+
+
+# ---------------------------------------------------------------------------
+# Services cache
+# ---------------------------------------------------------------------------
+
+
+class TestServicesCache:
+    """Services cache behaviour: populate on first use, clear on auth rotation."""
+
+    async def test_second_arm_does_not_refetch_services(
+        self, mock_api, client,
+    ):
+        """Cache hit on second arm — no extra xSSrv round-trip."""
+        _authenticate(client)
+        # _authenticate seeds the cache; arm should use it, not fetch.
+        # We do not mock any xSSrv response here — if arm tried to fetch,
+        # aioresponses would return a 404-ish error and the test would fail.
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_complete("A"))
+        mock_api.post(API_URL, body=_arm_panel_response())
+        mock_api.post(API_URL, body=_arm_status_complete("B"))
+
+        target_away = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
+        await client.arm(INSTALLATION, target_away)
+
+        # Reset current state to "disarmed" so the resolver accepts the next arm.
+        client.set_last_proto("D")
+
+        target_night = AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON)
+        await client.arm(INSTALLATION, target_night)
+
+        # Zero xSSrv calls should have been made.
+        assert not _has_call_with_operation(mock_api, "Srv")
+
+    async def test_cache_cleared_on_capabilities_rotation(
+        self, mock_api, client,
+    ):
+        """When capabilities refresh path fires, services cache is invalidated."""
+        _authenticate(client)
+        # Seed a value in the cache (already done by _authenticate).
+        assert INSTALLATION.number in client._services_cache
+
+        # Force the capabilities-refresh path: expire the capabilities token.
+        client._capabilities_exp[INSTALLATION.number] = datetime.min.replace(tzinfo=UTC)
+
+        # The next get_services call will rotate the JWT; our invalidation
+        # hook must clear the services cache in the same step.
+        cap_token = _make_jwt()
+        mock_api.post(API_URL, body=_services_response(cap_token))
+
+        await client.get_services(INSTALLATION)
+
+        # After the refresh, the cache for this installation must be gone.
+        assert INSTALLATION.number not in client._services_cache
