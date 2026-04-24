@@ -10,6 +10,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 
 from .const import (
+    CONF_INSTALLATION,
+    CONF_INSTALLATION_ALIAS,
+    CONF_INSTALLATION_NUMBER,
+    CONF_INSTALLATION_PANEL,
     CONF_POLL_DELAY,
     CONF_POLL_INTERVAL,
     CONF_POLL_TIMEOUT,
@@ -25,6 +29,31 @@ _LOGGER = logging.getLogger(__name__)
 type VerisureConfigEntry = ConfigEntry[VerisureCoordinator]
 
 PLATFORMS = ["alarm_control_panel", "button", "camera"]
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> bool:
+    """Migrate config entry between schema versions.
+
+    v1 → v2: synthesize CONF_INSTALLATION from the three legacy scalars
+    (number, panel, alias). Metadata fields (name, address, etc.) stay
+    None — the soften-on-None semantics in Installation were already the
+    right model; v1 was just shoving empty strings into them.
+    """
+    if entry.version == 1:
+        data = {**entry.data}
+        data[CONF_INSTALLATION] = {
+            "numinst": entry.data[CONF_INSTALLATION_NUMBER],
+            "alias": entry.data[CONF_INSTALLATION_ALIAS],
+            "panel": entry.data[CONF_INSTALLATION_PANEL],
+        }
+        hass.config_entries.async_update_entry(entry, data=data, version=2)
+        _LOGGER.info(
+            "Migrated config entry %s to v2 (numinst=%s)",
+            entry.entry_id, entry.data[CONF_INSTALLATION_NUMBER],
+        )
+    return True
 
 
 async def async_setup_entry(

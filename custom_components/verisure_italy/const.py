@@ -5,6 +5,9 @@ DOMAIN = "verisure_italy"
 CONF_INSTALLATION_NUMBER = "installation_number"
 CONF_INSTALLATION_PANEL = "installation_panel"
 CONF_INSTALLATION_ALIAS = "installation_alias"
+# v2+: full Installation dump (model_dump(mode="json")). Supersedes the
+# three scalars above, which remain for backward compatibility.
+CONF_INSTALLATION = "installation"
 CONF_DEVICE_ID = "device_id"
 CONF_UUID = "uuid"
 

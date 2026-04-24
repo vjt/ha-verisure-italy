@@ -42,9 +42,7 @@ from verisure_italy.models import PROTO_TO_STATE, ZoneException
 
 from .const import (
     CONF_DEVICE_ID,
-    CONF_INSTALLATION_ALIAS,
-    CONF_INSTALLATION_NUMBER,
-    CONF_INSTALLATION_PANEL,
+    CONF_INSTALLATION,
     CONF_POLL_DELAY,
     CONF_POLL_INTERVAL,
     CONF_POLL_TIMEOUT,
@@ -157,19 +155,12 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             poll_timeout=float(poll_timeout),
             poll_delay=float(poll_delay),
         )
-        self.installation = Installation(
-            numinst=config_entry.data[CONF_INSTALLATION_NUMBER],
-            alias=config_entry.data[CONF_INSTALLATION_ALIAS],
-            panel=config_entry.data[CONF_INSTALLATION_PANEL],
-            type="",
-            name="",
-            surname="",
-            address="",
-            city="",
-            postcode="",
-            province="",
-            email="",
-            phone="",
+        # v2: full Installation persisted by config flow (or synthesized from
+        # the three scalars during v1→v2 migration). Metadata fields default
+        # to None when absent — matching the soften-on-schema-drift design
+        # in Installation. No empty-string placeholders.
+        self.installation = Installation.model_validate(
+            config_entry.data[CONF_INSTALLATION]
         )
 
         # Camera state — populated during first refresh

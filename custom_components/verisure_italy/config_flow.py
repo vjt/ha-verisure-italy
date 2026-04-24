@@ -23,6 +23,7 @@ from verisure_italy import (
 
 from .const import (
     CONF_DEVICE_ID,
+    CONF_INSTALLATION,
     CONF_INSTALLATION_ALIAS,
     CONF_INSTALLATION_NUMBER,
     CONF_INSTALLATION_PANEL,
@@ -42,7 +43,7 @@ _LOGGER = logging.getLogger(__name__)
 class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Verisure Italy."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         self._client: VerisureClient | None = None
@@ -219,6 +220,11 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_PASSWORD: self._password,
                 CONF_DEVICE_ID: self._device_id,
                 CONF_UUID: self._uuid,
+                # v2: full Installation from list_installations() — single
+                # source of truth for coordinator + diagnostics.
+                CONF_INSTALLATION: installation.model_dump(mode="json"),
+                # Legacy scalars — preserved for downgrade compat and any
+                # external tool that still reads them.
                 CONF_INSTALLATION_NUMBER: installation.number,
                 CONF_INSTALLATION_PANEL: installation.panel,
                 CONF_INSTALLATION_ALIAS: installation.alias,
