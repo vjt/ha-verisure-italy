@@ -47,3 +47,34 @@ On failure at any step: stop, show full error, do NOT proceed or auto-fix.
 On success: report all gates passed.
 
 **Deploy does NOT release.** Releasing (PyPI + GitHub tag) is a separate manual step.
+
+## Live E2E cycle — state and automation restoration (MANDATORY)
+
+If an end-to-end arm/disarm cycle is run against the live panel as
+part of verification (either within this skill or downstream in a plan
+like `docs/plans/*.md`), the panel's **initial state** and the user's
+**automations** must be restored afterwards. This is a real home
+alarm — leaving it in the wrong state is a security failure.
+
+Protocol:
+
+1. **Capture initial state** before the first transition.
+   ```bash
+   source .env
+   INITIAL=$(curl -s http://homeassistant:8123/api/states/alarm_control_panel.verisure_alarm \
+     -H "Authorization: Bearer $HA_TOKEN" | python3 -c "import sys,json;print(json.load(sys.stdin)['state'])")
+   echo "initial: $INITIAL"
+   ```
+2. **Pause automations** that would interfere with deliberate
+   mutations (auto-disarm, morning-disarm, actionable-disarm notification, etc.). List is in auto-memory `project_ha_automations.md`.
+3. **Cycle** through the planned transitions.
+4. **Restore initial state.** If `INITIAL == armed_away`, the last
+   transition must be `alarm_arm_away`, not `alarm_disarm`. Never
+   end the cycle on a different state than where you started.
+5. **Re-enable automations** paused in step 2.
+6. **Verify**: `alarm_control_panel.verisure_alarm` state equals
+   `INITIAL`, and every paused automation is back to `on`.
+
+Do not rely on a plan's default "cycle ends disarmed" template —
+patch the last transition to restore. If unsure what the initial
+state was, ASK the user before running the cycle.
