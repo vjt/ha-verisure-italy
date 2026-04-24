@@ -8,7 +8,7 @@ Backlog for ha-verisure. Prune aggressively — completed items go in
 `CHANGELOG.md`, not here. Keep context on pending items so the next
 session can pick them up cold.
 
-Updated: 2026-04-20.
+Updated: 2026-04-24.
 
 ## Immediate
 
@@ -22,17 +22,29 @@ Updated: 2026-04-20.
 
 ## High
 
-- **Alarm trigger detection** — `xSStatus` fetches
-  `exceptions { status deviceType alias }` but the `GeneralStatus`
-  model drops the field. Capture a live trigger, then surface the
-  data as an HA event. See
-  [`findings/verisure-api.md`](findings/verisure-api.md).
+- **Alarm trigger detection + HA notification when the alarm rings** —
+  need to push an HA event the moment the panel goes into alarm state
+  (faster than the 15s `xSStatus` poll). Two possible signal sources:
+  `xSStatus.exceptions { status deviceType alias }` (already fetched,
+  currently dropped by the `GeneralStatus` model) and `xSActV2` timeline
+  signal types in the 5xx/7xx range (see below). Capture a live trigger
+  first, then surface as an HA event + notification. See
+  [`findings/verisure-api.md`](findings/verisure-api.md) and
+  [`findings/timeline-api.md`](findings/timeline-api.md).
+- **Alarm report browsing** — the web UI `/owa-static/timeline` surfaces
+  "VIEW REPORT" buttons on past alarms. We want to (a) fetch past alarm
+  reports programmatically, (b) expose them as an HA sensor or attribute
+  for automations. Likely piggy-backs on `xSActV2` (already reverse-
+  engineered — see [`findings/timeline-api.md`](findings/timeline-api.md))
+  plus a per-incidence detail endpoint. Dissect the web bundle for the
+  detail query shape.
 
 ## Medium
 
-- **TIMELINE service (id 506)** — operation exists on the panel but
-  GraphQL query name is unknown. Capture via webapp DevTools (see
-  [`findings/cameras.md`](findings/cameras.md)).
+- **TIMELINE / `xSActV2` integration** — query shape + response captured
+  in [`findings/timeline-api.md`](findings/timeline-api.md). Surface as
+  a read-only HA logbook/sensor for recent activity. Separate PR from
+  trigger detection above.
 - **Higher-resolution camera images** — all `xSRequestImages` output
   is 640×352 LOW. Worth revisiting if Verisure exposes a different
   endpoint.
