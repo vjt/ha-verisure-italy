@@ -1,6 +1,6 @@
 """Verisure Italy API client."""
 
-__version__ = "0.9.1"
+__version__ = "0.9.3"
 
 from .client import VerisureClient, generate_device_id, generate_uuid
 from .diagnostics import run_probe
@@ -51,6 +51,7 @@ from .models import (
     Thumbnail,
     ZoneException,
     active_services,
+    effective_family,
     parse_proto_code,
 )
 
@@ -100,6 +101,7 @@ __all__ = [
     "WAFBlockedError",
     "ZoneException",
     "active_services",
+    "effective_family",
     "generate_device_id",
     "generate_uuid",
     "parse_proto_code",

@@ -23,6 +23,7 @@ from .models import (
     PanelFamily,
     PerimeterMode,
     ServiceRequest,
+    effective_family,
 )
 
 # Every command → the base service(s) that must be active to honour it.
@@ -37,9 +38,12 @@ from .models import (
 # requires `DARM`. Sub-capabilities that ARE reliably reported per-panel:
 #   - ARMNIGHT (SDVECU active; absent on panels without night mode)
 #   - ARMANNEX / DARMANNEX (annex-equipped panels only)
-# Perimeter gating is handled by panel FAMILY below (PERI_CAPABLE vs
-# INTERIOR_ONLY) — not by the ServiceRequest.PERI flag, which isn't
-# reliable across panels.
+# Perimeter gating is handled by effective_family() below — model-level
+# PANEL_FAMILIES rejects *PERI* on INTERIOR_ONLY models (SDVFAST, SDVFSW),
+# and effective_family additionally demotes PERI_CAPABLE installs that
+# lack `EST` (perimeter sensors not provisioned). The PERI service flag
+# is unreliable: maintainer's fully-perimeter SDVECU lacks PERI in xSSrv
+# yet accepts every *PERI* command, so it cannot be used as a gate.
 _COMMAND_REQUIRES: dict[ArmCommand, frozenset[ServiceRequest]] = {
     # Disarm — base DARM only; perimeter-disarm variants are family-gated.
     ArmCommand.DISARM: frozenset({ServiceRequest.DARM}),
@@ -121,7 +125,7 @@ class CommandResolver(BaseModel):
                 f"Panel already in target state {target}. No command needed."
             )
 
-        family = PANEL_FAMILIES[self.panel]
+        family = effective_family(self.panel, self.active_services)
         command = self._pick_command(target=target, current=current, family=family)
         self._assert_supported(command)
         return command
@@ -214,17 +218,30 @@ class CommandResolver(BaseModel):
         """Raise UnsupportedCommandError if the panel cannot honour command.
 
         Two gates, both fail-secure:
-          1. Family — INTERIOR_ONLY panels reject every perimeter variant
-             (PERI service flags aren't universally reliable; family is).
+          1. Effective family — INTERIOR_ONLY (model-level or runtime-
+             demoted) rejects every perimeter variant. Demotion happens
+             when a PERI_CAPABLE model lacks `EST` in xSSrv (no perimeter
+             sensors provisioned); the panel rejects *PERI* commands with
+             error_code 101 / error_mpj_exception.
           2. Sub-capability — ARMNIGHT / ARMANNEX / DARMANNEX gates based
              on Service.active. Base ARM / DARM are always required.
         """
-        family = PANEL_FAMILIES[self.panel]
+        family = effective_family(self.panel, self.active_services)
         if command in _PERI_COMMANDS and family == PanelFamily.INTERIOR_ONLY:
+            # Distinguish model-level INTERIOR_ONLY (no perimeter hardware)
+            # from runtime-demoted PERI_CAPABLE (hardware capable, sensors
+            # not provisioned). Report the actual missing service so the
+            # GitHub issue body points at the real diagnostic.
+            model_family = PANEL_FAMILIES[self.panel]
+            missing_service = (
+                ServiceRequest.EST
+                if model_family == PanelFamily.PERI_CAPABLE
+                else ServiceRequest.PERI
+            )
             raise UnsupportedCommandError(
                 command=command,
                 panel=self.panel,
-                missing_services=frozenset({ServiceRequest.PERI}),
+                missing_services=frozenset({missing_service}),
             )
         required = _COMMAND_REQUIRES[command]
         missing = required - self.active_services

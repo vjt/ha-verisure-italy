@@ -128,12 +128,15 @@ def _authenticate(client: VerisureClient) -> None:
     # SDVECU active services, live-verified on panel 1234567 (2026-04-24).
     # Important: ARMDAY and PERI are NOT active services on this panel,
     # yet the panel accepts ARMDAY1 / ARM1PERI1 / DARM1DARMPERI fine.
-    # CommandResolver gates peri variants on panel FAMILY, not the PERI
-    # service flag. See docs/findings/panel-SDVECU-probe.json.
+    # CommandResolver gates peri variants on effective panel family —
+    # PANEL_FAMILIES at the model level, plus runtime demotion when
+    # `EST` is absent (perimeter sensors not provisioned on this install).
+    # See docs/findings/panel-SDVECU-probe.json.
     client._services_cache[INSTALLATION.number] = frozenset({
         ServiceRequest.ARM,
         ServiceRequest.DARM,
         ServiceRequest.ARMNIGHT,
+        ServiceRequest.EST,
     })
 
     # Realistic current-state observation — the coordinator polls

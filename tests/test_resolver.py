@@ -29,9 +29,13 @@ _PERI = AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.ON)
 # Live-verified SDVECU service set (from a real panel's xSSrv response).
 # Note: ARMDAY and PERI are NOT listed as separate active services on
 # SDVECU, yet the panel accepts ARMDAY1, ARM1PERI1, ARMDAY1PERI1, and
-# DARM1DARMPERI. See docs/findings/panel-SDVECU-probe.json.
+# DARM1DARMPERI fine. EST IS listed (perimeter sensors provisioned)
+# and is the runtime indicator effective_family() consults to keep this
+# install in PERI_CAPABLE rather than demoting to INTERIOR_ONLY.
+# See docs/findings/panel-SDVECU-probe.json.
 _SDVECU_SERVICES = frozenset({
     ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
+    ServiceRequest.EST,
 })
 # SDVFAST (issue #3 reporter probe): explicit ARMDAY / ARMNIGHT /
 # ARMINTFPART / ARMPARTFINT entries, no PERI. Interior-only family.
@@ -158,8 +162,13 @@ def test_arm_night_rejected_without_armnight_service() -> None:
 
 
 def test_base_arm_service_required_for_every_arm_variant() -> None:
-    """No ARM service = every arm command refused."""
-    services = frozenset({ServiceRequest.DARM})
+    """No ARM service = every arm command refused.
+
+    Seed EST so the perimeter family-gate (which would otherwise fire
+    first on a no-EST PERI_CAPABLE install) is satisfied; we want the
+    test to land on the missing-ARM check specifically.
+    """
+    services = frozenset({ServiceRequest.DARM, ServiceRequest.EST})
     r = _r("SDVECU", services)
     with pytest.raises(UnsupportedCommandError) as exc:
         r.resolve(target=_TOTAL_PERI, current=_OFF)
@@ -211,3 +220,61 @@ def test_cross_peri_from_peri_only_to_total_does_not_trigger() -> None:
     r = _r("SDVECU", _SDVECU_SERVICES)
     out = r.resolve(target=_TOTAL, current=_PERI)
     assert out == ArmCommand.ARM_TOTAL
+
+
+# --- v0.9.3: PERI_CAPABLE-no-EST demotion (Issue #4) ---
+#
+# An SDVECU model can ship without perimeter sensors provisioned.
+# Issue #4 reporter laurafabry's xSSrv was [ARM, ARMNIGHT, DARM] (no EST);
+# the panel rejected ARMDAY1PERI1 / ARM1PERI1 with code 101
+# error_mpj_exception. effective_family() now demotes such installs to
+# INTERIOR_ONLY so the resolver refuses *PERI* commands client-side
+# rather than letting the panel reject them on the wire.
+
+# Issue #4 reporter's exact service set — SDVECU, no EST.
+_SDVECU_NO_EST_SERVICES = frozenset({
+    ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
+})
+
+
+def test_sdvecu_without_est_rejects_arm_partial_perimeter() -> None:
+    """Issue #4: SDVECU + no EST → ARM_PARTIAL_PERIMETER refused with EST missing."""
+    r = _r("SDVECU", _SDVECU_NO_EST_SERVICES)
+    with pytest.raises(UnsupportedCommandError) as exc:
+        r.resolve(target=_PARTIAL_PERI, current=_OFF)
+    assert ServiceRequest.EST in exc.value.missing_services
+    assert exc.value.command == ArmCommand.ARM_PARTIAL_PERIMETER
+
+
+def test_sdvecu_without_est_rejects_arm_total_perimeter() -> None:
+    """Issue #4: SDVECU + no EST → ARM_TOTAL_PERIMETER refused with EST missing."""
+    r = _r("SDVECU", _SDVECU_NO_EST_SERVICES)
+    with pytest.raises(UnsupportedCommandError) as exc:
+        r.resolve(target=_TOTAL_PERI, current=_OFF)
+    assert ServiceRequest.EST in exc.value.missing_services
+    assert exc.value.command == ArmCommand.ARM_TOTAL_PERIMETER
+
+
+def test_sdvecu_without_est_accepts_interior_only_arm() -> None:
+    """Demoted SDVECU still arms via the INTERIOR_ONLY path (ARMDAY1, ARM1)."""
+    r = _r("SDVECU", _SDVECU_NO_EST_SERVICES)
+    assert (
+        r.resolve(target=_PARTIAL, current=_OFF) == ArmCommand.ARM_PARTIAL
+    )
+    assert (
+        r.resolve(target=_TOTAL, current=_OFF) == ArmCommand.ARM_TOTAL
+    )
+
+
+def test_sdvfast_missing_perimeter_reports_peri_not_est() -> None:
+    """Model-level INTERIOR_ONLY (no perimeter hardware) reports PERI missing.
+
+    Distinguishes: PERI_CAPABLE-no-EST = missing EST (sensors not
+    provisioned); INTERIOR_ONLY = missing PERI (model has no perimeter
+    hardware at all). Issue body should point at the right service.
+    """
+    r = _r("SDVFAST", _SDVFAST_SERVICES)
+    with pytest.raises(UnsupportedCommandError) as exc:
+        r.resolve(target=_TOTAL_PERI, current=_OFF)
+    assert ServiceRequest.PERI in exc.value.missing_services
+    assert ServiceRequest.EST not in exc.value.missing_services

@@ -48,7 +48,9 @@ def _bare_coordinator() -> VerisureCoordinator:
     coord.data = _make_data()  # type: ignore[attr-defined]
     coord.client = MagicMock()
     coord.client.get_general_status = AsyncMock()
-    coord._cameras_discovered = True  # skip discovery branch
+    coord._cameras_discovered = True  # skip camera discovery branch
+    coord._services_discovered = True  # skip xSSrv discovery branch
+    coord.active_services = frozenset()  # type: ignore[attr-defined]
     coord.installation = Installation(
         number="1234567", alias="Home", panel="SDVECU", type="home",
     )

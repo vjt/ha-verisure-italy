@@ -149,6 +149,14 @@ class ServiceRequest(StrEnum):
     Each ArmCommand requires at least one of these services to be
     active=true for the panel to honour it. The mapping lives in
     verisure_italy/resolver.py (added in a later task).
+
+    EST is not a command-gating service — it advertises that the install
+    has perimeter sensors provisioned. PANEL_FAMILIES maps panel models
+    to PERI_CAPABLE / INTERIOR_ONLY at the model level, but a single
+    PERI_CAPABLE model (e.g. SDVECU) can ship with or without perimeter
+    sensors. EST presence is the runtime indicator; without it, *PERI*
+    arm commands are rejected by the panel (error_code 101,
+    error_mpj_exception). See effective_family() below.
     """
 
     ARM = "ARM"
@@ -156,6 +164,7 @@ class ServiceRequest(StrEnum):
     ARMDAY = "ARMDAY"
     ARMNIGHT = "ARMNIGHT"
     PERI = "PERI"
+    EST = "EST"
     ARMANNEX = "ARMANNEX"
     DARMANNEX = "DARMANNEX"
     ARMINTFPART = "ARMINTFPART"
@@ -394,6 +403,30 @@ PANEL_FAMILIES: dict[str, PanelFamily] = {
 SUPPORTED_PANELS: frozenset[str] = frozenset(PANEL_FAMILIES.keys())
 
 
+def effective_family(
+    panel: str, services: frozenset[ServiceRequest]
+) -> PanelFamily:
+    """Return the install's effective family, demoting on missing perimeter.
+
+    PANEL_FAMILIES classifies panels by model. A PERI_CAPABLE model
+    (e.g. SDVECU) can still ship with perimeter sensors un-provisioned;
+    the runtime signal is `ServiceRequest.EST` in xSSrv. When EST is
+    absent on a PERI_CAPABLE install, every *PERI* arm command is
+    rejected by the panel with error_code 101 (error_mpj_exception).
+
+    This function is the single source of truth: callers (resolver,
+    HA entity) decide arm targets and proto→state mapping by effective
+    family rather than by `PANEL_FAMILIES[panel]` directly.
+
+    Raises KeyError if the panel is not in PANEL_FAMILIES — same
+    contract as the caller would have hit looking up the dict.
+    """
+    family = PANEL_FAMILIES[panel]
+    if family == PanelFamily.PERI_CAPABLE and ServiceRequest.EST not in services:
+        return PanelFamily.INTERIOR_ONLY
+    return family
+
+
 # ---------------------------------------------------------------------------
 # Camera models
 # ---------------------------------------------------------------------------
@@ -501,8 +534,11 @@ def active_services(services: list[Service]) -> frozenset[ServiceRequest]:
     """Return the set of ServiceRequest codes active on the panel.
 
     Inputs are parsed Service objects (from xSSrv). Unknown request
-    strings (IMG, EST, CAMERAS, …) are dropped — the set reports only
-    the codes the resolver knows how to consume.
+    strings (IMG, CAMERAS, TIMELINE, …) are dropped — the set reports
+    only the codes the resolver / family logic knows how to consume.
+    EST is retained even though it doesn't gate any specific command:
+    its presence/absence drives effective_family() to demote
+    PERI_CAPABLE panels without perimeter sensors to INTERIOR_ONLY.
     """
     known: set[ServiceRequest] = set()
     for svc in services:

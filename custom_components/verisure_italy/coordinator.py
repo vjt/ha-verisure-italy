@@ -28,11 +28,15 @@ from verisure_italy import (
     GeneralStatus,
     Installation,
     ProtoCode,
+    ServiceRequest,
     SessionExpiredError,
     TwoFactorRequiredError,
     VerisureClient,
     WAFBlockedError,
     parse_proto_code,
+)
+from verisure_italy import (
+    active_services as parse_active_services,
 )
 from verisure_italy.exceptions import (
     APIConnectionError,
@@ -166,6 +170,17 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         self.installation = Installation.model_validate(
             config_entry.data[CONF_INSTALLATION]
         )
+
+        # Active services — populated during first refresh from xSSrv.
+        # Drives effective_family() for PERI_CAPABLE panels: an SDVECU
+        # without `EST` in services has no perimeter sensors provisioned,
+        # so arm targets must be demoted to interior-only. Frozenset starts
+        # empty; the first-refresh fetch is mandatory and `UpdateFailed`
+        # is raised if it errors — no silent fallback to model-level family,
+        # because the wrong family on a no-EST install means every arm
+        # command gets rejected with error_mpj_exception.
+        self.active_services: frozenset[ServiceRequest] = frozenset()
+        self._services_discovered: bool = False
 
         # Camera state — populated during first refresh
         self.camera_devices: list[CameraDevice] = []
@@ -343,6 +358,31 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             raise UpdateFailed(
                 f"API response format changed: {err}"
             ) from err
+
+        # Fetch active services on first successful refresh. Drives
+        # effective_family() — must complete before any arm command, so
+        # we fetch synchronously here rather than lazily on first arm.
+        # If the fetch fails (network, schema drift, …), surface as
+        # UpdateFailed: we cannot safely select arm targets without
+        # knowing whether perimeter is provisioned.
+        if not self._services_discovered:
+            try:
+                services = await self.client.get_services(self.installation)
+            except (APIConnectionError, APIResponseError, WAFBlockedError) as err:
+                raise UpdateFailed(
+                    f"Active-services fetch failed: {err.message}"
+                ) from err
+            except ValidationError as err:
+                raise UpdateFailed(
+                    f"xSSrv schema drift: {err}"
+                ) from err
+            self.active_services = parse_active_services(services)
+            self._services_discovered = True
+            _LOGGER.info(
+                "Active services on %s panel: %s",
+                self.installation.panel,
+                sorted(s.value for s in self.active_services),
+            )
 
         # Discover camera devices on first successful refresh
         if not self._cameras_discovered:

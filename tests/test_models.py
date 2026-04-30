@@ -21,6 +21,7 @@ from verisure_italy.models import (
     ServiceRequest,
     ZoneException,
     active_services,
+    effective_family,
     parse_proto_code,
 )
 
@@ -290,3 +291,45 @@ def test_unsupported_command_error_carries_context() -> None:
     # Message must mention both the panel and the command for the log.
     assert "SDVFAST" in str(err)
     assert "ARM1PERI1" in str(err)
+
+
+class TestEffectiveFamily:
+    """effective_family() — runtime perimeter-provisioning override."""
+
+    def test_peri_capable_with_est_stays_peri_capable(self) -> None:
+        services = frozenset({
+            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.EST,
+        })
+        assert effective_family("SDVECU", services) == PanelFamily.PERI_CAPABLE
+
+    def test_peri_capable_without_est_demotes_to_interior_only(self) -> None:
+        """Issue #4: SDVECU without EST → INTERIOR_ONLY effective family."""
+        services = frozenset({
+            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
+        })
+        assert effective_family("SDVECU", services) == PanelFamily.INTERIOR_ONLY
+
+    def test_interior_only_stays_interior_only_with_or_without_est(self) -> None:
+        """Model-level INTERIOR_ONLY is stable regardless of EST presence."""
+        no_est = frozenset({ServiceRequest.ARM, ServiceRequest.DARM})
+        with_est = no_est | {ServiceRequest.EST}
+        assert effective_family("SDVFAST", no_est) == PanelFamily.INTERIOR_ONLY
+        # An INTERIOR_ONLY model advertising EST shouldn't happen, but if
+        # it ever does the family stays INTERIOR_ONLY (model is the floor).
+        assert effective_family("SDVFAST", with_est) == PanelFamily.INTERIOR_ONLY
+
+    def test_unknown_panel_raises_key_error(self) -> None:
+        with pytest.raises(KeyError, match="ACME9000"):
+            effective_family("ACME9000", frozenset())
+
+    def test_empty_services_demotes_peri_capable(self) -> None:
+        """Pre-first-refresh empty set must not silently keep PERI_CAPABLE."""
+        assert effective_family("SDVECU", frozenset()) == PanelFamily.INTERIOR_ONLY
+
+    def test_all_peri_capable_models_demote_without_est(self) -> None:
+        no_est = frozenset({ServiceRequest.ARM, ServiceRequest.DARM})
+        for panel, family in PANEL_FAMILIES.items():
+            if family == PanelFamily.PERI_CAPABLE:
+                assert effective_family(panel, no_est) == PanelFamily.INTERIOR_ONLY, (
+                    f"{panel} should demote without EST"
+                )

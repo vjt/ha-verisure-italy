@@ -102,16 +102,17 @@ The actual gating observed in practice:
 | `ARMNIGHT` (active) | Panel supports night-mode arming (sub-cap; reliably reported). |
 | `ARMANNEX` / `DARMANNEX` (active) | Panel has an annex zone (sub-cap). |
 | `ARMDAY` / `PERI` flags | **UI hints, not wire-protocol gates**. Absence doesn't block the corresponding wire commands on panels that physically support them. |
-| Panel FAMILY (peri-capable vs interior-only) | Reliable indicator for perimeter variants. SDVFAST/SDVFSW (interior-only family) reject every `*PERI*` command regardless of service flags. |
+| Panel FAMILY (peri-capable vs interior-only) | Model-level capability. SDVFAST/SDVFSW (interior-only family) reject every `*PERI*` command regardless of service flags — no perimeter hardware exists. |
+| `EST` (active) | **Runtime perimeter-provisioning indicator**. A `PERI_CAPABLE` model can ship without perimeter sensors provisioned; in that case `EST` is absent from `xSSrv` and the panel rejects every `*PERI*` command with `code 101 / error_mpj_exception`. Drives `effective_family()` demotion (Issue #4, v0.9.3). |
 
 ### CommandResolver gating logic
 
 1. **Base gate**: every arm variant requires `ARM`; every disarm variant requires `DARM`.
 2. **Sub-capability gate**: `ARMNIGHT`/`ARMANNEX`/`DARMANNEX` required only for commands that use them (e.g. `ARMNIGHT1`).
-3. **Family gate**: perimeter-involving commands (`ARM1PERI1`, `ARMDAY1PERI1`, `ARMNIGHT1PERI1`, `PERI1`, `ARMINTEXT1`, `DARM1DARMPERI`, `DARMPERI`) are rejected client-side on `INTERIOR_ONLY` family panels.
+3. **Effective-family gate**: perimeter-involving commands (`ARM1PERI1`, `ARMDAY1PERI1`, `ARMNIGHT1PERI1`, `PERI1`, `ARMINTEXT1`, `DARM1DARMPERI`, `DARMPERI`) are rejected client-side when the **effective** family is `INTERIOR_ONLY`. Effective family combines the model-level classifier (`PANEL_FAMILIES`) with a runtime demotion: a `PERI_CAPABLE` model whose `xSSrv` lacks `EST` is treated as `INTERIOR_ONLY`. The HA entity also consults effective family when picking arm targets, so the resolver never sees a perimeter target on a no-EST install in the first place; the resolver-level check is defense in depth for direct service callers.
 4. **Panel rejection** remains fail-secure: if we do send a command the panel refuses, we crash loud with the full wire-level response (see failure-report markers).
 
-`PERI` service flag is **not** used as a gate — it's observed to be absent on panels that fully support perimeter operations.
+`PERI` service flag is **not** used as a gate — it's observed to be absent on panels that fully support perimeter operations (maintainer's SDVECU+EST has no `PERI` in services yet accepts every `*PERI*` command). `EST` is the reliable runtime signal because it advertises sensor provisioning rather than UI capability.
 
 ## Panel roster (from bundle, 2026-04-24 / v2.4.2)
 

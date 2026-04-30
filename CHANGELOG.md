@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.9.3 — 2026-04-30
+
+Bug-fix release for Issue #4 (`laurafabry`). An SDVECU panel without
+perimeter sensors provisioned (no `EST` service in `xSSrv`) rejected
+every `arm_home` / `arm_away` from HA with `OperationFailedError`
+code `101` / `error_mpj_exception`: the integration was sending
+`ARMDAY1PERI1` / `ARM1PERI1` based on the model-level family, but
+the panel has no perimeter to engage. Disarm worked.
+
+### Fixes
+
+- **Service-aware effective panel family.** New
+  `verisure_italy.models.effective_family(panel, services)` is the
+  single source of truth: a `PERI_CAPABLE` model whose `xSSrv` lacks
+  `EST` is demoted to `INTERIOR_ONLY` for arm-target selection,
+  proto→state mapping, and the resolver's perimeter gate. The HA
+  entity reads `coordinator.active_services` at decision time, so
+  the demoted install arms via `ARMDAY1` / `ARM1` (the correct
+  Verisure-IT-web-app behaviour for that hardware).
+- **`ServiceRequest.EST`** is now retained by `active_services()`.
+  Previously dropped as "unknown" because no command requires it as
+  a gate; in v0.9.3 it survives the parse so the family-demotion
+  logic can read it.
+- **Coordinator pre-fetches services on first refresh.** The xSSrv
+  query now runs synchronously inside the first
+  `_async_update_data` call, before any entity is constructed.
+  Failure surfaces as `UpdateFailed` rather than silently falling
+  back to model-level family — wrong family on a no-EST install
+  means every arm command gets rejected on the wire.
+- **Resolver reports the correct missing service.**
+  `UnsupportedCommandError` raised against a runtime-demoted
+  `PERI_CAPABLE` install names `EST` (sensors not provisioned);
+  against a model-level `INTERIOR_ONLY` panel it still names `PERI`
+  (no perimeter hardware at all). The two cases need different
+  remediation, so the diagnostic block must distinguish them.
+
+### Tests
+
+- New `TestEffectiveFamily` in `tests/test_models.py` exhausts the
+  matrix: PERI_CAPABLE with EST stays PERI_CAPABLE, without EST
+  demotes; INTERIOR_ONLY is stable both ways; unknown panels raise
+  `KeyError`; every PERI_CAPABLE model demotes uniformly.
+- Resolver tests: SDVECU + no-EST → `UnsupportedCommandError(missing={EST})`
+  for both `*_PERIMETER` arm targets, plus a positive case proving
+  the demoted install accepts interior-only commands.
+- Entity tests: SDVECU + no-EST coordinator services → arm targets
+  `(PARTIAL/OFF)` and `(TOTAL/OFF)` instead of the perimeter-on
+  variants.
+
+### No changes to
+
+- `PANEL_FAMILIES` (model-level classifier stays as-is).
+- `_PERI_COMMANDS` and `_COMMAND_REQUIRES` tables.
+- The fail-secure proto→state mapping for INTERIOR_ONLY (a
+  perimeter proto on a demoted install is still a `KeyError`).
+
+### Validation
+
+Pending live E2E on maintainer's SDVECU+EST install (must still
+arm/disarm cleanly). SDVECU-no-EST validation pending on reporter
+side (Issue #4); will stay open until confirmed.
+
 ## 0.9.2 — 2026-04-24
 
 Bug-fix release for Issue #3 (SDVFAST panel, `alan210874`). Every

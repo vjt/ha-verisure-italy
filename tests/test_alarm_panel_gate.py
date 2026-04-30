@@ -27,13 +27,33 @@ from verisure_italy.exceptions import (
     UnsupportedPanelError,
 )
 from verisure_italy.models import (
+    PANEL_FAMILIES,
     SUPPORTED_PANELS,
     AlarmState,
     Installation,
     InteriorMode,
     PanelFamily,
     PerimeterMode,
+    ServiceRequest,
 )
+
+# Canonical default services per family. PERI_CAPABLE installs include EST
+# (perimeter sensors provisioned); INTERIOR_ONLY do not. Tests for the
+# v0.9.3 no-EST demotion case override `coordinator.active_services` after
+# `_make_panel_entity` to drop EST and assert the demoted behaviour.
+_DEFAULT_SERVICES: dict[PanelFamily, frozenset[ServiceRequest]] = {
+    PanelFamily.PERI_CAPABLE: frozenset({
+        ServiceRequest.ARM,
+        ServiceRequest.DARM,
+        ServiceRequest.ARMNIGHT,
+        ServiceRequest.EST,
+    }),
+    PanelFamily.INTERIOR_ONLY: frozenset({
+        ServiceRequest.ARM,
+        ServiceRequest.DARM,
+        ServiceRequest.ARMNIGHT,
+    }),
+}
 
 
 @asynccontextmanager
@@ -60,6 +80,13 @@ def _make_panel_entity(panel: str):
     coordinator.data = MagicMock()
     coordinator.data.alarm_state = MagicMock()
     coordinator.force_context = None
+    # Seed canonical-for-family services so effective_family() returns the
+    # model-level family. Tests targeting the demoted PERI_CAPABLE-no-EST
+    # case override this attribute directly after the call.
+    family = PANEL_FAMILIES.get(panel)
+    coordinator.active_services = (
+        _DEFAULT_SERVICES[family] if family is not None else frozenset()
+    )
 
     # VerisureAlarmPanel.__init__ reads coordinator.data.alarm_state through
     # _STATE_MAP — bypass __init__ to skip HA entity wiring we don't need here.
@@ -713,6 +740,52 @@ class TestArmTargetsByFamily:
 
     async def test_arm_away_on_interior_only_targets_total_off(self):
         entity, coordinator = _wire_mutation_entity("SDVFSW")
+        coordinator.async_arm = AsyncMock()
+
+        await entity.async_alarm_arm_away()
+
+        coordinator.async_arm.assert_awaited_once()
+        target = coordinator.async_arm.call_args.args[0]
+        assert target == AlarmState(
+            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+        )
+
+    # --- v0.9.3: PERI_CAPABLE-no-EST entity-layer demotion (Issue #4) ---
+
+    async def test_arm_home_demotes_when_peri_capable_lacks_est(self):
+        """Issue #4: SDVECU without EST in services targets PARTIAL/OFF, not PARTIAL/ON.
+
+        Entity layer reads coordinator.active_services and computes
+        effective family. Without EST a PERI_CAPABLE install behaves
+        like INTERIOR_ONLY for arm targets — otherwise the resolver
+        would emit ARMDAY1PERI1 and the panel would reject it with
+        code 101 error_mpj_exception.
+        """
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        # Override default seeded services to drop EST.
+        coordinator.active_services = frozenset({
+            ServiceRequest.ARM,
+            ServiceRequest.DARM,
+            ServiceRequest.ARMNIGHT,
+        })
+        coordinator.async_arm = AsyncMock()
+
+        await entity.async_alarm_arm_home()
+
+        coordinator.async_arm.assert_awaited_once()
+        target = coordinator.async_arm.call_args.args[0]
+        assert target == AlarmState(
+            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+        )
+
+    async def test_arm_away_demotes_when_peri_capable_lacks_est(self):
+        """Issue #4: SDVECU without EST in services targets TOTAL/OFF, not TOTAL/ON."""
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        coordinator.active_services = frozenset({
+            ServiceRequest.ARM,
+            ServiceRequest.DARM,
+            ServiceRequest.ARMNIGHT,
+        })
         coordinator.async_arm = AsyncMock()
 
         await entity.async_alarm_arm_away()

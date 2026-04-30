@@ -32,7 +32,6 @@ from verisure_italy import (
 )
 from verisure_italy.exceptions import ArmingExceptionError
 from verisure_italy.models import (
-    PANEL_FAMILIES,
     PROTO_TO_STATE,
     SUPPORTED_PANELS,
     AlarmState,
@@ -40,6 +39,7 @@ from verisure_italy.models import (
     PanelFamily,
     PerimeterMode,
     ProtoCode,
+    effective_family,
 )
 
 from . import VerisureConfigEntry
@@ -172,7 +172,18 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
     @property
     def _panel_family(self) -> PanelFamily:
-        return PANEL_FAMILIES[self.coordinator.installation.panel]
+        """Effective family for this install (model-level, demoted on no EST).
+
+        A PERI_CAPABLE model (e.g. SDVECU) without the `EST` service in
+        xSSrv has no perimeter sensors provisioned, so arm targets +
+        proto→state mapping must follow the INTERIOR_ONLY shape. The
+        coordinator populates `active_services` during first refresh,
+        before any entity is constructed, so the lookup is always valid.
+        """
+        return effective_family(
+            self.coordinator.installation.panel,
+            self.coordinator.active_services,
+        )
 
     def _update_alarm_state(self) -> None:
         """Update _attr_alarm_state from coordinator data. Crashes on unknown state."""
