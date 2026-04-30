@@ -158,6 +158,19 @@ bytes sent). Adding a new panel requires live probe output (via the
 `verisure-italy-cli` tool or HA log) + committed command map.
 See `docs/findings/panel-types.md`.
 
+### Effective Family — service-aware perimeter gate (v0.9.3+)
+`PANEL_FAMILIES` is a per-model classifier (e.g. SDVECU =
+PERI_CAPABLE). A given install of a PERI_CAPABLE model can still
+ship without perimeter sensors provisioned; `EST` in `xSSrv` is
+the runtime indicator that perimeter is in service. The single
+source of truth is `verisure_italy.models.effective_family(panel,
+services)` — when EST is missing on a PERI_CAPABLE install, the
+function demotes to INTERIOR_ONLY for arm-target selection, the
+proto→state reverse map, and the resolver's perimeter gate. The
+`PERI` service flag is **not** a reliable gate — it's absent on
+maintainer's fully-perimeter SDVECU yet every `*PERI*` command
+works. Use EST. See Issue #4 + `docs/findings/arm-command-vocabulary.md`.
+
 ## Access
 - SSH to HAOS: `ssh root@homeassistant -p 22222`
 - SSH to HA container: `ssh hassio@homeassistant` (no scp, tar over ssh)
