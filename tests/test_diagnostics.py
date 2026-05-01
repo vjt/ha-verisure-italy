@@ -576,6 +576,28 @@ def test_failure_report_empty_partitions_renders_cleanly() -> None:
     assert "alarm_partitions: []" in report
 
 
+def test_failure_report_renders_asymmetric_partition() -> None:
+    """Arm-permitted but disarm-denied (or inverse) renders distinctly.
+
+    The arm and disarm direction gates are independent (web bundle's `z`
+    function checks enterStates for arm and leaveStates for disarm
+    separately). A user permitted to arm perimeter but not disarm it
+    must show as `02:E[01]/L[]` — distinguishable from both shapes
+    covered by the prior two tests.
+    """
+    partitions = _make_partitions(("02", ["01"], []))
+    report = format_failure_report(
+        operation="disarm",
+        installation=_installation(panel="SDVECU"),
+        command=ArmCommand.DISARM_PERIMETER,
+        active_services=frozenset({ServiceRequest.DARM}),
+        current_proto="E",
+        alarm_partitions=partitions,
+        error=OperationFailedError("rejected", error_code=None, error_type=None),
+    )
+    assert "02:E[01]/L[]" in report
+
+
 def test_failure_report_unsupported_command_error_includes_missing_services() -> None:
     """UnsupportedCommandError carries context we want surfaced in the report."""
     err = UnsupportedCommandError(
