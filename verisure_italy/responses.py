@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from .models import (
     ArmResult,
     CheckAlarmResponse,
+    ConfigRepoUser,
     DisarmPanelResponse,
     DisarmResult,
     GeneralStatus,
@@ -37,6 +38,7 @@ class _ServiceInstallation(BaseModel):
     numinst: str
     capabilities: str
     services: list[Service]
+    config_repo_user: ConfigRepoUser = Field(alias="configRepoUser")
 
 
 class _SrvData(BaseModel):

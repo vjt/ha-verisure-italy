@@ -99,6 +99,7 @@ def _services_body() -> str:
                             "attributes": None,
                         },
                     ],
+                    "configRepoUser": {"alarmPartitions": []},
                 },
             }
         }

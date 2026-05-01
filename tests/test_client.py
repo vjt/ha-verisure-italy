@@ -245,6 +245,7 @@ def _services_response(capabilities_token: str | None = None) -> str:
                             "description": "Timeline",
                         },
                     ],
+                    "configRepoUser": {"alarmPartitions": []},
                 },
             }
         }

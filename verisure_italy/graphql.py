@@ -65,6 +65,9 @@ SERVICES_QUERY = (
     " minWrapperVersion description"
     " attributes { attributes { name value active } }"
     " }"
+    " configRepoUser {"
+    " alarmPartitions { id enterStates leaveStates }"
+    " }"
     " capabilities"
     " } } }"
 )
