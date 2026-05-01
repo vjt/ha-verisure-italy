@@ -8,38 +8,25 @@ Backlog for ha-verisure. Prune aggressively — completed items go in
 `CHANGELOG.md`, not here. Keep context on pending items so the next
 session can pick them up cold.
 
-Updated: 2026-05-01 (v0.9.4 shipped for Issue #5 — laurafabry
-SDVECU-with-EST-but-empty-partition-02. v0.9.3 superseded.
-Awaiting reporter confirmation; Issue #1 still silent since v0.9.0).
+Updated: 2026-05-01 (v0.9.4 shipped for Issue #5; #5 + #6 closed by
+reporter; Issue #1 re-pinged with v0.9.4 ask).
 
 ## Immediate
 
-- **Issue #5 confirmation pending (laurafabry)** — v0.9.4 shipped
-  2026-05-01 with partition-aware `effective_family(panel,
-  alarm_partitions)` — SDVECU installs whose user lacks perimeter
-  permission (partition `02` enterStates empty) now demote to
-  `INTERIOR_ONLY` and arm via `ARMDAY1` / `ARM1`. Mirrors the
-  official Verisure IT web app gate (function `z` in main bundle).
-  v0.9.3's EST-based gate was insufficient: laurafabry's SDVECU
-  has `EST` active and still rejected every `*PERI*` arm.
-  Reporter pinged on #5 with Italian upgrade instructions + full
-  English root-cause. Issue #4 cross-linked but NOT reopened
-  (resolved-by-supersession). Close #5 on confirmation; if a new
-  `VERISURE ARM FAILURE BEGIN` lands, the new partition-snapshot
-  field will pinpoint the cause. References:
-  `docs/findings/configrepouser-partitions.md`,
-  `docs/findings/arm-command-vocabulary.md`.
-
-- **Issue #1 arm failure (ewinters-ca-spark)** — no reply since the
-  2026-04-24 v0.9.0 nudge; v0.9.1 + v0.9.2 + v0.9.3 + v0.9.4 have
-  shipped since. The reporter's `xSDeviceList` had a device with `type:
-  CENT` ("Pannello di Controllo"), which earlier notes mistakenly
-  tracked as the panel model — `CENT` is the device type for the
+- **Issue #1 arm failure (ewinters-ca-spark)** — re-pinged 2026-05-01
+  with v0.9.4 update: panel-type discovery now has a real allowlist
+  (`SUPPORTED_PANELS`) with self-contained probe block on unknown
+  panels, arm-command resolution mirrors the official web-app gate
+  (per-user partition permissions via `configRepoUser.alarmPartitions`),
+  failure reports include partition snapshot + command + family.
+  Five releases (v0.9.0 → v0.9.4) silent since the original nudge.
+  The reporter's `xSDeviceList` had a device with `type: CENT`
+  ("Pannello di Controllo") — `CENT` is the device type for the
   control-panel unit, not `installation.panel`. Actual panel model
   unknown; likely one of the 8 supported panels. When they respond:
   if arm works, close. If a `VERISURE ARM FAILURE BEGIN` block
-  lands, use it to identify the panel + any missing service gate.
-  Reference: `docs/findings/arm-command-vocabulary.md`.
+  lands, the new partition + command fields should pinpoint cause
+  at a glance. Reference: `docs/findings/arm-command-vocabulary.md`.
 ## High
 
 - **xSActV2 observability** — the alarm timeline query is reverse-
