@@ -11,6 +11,7 @@ import pytest
 
 from verisure_italy.exceptions import UnsupportedCommandError
 from verisure_italy.models import (
+    AlarmPartition,
     AlarmState,
     ArmCommand,
     InteriorMode,
@@ -29,13 +30,9 @@ _PERI = AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.ON)
 # Live-verified SDVECU service set (from a real panel's xSSrv response).
 # Note: ARMDAY and PERI are NOT listed as separate active services on
 # SDVECU, yet the panel accepts ARMDAY1, ARM1PERI1, ARMDAY1PERI1, and
-# DARM1DARMPERI fine. EST IS listed (perimeter sensors provisioned)
-# and is the runtime indicator effective_family() consults to keep this
-# install in PERI_CAPABLE rather than demoting to INTERIOR_ONLY.
-# See docs/findings/panel-SDVECU-probe.json.
+# DARM1DARMPERI fine. See docs/findings/panel-SDVECU-probe.json.
 _SDVECU_SERVICES = frozenset({
     ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
-    ServiceRequest.EST,
 })
 # SDVFAST (issue #3 reporter probe): explicit ARMDAY / ARMNIGHT /
 # ARMINTFPART / ARMPARTFINT entries, no PERI. Interior-only family.
@@ -45,20 +42,41 @@ _SDVFAST_SERVICES = frozenset({
     ServiceRequest.ARMPARTFINT,
 })
 
+# Partition tuples — used to drive effective_family() in the resolver.
+# A positive partition 02 (non-empty enterStates) = perimeter provisioned.
+_PARTITIONS_WITH_PERIMETER: tuple[AlarmPartition, ...] = (
+    AlarmPartition(id="01", enterStates=("01", "02"), leaveStates=("01", "02")),
+    AlarmPartition(id="02", enterStates=("01",), leaveStates=("01",)),
+    AlarmPartition(id="03", enterStates=(), leaveStates=()),
+)
+_PARTITIONS_WITHOUT_PERIMETER: tuple[AlarmPartition, ...] = (
+    AlarmPartition(id="01", enterStates=("01", "02"), leaveStates=("01", "02")),
+    AlarmPartition(id="02", enterStates=(), leaveStates=()),
+    AlarmPartition(id="03", enterStates=(), leaveStates=()),
+)
 
-def _r(panel: str, services: frozenset[ServiceRequest]) -> CommandResolver:
-    return CommandResolver(panel=panel, active_services=services)
+
+def _r(
+    panel: str,
+    services: frozenset[ServiceRequest],
+    alarm_partitions: tuple[AlarmPartition, ...] = (),
+) -> CommandResolver:
+    return CommandResolver(
+        panel=panel,
+        active_services=services,
+        alarm_partitions=alarm_partitions,
+    )
 
 
 # --- Disarm paths ---
 
 def test_disarm_from_total_peri_uses_disarm_all() -> None:
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     assert r.resolve(target=_OFF, current=_TOTAL_PERI) == ArmCommand.DISARM_ALL
 
 
 def test_disarm_from_total_only_uses_disarm() -> None:
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     assert r.resolve(target=_OFF, current=_TOTAL) == ArmCommand.DISARM
 
 
@@ -70,12 +88,12 @@ def test_disarm_sdvfast_uses_simple_disarm() -> None:
 # --- Arm from off ---
 
 def test_arm_total_from_off_peri_capable() -> None:
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     assert r.resolve(target=_TOTAL_PERI, current=_OFF) == ArmCommand.ARM_TOTAL_PERIMETER
 
 
 def test_arm_partial_from_off_peri_capable() -> None:
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     assert r.resolve(target=_PARTIAL_PERI, current=_OFF) == ArmCommand.ARM_PARTIAL_PERIMETER
 
 
@@ -113,7 +131,7 @@ def test_sdvfast_transition_total_to_partial_uses_partfint_day() -> None:
 
 def test_sdvecu_partial_to_total_falls_through_to_arm_total() -> None:
     """SDVECU without ARMINTFPART service → target-only ARM_TOTAL."""
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     out = r.resolve(target=_TOTAL, current=_PARTIAL)
     assert out == ArmCommand.ARM_TOTAL
 
@@ -124,7 +142,7 @@ def test_sdvecu_total_peri_to_partial_peri_uses_arm_partial_peri() -> None:
     Resolver must fall through to ARMDAY1PERI1 (ARM_PARTIAL_PERIMETER),
     which SDVECU accepts — matches pre-v0.9.0 behaviour.
     """
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     out = r.resolve(target=_PARTIAL_PERI, current=_TOTAL_PERI)
     assert out == ArmCommand.ARM_PARTIAL_PERIMETER
 
@@ -132,7 +150,7 @@ def test_sdvecu_total_peri_to_partial_peri_uses_arm_partial_peri() -> None:
 # --- Perimeter-only (SDVECU only) ---
 
 def test_arm_perimeter_only() -> None:
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     assert r.resolve(target=_PERI, current=_OFF) == ArmCommand.ARM_PERIMETER
 
 
@@ -148,7 +166,7 @@ def test_arm_perimeter_rejected_on_interior_only_panel() -> None:
 def test_arm_night_rejected_without_armnight_service() -> None:
     """ARMNIGHT is a reliably-reported sub-capability; its absence gates."""
     services = frozenset({ServiceRequest.ARM, ServiceRequest.DARM})
-    r = _r("SDVECU", services)
+    r = _r("SDVECU", services, _PARTITIONS_WITH_PERIMETER)
     target_night = AlarmState(
         interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
     )
@@ -164,12 +182,12 @@ def test_arm_night_rejected_without_armnight_service() -> None:
 def test_base_arm_service_required_for_every_arm_variant() -> None:
     """No ARM service = every arm command refused.
 
-    Seed EST so the perimeter family-gate (which would otherwise fire
-    first on a no-EST PERI_CAPABLE install) is satisfied; we want the
-    test to land on the missing-ARM check specifically.
+    Provide a positive partition tuple so the perimeter family-gate
+    (which would otherwise fire first on a demoted install) is
+    satisfied; we want the test to land on the missing-ARM check.
     """
-    services = frozenset({ServiceRequest.DARM, ServiceRequest.EST})
-    r = _r("SDVECU", services)
+    services = frozenset({ServiceRequest.DARM})
+    r = _r("SDVECU", services, _PARTITIONS_WITH_PERIMETER)
     with pytest.raises(UnsupportedCommandError) as exc:
         r.resolve(target=_TOTAL_PERI, current=_OFF)
     assert ServiceRequest.ARM in exc.value.missing_services
@@ -179,7 +197,7 @@ def test_base_arm_service_required_for_every_arm_variant() -> None:
 
 def test_noop_when_target_equals_current() -> None:
     from verisure_italy.exceptions import SameStateError
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     with pytest.raises(SameStateError, match="already in target state"):
         r.resolve(target=_OFF, current=_OFF)
 
@@ -200,13 +218,13 @@ def test_cross_peri_armed_to_armed_rejected() -> None:
     the wrong wire command. Fail-secure: raise so the caller must
     disarm first.
     """
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     with pytest.raises(ValueError, match="Cross-perimeter armed transition"):
         r.resolve(target=_PARTIAL, current=_TOTAL_PERI)
 
 
 def test_cross_peri_from_partial_peri_to_total_rejected() -> None:
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     with pytest.raises(ValueError, match="Cross-perimeter armed transition"):
         r.resolve(target=_TOTAL, current=_PARTIAL_PERI)
 
@@ -217,64 +235,92 @@ def test_cross_peri_from_peri_only_to_total_does_not_trigger() -> None:
     Going from perimeter-only (interior OFF) to total arm is a
     normal arm-from-disarmed path; returns ARM_TOTAL.
     """
-    r = _r("SDVECU", _SDVECU_SERVICES)
+    r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     out = r.resolve(target=_TOTAL, current=_PERI)
     assert out == ArmCommand.ARM_TOTAL
 
 
-# --- v0.9.3: PERI_CAPABLE-no-EST demotion (Issue #4) ---
+# --- v0.9.4: Partition-aware perimeter gate (Issue #5) ---
 #
-# An SDVECU model can ship without perimeter sensors provisioned.
-# Issue #4 reporter laurafabry's xSSrv was [ARM, ARMNIGHT, DARM] (no EST);
-# the panel rejected ARMDAY1PERI1 / ARM1PERI1 with code 101
-# error_mpj_exception. effective_family() now demotes such installs to
-# INTERIOR_ONLY so the resolver refuses *PERI* commands client-side
-# rather than letting the panel reject them on the wire.
+# Supersedes the v0.9.3 EST-based gate. The gate now reads partition 02
+# enterStates: if empty, effective_family() demotes PERI_CAPABLE → INTERIOR_ONLY.
+# Diagnostic message names the partition-permission gap, not EST.
 
-# Issue #4 reporter's exact service set — SDVECU, no EST.
-_SDVECU_NO_EST_SERVICES = frozenset({
-    ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
-})
+class TestResolverPerimeterGate:
+    """Partition gate for arm/disarm — supersedes v0.9.3 EST-based gate."""
 
+    def test_sdvecu_with_perimeter_picks_armday1peri1(self) -> None:
+        resolver = CommandResolver(
+            panel="SDVECU",
+            active_services=frozenset({
+                ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
+            }),
+            alarm_partitions=_PARTITIONS_WITH_PERIMETER,
+        )
 
-def test_sdvecu_without_est_rejects_arm_partial_perimeter() -> None:
-    """Issue #4: SDVECU + no EST → ARM_PARTIAL_PERIMETER refused with EST missing."""
-    r = _r("SDVECU", _SDVECU_NO_EST_SERVICES)
-    with pytest.raises(UnsupportedCommandError) as exc:
-        r.resolve(target=_PARTIAL_PERI, current=_OFF)
-    assert ServiceRequest.EST in exc.value.missing_services
-    assert exc.value.command == ArmCommand.ARM_PARTIAL_PERIMETER
+        cmd = resolver.resolve(
+            target=AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON),
+            current=AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF),
+        )
 
+        assert cmd == ArmCommand.ARM_PARTIAL_PERIMETER
 
-def test_sdvecu_without_est_rejects_arm_total_perimeter() -> None:
-    """Issue #4: SDVECU + no EST → ARM_TOTAL_PERIMETER refused with EST missing."""
-    r = _r("SDVECU", _SDVECU_NO_EST_SERVICES)
-    with pytest.raises(UnsupportedCommandError) as exc:
-        r.resolve(target=_TOTAL_PERI, current=_OFF)
-    assert ServiceRequest.EST in exc.value.missing_services
-    assert exc.value.command == ArmCommand.ARM_TOTAL_PERIMETER
+    def test_sdvecu_without_perimeter_demotes_to_armday1(self) -> None:
+        """laurafabry profile — partition 02 empty -> INTERIOR_ONLY effective family."""
+        resolver = CommandResolver(
+            panel="SDVECU",
+            active_services=frozenset({
+                ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
+            }),
+            alarm_partitions=_PARTITIONS_WITHOUT_PERIMETER,
+        )
 
+        # Caller (HA entity) would not request a PERIMETER target on a demoted
+        # install — but the resolver-layer guard exists for direct service callers.
+        with pytest.raises(UnsupportedCommandError) as exc_info:
+            resolver.resolve(
+                target=AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON),
+                current=AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF),
+            )
 
-def test_sdvecu_without_est_accepts_interior_only_arm() -> None:
-    """Demoted SDVECU still arms via the INTERIOR_ONLY path (ARMDAY1, ARM1)."""
-    r = _r("SDVECU", _SDVECU_NO_EST_SERVICES)
-    assert (
-        r.resolve(target=_PARTIAL, current=_OFF) == ArmCommand.ARM_PARTIAL
-    )
-    assert (
-        r.resolve(target=_TOTAL, current=_OFF) == ArmCommand.ARM_TOTAL
-    )
+        # The diagnostic must NOT name EST; it names the missing per-user
+        # permission via partition.
+        assert (
+            "perimeter" in str(exc_info.value).lower()
+            or "partition" in str(exc_info.value).lower()
+        )
 
+    def test_sdvecu_without_perimeter_arm_partial_off_works(self) -> None:
+        """Demoted install picks the interior-only command, no exception."""
+        resolver = CommandResolver(
+            panel="SDVECU",
+            active_services=frozenset({
+                ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
+            }),
+            alarm_partitions=_PARTITIONS_WITHOUT_PERIMETER,
+        )
 
-def test_sdvfast_missing_perimeter_reports_peri_not_est() -> None:
-    """Model-level INTERIOR_ONLY (no perimeter hardware) reports PERI missing.
+        cmd = resolver.resolve(
+            target=AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF),
+            current=AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF),
+        )
 
-    Distinguishes: PERI_CAPABLE-no-EST = missing EST (sensors not
-    provisioned); INTERIOR_ONLY = missing PERI (model has no perimeter
-    hardware at all). Issue body should point at the right service.
-    """
-    r = _r("SDVFAST", _SDVFAST_SERVICES)
-    with pytest.raises(UnsupportedCommandError) as exc:
-        r.resolve(target=_TOTAL_PERI, current=_OFF)
-    assert ServiceRequest.PERI in exc.value.missing_services
-    assert ServiceRequest.EST not in exc.value.missing_services
+        assert cmd == ArmCommand.ARM_PARTIAL
+
+    def test_sdvfast_missing_perimeter_reports_peri_not_partition(self) -> None:
+        """Model-level INTERIOR_ONLY (no perimeter hardware) reports PERI missing.
+
+        Distinguishes: PERI_CAPABLE-no-partition = partition detail message;
+        INTERIOR_ONLY = missing PERI (model has no perimeter hardware at all).
+        Issue body should point at the right diagnostic.
+        """
+        resolver = CommandResolver(
+            panel="SDVFAST",
+            active_services=_SDVFAST_SERVICES,
+            alarm_partitions=(),
+        )
+        with pytest.raises(UnsupportedCommandError) as exc:
+            resolver.resolve(target=_TOTAL_PERI, current=_OFF)
+        assert ServiceRequest.PERI in exc.value.missing_services
+        # Model-level INTERIOR_ONLY: no detail string (service-flag path).
+        assert exc.value.detail is None

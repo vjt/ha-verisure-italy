@@ -175,12 +175,20 @@ class UnsupportedCommandError(VerisureError):
         command: ArmCommand,
         panel: str,
         missing_services: frozenset[ServiceRequest],
+        detail: str | None = None,
     ) -> None:
         self.command = command
         self.panel = panel
         self.missing_services = missing_services
-        missing = ", ".join(sorted(s.value for s in missing_services))
-        super().__init__(
-            f"Panel {panel!r} cannot honour {command.value!r}: "
-            f"missing active service(s): {missing}"
-        )
+        self.detail = detail
+        if detail is not None:
+            message = (
+                f"Panel {panel!r} cannot honour {command.value!r}: {detail}"
+            )
+        else:
+            missing = ", ".join(sorted(s.value for s in missing_services))
+            message = (
+                f"Panel {panel!r} cannot honour {command.value!r}: "
+                f"missing active service(s): {missing}"
+            )
+        super().__init__(message)

@@ -17,6 +17,8 @@ from pydantic import BaseModel, ConfigDict
 from .exceptions import SameStateError, UnsupportedCommandError
 from .models import (
     PANEL_FAMILIES,
+    PARTITION_ID_PERIMETRAL,
+    AlarmPartition,
     AlarmState,
     ArmCommand,
     InteriorMode,
@@ -109,6 +111,7 @@ class CommandResolver(BaseModel):
 
     panel: str
     active_services: frozenset[ServiceRequest]
+    alarm_partitions: tuple[AlarmPartition, ...]
 
     def resolve(self, *, target: AlarmState, current: AlarmState) -> ArmCommand:
         """Return the ArmCommand for current -> target.
@@ -116,7 +119,8 @@ class CommandResolver(BaseModel):
         Raises:
           SameStateError — `current == target`, no mutation needed (benign).
           ValueError — unsupported transition / unknown panel (programming error).
-          UnsupportedCommandError — panel lacks the required active service.
+          UnsupportedCommandError — panel lacks the required active service or
+            user lacks per-partition permission for a perimeter command.
         """
         if self.panel not in PANEL_FAMILIES:
             raise ValueError(f"Unknown panel {self.panel!r}")
@@ -125,7 +129,7 @@ class CommandResolver(BaseModel):
                 f"Panel already in target state {target}. No command needed."
             )
 
-        family = effective_family(self.panel, self.active_services)
+        family = effective_family(self.panel, self.alarm_partitions)
         command = self._pick_command(target=target, current=current, family=family)
         self._assert_supported(command)
         return command
@@ -215,33 +219,44 @@ class CommandResolver(BaseModel):
         )
 
     def _assert_supported(self, command: ArmCommand) -> None:
-        """Raise UnsupportedCommandError if the panel cannot honour command.
+        """Raise UnsupportedCommandError if the panel cannot honour `command`.
 
         Two gates, both fail-secure:
           1. Effective family — INTERIOR_ONLY (model-level or runtime-
              demoted) rejects every perimeter variant. Demotion happens
-             when a PERI_CAPABLE model lacks `EST` in xSSrv (no perimeter
-             sensors provisioned); the panel rejects *PERI* commands with
-             error_code 101 / error_mpj_exception.
+             when a PERI_CAPABLE model's user lacks perimeter-arm
+             permission (partition `02` `enterStates` empty); the
+             panel rejects `*PERI*` commands with error_code 101 /
+             error_mpj_exception. The user-permission gate also implies
+             the install has perimeter sensors provisioned — you cannot
+             have a non-empty `enterStates` without underlying hardware.
           2. Sub-capability — ARMNIGHT / ARMANNEX / DARMANNEX gates based
-             on Service.active. Base ARM / DARM are always required.
+             on `Service.active`. Base ARM / DARM are always required.
         """
-        family = effective_family(self.panel, self.active_services)
+        family = effective_family(self.panel, self.alarm_partitions)
         if command in _PERI_COMMANDS and family == PanelFamily.INTERIOR_ONLY:
             # Distinguish model-level INTERIOR_ONLY (no perimeter hardware)
-            # from runtime-demoted PERI_CAPABLE (hardware capable, sensors
-            # not provisioned). Report the actual missing service so the
-            # GitHub issue body points at the real diagnostic.
+            # from runtime-demoted PERI_CAPABLE (model is peri-capable but
+            # the user / install has no perimeter permission). Different
+            # remediation paths, so the diagnostic must be specific.
             model_family = PANEL_FAMILIES[self.panel]
-            missing_service = (
-                ServiceRequest.EST
-                if model_family == PanelFamily.PERI_CAPABLE
-                else ServiceRequest.PERI
-            )
+            if model_family == PanelFamily.PERI_CAPABLE:
+                # Surface the partition-gate failure rather than a service flag.
+                raise UnsupportedCommandError(
+                    command=command,
+                    panel=self.panel,
+                    missing_services=frozenset(),  # not a service-flag issue
+                    detail=(
+                        f"Perimeter arm/disarm not permitted for this user "
+                        f"on partition {PARTITION_ID_PERIMETRAL!r} "
+                        f"(enterStates / leaveStates empty)."
+                    ),
+                )
+            # Model-level INTERIOR_ONLY — no perimeter hardware exists.
             raise UnsupportedCommandError(
                 command=command,
                 panel=self.panel,
-                missing_services=frozenset({missing_service}),
+                missing_services=frozenset({ServiceRequest.PERI}),
             )
         required = _COMMAND_REQUIRES[command]
         missing = required - self.active_services
