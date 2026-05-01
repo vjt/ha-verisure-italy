@@ -294,6 +294,17 @@ def test_unsupported_command_error_carries_context() -> None:
     assert "ARM1PERI1" in str(err)
 
 
+def test_unsupported_command_error_requires_missing_or_detail() -> None:
+    """Crash loud on the silently-malformed dual-None construction."""
+    with pytest.raises(ValueError, match="missing_services or detail"):
+        UnsupportedCommandError(
+            command=ArmCommand.ARM_TOTAL,
+            panel="SDVECU",
+            missing_services=frozenset(),
+            detail=None,
+        )
+
+
 class TestEffectiveFamily:
     """`effective_family` is the single source of truth for the perimeter gate.
 

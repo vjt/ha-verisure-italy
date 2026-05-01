@@ -177,6 +177,11 @@ class UnsupportedCommandError(VerisureError):
         missing_services: frozenset[ServiceRequest],
         detail: str | None = None,
     ) -> None:
+        if not missing_services and detail is None:
+            raise ValueError(
+                "UnsupportedCommandError requires missing_services or detail; "
+                "got both empty."
+            )
         self.command = command
         self.panel = panel
         self.missing_services = missing_services

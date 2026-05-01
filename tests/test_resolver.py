@@ -59,8 +59,18 @@ _PARTITIONS_WITHOUT_PERIMETER: tuple[AlarmPartition, ...] = (
 def _r(
     panel: str,
     services: frozenset[ServiceRequest],
-    alarm_partitions: tuple[AlarmPartition, ...] = (),
+    alarm_partitions: tuple[AlarmPartition, ...],
 ) -> CommandResolver:
+    """Construct a CommandResolver. `alarm_partitions` is required:
+
+    - `_PARTITIONS_WITH_PERIMETER` for tests exercising the perimeter path
+      (laurafabry profile inverse — provisioned + permitted).
+    - `_PARTITIONS_WITHOUT_PERIMETER` for tests exercising the
+      partition-gate demotion path (laurafabry profile).
+    - `()` for tests of model-level INTERIOR_ONLY panels (SDVFAST etc.) —
+      partition data is irrelevant there but the explicit `()` makes the
+      intent visible to the reader.
+    """
     return CommandResolver(
         panel=panel,
         active_services=services,
@@ -81,7 +91,7 @@ def test_disarm_from_total_only_uses_disarm() -> None:
 
 
 def test_disarm_sdvfast_uses_simple_disarm() -> None:
-    r = _r("SDVFAST", _SDVFAST_SERVICES)
+    r = _r("SDVFAST", _SDVFAST_SERVICES, ())
     assert r.resolve(target=_OFF, current=_TOTAL) == ArmCommand.DISARM
 
 
@@ -98,12 +108,12 @@ def test_arm_partial_from_off_peri_capable() -> None:
 
 
 def test_arm_total_from_off_interior_only() -> None:
-    r = _r("SDVFAST", _SDVFAST_SERVICES)
+    r = _r("SDVFAST", _SDVFAST_SERVICES, ())
     assert r.resolve(target=_TOTAL, current=_OFF) == ArmCommand.ARM_TOTAL
 
 
 def test_arm_partial_from_off_interior_only() -> None:
-    r = _r("SDVFAST", _SDVFAST_SERVICES)
+    r = _r("SDVFAST", _SDVFAST_SERVICES, ())
     assert r.resolve(target=_PARTIAL, current=_OFF) == ArmCommand.ARM_PARTIAL
 
 
@@ -117,14 +127,14 @@ def test_arm_partial_from_off_interior_only() -> None:
 
 def test_sdvfast_transition_partial_to_total_uses_intfpart() -> None:
     """SDVFAST has ARMINTFPART active → single-step transition."""
-    r = _r("SDVFAST", _SDVFAST_SERVICES)
+    r = _r("SDVFAST", _SDVFAST_SERVICES, ())
     out = r.resolve(target=_TOTAL, current=_PARTIAL)
     assert out == ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR
 
 
 def test_sdvfast_transition_total_to_partial_uses_partfint_day() -> None:
     """SDVFAST has ARMPARTFINT active → single-step transition."""
-    r = _r("SDVFAST", _SDVFAST_SERVICES)
+    r = _r("SDVFAST", _SDVFAST_SERVICES, ())
     out = r.resolve(target=_PARTIAL, current=_TOTAL)
     assert out == ArmCommand.ARM_PARTIAL_FROM_TOTAL
 
@@ -155,7 +165,7 @@ def test_arm_perimeter_only() -> None:
 
 
 def test_arm_perimeter_rejected_on_interior_only_panel() -> None:
-    r = _r("SDVFAST", _SDVFAST_SERVICES)
+    r = _r("SDVFAST", _SDVFAST_SERVICES, ())
     with pytest.raises(UnsupportedCommandError) as exc:
         r.resolve(target=_PERI, current=_OFF)
     assert ServiceRequest.PERI in exc.value.missing_services
@@ -203,7 +213,7 @@ def test_noop_when_target_equals_current() -> None:
 
 
 def test_unknown_panel_rejected() -> None:
-    r = _r("TOTALLY_FAKE", _SDVECU_SERVICES)
+    r = _r("TOTALLY_FAKE", _SDVECU_SERVICES, ())
     with pytest.raises(ValueError, match="TOTALLY_FAKE"):
         r.resolve(target=_TOTAL, current=_OFF)
 
@@ -284,11 +294,13 @@ class TestResolverPerimeterGate:
             )
 
         # The diagnostic must NOT name EST; it names the missing per-user
-        # permission via partition.
-        assert (
-            "perimeter" in str(exc_info.value).lower()
-            or "partition" in str(exc_info.value).lower()
-        )
+        # permission via partition. Assert the new-shape contract directly
+        # (detail string + empty missing_services) — substring matches on
+        # str(exc) are too loose because the command name itself contains
+        # "perimeter".
+        assert exc_info.value.missing_services == frozenset()
+        assert exc_info.value.detail is not None
+        assert "partition" in exc_info.value.detail.lower()
 
     def test_sdvecu_without_perimeter_arm_partial_off_works(self) -> None:
         """Demoted install picks the interior-only command, no exception."""
