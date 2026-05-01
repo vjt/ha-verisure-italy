@@ -322,6 +322,12 @@ class VerisureClient:
         Populated as a side-effect of `_active_services_cached` on the first
         arm/disarm per session. Tests seed directly via
         `client._partitions_cache[installation.number] = (...)`.
+
+        Treats `not yet populated` and `provisioned without perimeter
+        permission` identically — both produce `()`, both demote to
+        INTERIOR_ONLY at the resolver. Callers that need to distinguish
+        the two cases must check `installation.number in self._partitions_cache`
+        explicitly.
         """
         return self._partitions_cache.get(installation.number, ())
 
@@ -795,9 +801,11 @@ class VerisureClient:
         )
 
         # Services and partitions might change if the installation is
-        # reconfigured; drop both per-installation caches on every
-        # capabilities rotation so the next arm/disarm picks up the new
-        # active-service / partition set.
+        # reconfigured; refresh both per-installation caches on every
+        # capabilities rotation. Services are popped (re-derived lazily
+        # by _active_services_cached when next consulted); partitions
+        # are written directly since they're already in their final
+        # tuple shape on the parsed envelope.
         self._services_cache.pop(installation.number, None)
         self._partitions_cache[installation.number] = tuple(
             srv.config_repo_user.alarm_partitions

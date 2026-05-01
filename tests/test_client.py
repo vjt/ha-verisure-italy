@@ -1891,3 +1891,24 @@ class TestClientPartitionGate:
 
         # No arm mutation must have hit the network.
         assert not _has_call_with_operation(mock_api, "xSArmPanel")
+
+    async def test_client_demotes_when_partition_cache_empty(
+        self, mock_api, client,
+    ) -> None:
+        """Cache-miss is fail-secure: empty/unpopulated partitions →
+        INTERIOR_ONLY effective family → resolver refuses PERI command.
+
+        Pins down the contract that "not yet populated" and
+        "provisioned without perimeter permission" produce identical
+        gate behaviour — see _cached_partitions docstring.
+        """
+        _authenticate(client)
+        # Explicit cache miss — the install number is not present.
+        client._partitions_cache.pop(INSTALLATION.number, None)
+
+        target = AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON)
+
+        with pytest.raises(UnsupportedCommandError):
+            await client.arm(INSTALLATION, target)
+
+        assert not _has_call_with_operation(mock_api, "xSArmPanel")
