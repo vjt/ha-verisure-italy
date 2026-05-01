@@ -35,26 +35,7 @@ from verisure_italy.models import (
     InteriorMode,
     PanelFamily,
     PerimeterMode,
-    ServiceRequest,
 )
-
-# Canonical default services per family. PERI_CAPABLE installs include EST
-# (perimeter sensors provisioned); INTERIOR_ONLY do not. Tests for the
-# v0.9.3 no-EST demotion case override `coordinator.active_services` after
-# `_make_panel_entity` to drop EST and assert the demoted behaviour.
-_DEFAULT_SERVICES: dict[PanelFamily, frozenset[ServiceRequest]] = {
-    PanelFamily.PERI_CAPABLE: frozenset({
-        ServiceRequest.ARM,
-        ServiceRequest.DARM,
-        ServiceRequest.ARMNIGHT,
-        ServiceRequest.EST,
-    }),
-    PanelFamily.INTERIOR_ONLY: frozenset({
-        ServiceRequest.ARM,
-        ServiceRequest.DARM,
-        ServiceRequest.ARMNIGHT,
-    }),
-}
 
 # Canonical default alarm_partitions per family (v0.9.4 partition-aware gate).
 # PERI_CAPABLE installs get a filled partition 02 (enterStates non-empty);
@@ -97,17 +78,13 @@ def _make_panel_entity(panel: str):
     coordinator.data = MagicMock()
     coordinator.data.alarm_state = MagicMock()
     coordinator.force_context = None
-    # Seed canonical-for-family services so effective_family() returns the
-    # model-level family. Tests targeting the demoted PERI_CAPABLE-no-EST
-    # case override this attribute directly after the call.
-    family = PANEL_FAMILIES.get(panel)
-    coordinator.active_services = (
-        _DEFAULT_SERVICES[family] if family is not None else frozenset()
-    )
     # Seed canonical-for-family partitions (v0.9.4 partition-aware gate).
     # PERI_CAPABLE gets a filled partition 02; INTERIOR_ONLY gets empty tuple.
     # Tests for the demotion case (laurafabry profile) override alarm_partitions
     # to simulate a user who lacks perimeter permission (partition 02 empty).
+    # active_services is NOT seeded — effective_family() reads alarm_partitions
+    # only (v0.9.4+); no entity-level code consumes active_services directly.
+    family = PANEL_FAMILIES.get(panel)
     coordinator.alarm_partitions = (
         _DEFAULT_PARTITIONS[family] if family is not None else ()
     )

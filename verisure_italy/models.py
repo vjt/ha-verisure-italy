@@ -144,19 +144,30 @@ class ArmCommand(StrEnum):
 
 
 class ServiceRequest(StrEnum):
-    """Values of Service.request from xSSrv that gate arm/disarm commands.
+    """Service codes recognised from `xSSrv.installation.services[].request`.
 
-    Each ArmCommand requires at least one of these services to be
-    active=true for the panel to honour it. The mapping lives in
-    verisure_italy/resolver.py (added in a later task).
+    Some members are load-bearing for capability decisions (ARM, DARM,
+    ARMNIGHT, ARMANNEX, DARMANNEX, ARMINTFPART, ARMPARTFINT — see
+    `_COMMAND_REQUIRES` in resolver.py). Others (`PERI`, `EST`,
+    `ARMDAY`) are recognised for visibility but NOT used as gates:
 
-    EST is not a command-gating service — it advertises that the install
-    has perimeter sensors provisioned. PANEL_FAMILIES maps panel models
-    to PERI_CAPABLE / INTERIOR_ONLY at the model level, but a single
-    PERI_CAPABLE model (e.g. SDVECU) can ship with or without perimeter
-    sensors. EST presence is the runtime indicator; without it, *PERI*
-    arm commands are rejected by the panel (error_code 101,
-    error_mpj_exception). See effective_family() below.
+      - `PERI` is absent on installs that fully support `*PERI*`
+        commands (maintainer's SDVECU has perimeter sensors but no
+        `PERI` row in xSSrv) — observed empirically.
+      - `EST` advertises that perimeter sensors are provisioned at the
+        install level. Was used as the perimeter gate in v0.9.3 but
+        proved insufficient: an install with `EST` active can still
+        have per-user perimeter permission disabled (Issue #5,
+        laurafabry SDVECU). Replaced in v0.9.4 by the partition gate
+        (`AlarmPartition`).
+      - `ARMDAY` is a UI hint that does not gate the wire `ARMDAY1`
+        command — empirically present on some panels and absent on
+        others that nonetheless accept `ARMDAY1` fine.
+
+    Members listed here without a corresponding entry in
+    `_COMMAND_REQUIRES` survive the `active_services()` filter so the
+    raw set reflects what the API reported, but they participate in
+    no command-selection logic.
     """
 
     ARM = "ARM"
@@ -585,14 +596,15 @@ class RequestImagesStatusResult(BaseModel):
 
 
 def active_services(services: list[Service]) -> frozenset[ServiceRequest]:
-    """Return the set of ServiceRequest codes active on the panel.
+    """Return the set of `ServiceRequest` codes active on the panel.
 
-    Inputs are parsed Service objects (from xSSrv). Unknown request
+    Inputs are parsed `Service` objects (from xSSrv). Unknown request
     strings (IMG, CAMERAS, TIMELINE, …) are dropped — the set reports
-    only the codes the resolver / family logic knows how to consume.
-    EST is retained even though it doesn't gate any specific command:
-    its presence/absence drives effective_family() to demote
-    PERI_CAPABLE panels without perimeter sensors to INTERIOR_ONLY.
+    only the codes the resolver / family logic recognises.
+
+    Recognised-but-not-load-bearing codes (`EST`, `PERI`, `ARMDAY`)
+    are retained for visibility / future use — see the
+    `ServiceRequest` enum docstring for the rationale.
     """
     known: set[ServiceRequest] = set()
     for svc in services:
