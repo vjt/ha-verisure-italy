@@ -352,6 +352,10 @@ class TestEffectiveFamily:
                 f"{panel} did not demote with empty perimeter perms"
             )
 
+    def test_empty_partitions_demotes_peri_capable(self) -> None:
+        """Pre-first-refresh empty tuple must demote, not silently keep PERI_CAPABLE."""
+        assert effective_family("SDVECU", ()) == PanelFamily.INTERIOR_ONLY
+
 
 class TestAlarmPartition:
     """Pydantic parse for xSSrv.installation.configRepoUser.alarmPartitions[]."""
