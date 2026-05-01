@@ -1,5 +1,75 @@
 # Changelog
 
+## 0.9.4 — TBD (v0.9.3 superseded)
+
+Bug-fix release for Issue #5 (`laurafabry`). The v0.9.3 fix
+targeted the wrong root cause: the EST-based `effective_family`
+demotion proved insufficient — laurafabry's SDVECU has `EST`
+active in `xSSrv` and still rejects every `*PERI*` arm command.
+The actual gate the official Verisure IT web app uses is the
+per-user partition permission set in
+`xSSrv.installation.configRepoUser.alarmPartitions`.
+
+### Fixes
+
+- **Partition-aware `effective_family`.** Signature changes to
+  `effective_family(panel, alarm_partitions)`. A `PERI_CAPABLE`
+  model whose `partition[id="02"].enterStates` is empty is demoted
+  to `INTERIOR_ONLY` for arm-target selection, the proto→state
+  reverse map, and the resolver's perimeter gate. Mirrors the web
+  app's client-side `z()` function.
+- **`SERVICES_QUERY` extended** to fetch
+  `configRepoUser { alarmPartitions { id enterStates leaveStates } }`
+  — same operation, additive field. New Pydantic models:
+  `AlarmPartition`, `ConfigRepoUser`. Partition-id constants:
+  `PARTITION_ID_MAIN`/`PERIMETRAL`/`ANNEX`.
+- **Resolver diagnostic** for demoted PERI_CAPABLE installs now
+  names the partition-permission gap rather than a missing service
+  flag (the v0.9.3 message claimed `EST` was missing — wrong).
+- **Diagnostics failure report** includes a partition snapshot, so
+  future arm-failure reports self-diagnose.
+
+### Removed
+
+- The v0.9.3 EST-based demotion path. `ServiceRequest.EST` is
+  retained as a recognised service code for visibility; it has
+  zero capability-gate consumers as of v0.9.4. Same treatment as
+  `PERI` (recognised, never gated on).
+- `_DEFAULT_SERVICES` test fixture seed in
+  `tests/test_alarm_panel_gate.py` (dead since the v0.9.4 entity
+  reads `coordinator.alarm_partitions` only).
+
+### Tests
+
+- `TestAlarmPartition` — Pydantic round-trip + frozen.
+- `TestEffectiveFamily` — rewritten around partitions; matrix:
+  perimeter present, perimeter absent (laurafabry profile),
+  INTERIOR_ONLY stable, missing PERIMETRAL row treated as no
+  permission, every PERI_CAPABLE panel demotes uniformly.
+- `TestResolverPerimeterGate` — SDVECU + empty partition-02 →
+  `UnsupportedCommandError` with partition-permission detail
+  (no `EST` in the message).
+- `TestEntityPartitionGate` — entity arm-target selection on
+  laurafabry profile picks `(PARTIAL, OFF)` and `(TOTAL, OFF)`
+  for arm_home and arm_away respectively.
+- `TestClientPartitionGate` — end-to-end through `client.arm()`:
+  laurafabry-profile xSSrv response causes `UnsupportedCommandError`
+  with no wire bytes sent.
+
+### No changes to
+
+- `PANEL_FAMILIES` (model-level classifier).
+- `_PERI_COMMANDS` / `_COMMAND_REQUIRES`.
+- The fail-secure proto→state mapping for INTERIOR_ONLY.
+
+### Validation
+
+- Live capture of maintainer's SDVECU+EST web session
+  (`customers.verisure.it`) confirmed the wire shape and gate
+  logic. See `docs/findings/configrepouser-partitions.md`.
+- Live E2E on maintainer install: pending (Task 12 of the plan).
+- Issue #5 fix verification by laurafabry: pending.
+
 ## 0.9.3 — 2026-04-30
 
 Bug-fix release for Issue #4 (`laurafabry`). An SDVECU panel without

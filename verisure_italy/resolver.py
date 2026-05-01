@@ -42,10 +42,15 @@ from .models import (
 #   - ARMANNEX / DARMANNEX (annex-equipped panels only)
 # Perimeter gating is handled by effective_family() below — model-level
 # PANEL_FAMILIES rejects *PERI* on INTERIOR_ONLY models (SDVFAST, SDVFSW),
-# and effective_family additionally demotes PERI_CAPABLE installs that
-# lack `EST` (perimeter sensors not provisioned). The PERI service flag
-# is unreliable: maintainer's fully-perimeter SDVECU lacks PERI in xSSrv
-# yet accepts every *PERI* command, so it cannot be used as a gate.
+# and effective_family additionally demotes PERI_CAPABLE installs whose
+# configRepoUser.alarmPartitions[id="02"].enterStates is empty (per-user
+# perimeter permission not granted). This is the authoritative gate as of
+# v0.9.4 (Issue #5). The EST service flag is recognised but not load-bearing:
+# v0.9.3 used it as the gate, but it proved necessary-not-sufficient —
+# an install with EST active can still have partition-02 permissions empty.
+# See docs/findings/configrepouser-partitions.md. The PERI service flag is
+# also unreliable: maintainer's SDVECU lacks PERI yet accepts every *PERI*
+# command, so it cannot be used as a gate.
 _COMMAND_REQUIRES: dict[ArmCommand, frozenset[ServiceRequest]] = {
     # Disarm — base DARM only; perimeter-disarm variants are family-gated.
     ArmCommand.DISARM: frozenset({ServiceRequest.DARM}),

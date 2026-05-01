@@ -103,16 +103,18 @@ The actual gating observed in practice:
 | `ARMANNEX` / `DARMANNEX` (active) | Panel has an annex zone (sub-cap). |
 | `ARMDAY` / `PERI` flags | **UI hints, not wire-protocol gates**. Absence doesn't block the corresponding wire commands on panels that physically support them. |
 | Panel FAMILY (peri-capable vs interior-only) | Model-level capability. SDVFAST/SDVFSW (interior-only family) reject every `*PERI*` command regardless of service flags — no perimeter hardware exists. |
-| `EST` (active) | **Runtime perimeter-provisioning indicator**. A `PERI_CAPABLE` model can ship without perimeter sensors provisioned; in that case `EST` is absent from `xSSrv` and the panel rejects every `*PERI*` command with `code 101 / error_mpj_exception`. Drives `effective_family()` demotion (Issue #4, v0.9.3). |
+| `EST` (active) | **Recognised, not load-bearing.** Advertises perimeter sensor provisioning at the install level. Was the v0.9.3 perimeter gate but Issue #5 proved necessary-but-not-sufficient: per-user partition permission supersedes it (v0.9.4). Retained in `ServiceRequest` enum for visibility. |
+| `configRepoUser.alarmPartitions[id="02"].enterStates` | **Authoritative perimeter-arm gate** — partition `02` is the PERIMETRAL partition; non-empty `enterStates` means the user is permitted to arm perimeter. Mirrors the web-app gate. |
+| `configRepoUser.alarmPartitions[id="02"].leaveStates` | **Authoritative perimeter-disarm gate** — same shape, gates `*PERI*` disarm variants. |
 
 ### CommandResolver gating logic
 
 1. **Base gate**: every arm variant requires `ARM`; every disarm variant requires `DARM`.
 2. **Sub-capability gate**: `ARMNIGHT`/`ARMANNEX`/`DARMANNEX` required only for commands that use them (e.g. `ARMNIGHT1`).
-3. **Effective-family gate**: perimeter-involving commands (`ARM1PERI1`, `ARMDAY1PERI1`, `ARMNIGHT1PERI1`, `PERI1`, `ARMINTEXT1`, `DARM1DARMPERI`, `DARMPERI`) are rejected client-side when the **effective** family is `INTERIOR_ONLY`. Effective family combines the model-level classifier (`PANEL_FAMILIES`) with a runtime demotion: a `PERI_CAPABLE` model whose `xSSrv` lacks `EST` is treated as `INTERIOR_ONLY`. The HA entity also consults effective family when picking arm targets, so the resolver never sees a perimeter target on a no-EST install in the first place; the resolver-level check is defense in depth for direct service callers.
+3. **Effective-family gate**: perimeter-involving commands (`ARM1PERI1`, `ARMDAY1PERI1`, `ARMNIGHT1PERI1`, `PERI1`, `ARMINTEXT1`, `DARM1DARMPERI`, `DARMPERI`) are rejected client-side when the **effective** family is `INTERIOR_ONLY`. Effective family combines the model-level classifier (`PANEL_FAMILIES`) with a runtime demotion: a `PERI_CAPABLE` model whose `configRepoUser.alarmPartitions[id="02"].enterStates` is empty is treated as `INTERIOR_ONLY`. The HA entity also consults effective family when picking arm targets, so the resolver never sees a perimeter target on a no-partition-permission install in the first place; the resolver-level check is defense in depth for direct service callers.
 4. **Panel rejection** remains fail-secure: if we do send a command the panel refuses, we crash loud with the full wire-level response (see failure-report markers).
 
-`PERI` service flag is **not** used as a gate — it's observed to be absent on panels that fully support perimeter operations (maintainer's SDVECU+EST has no `PERI` in services yet accepts every `*PERI*` command). `EST` is the reliable runtime signal because it advertises sensor provisioning rather than UI capability.
+`PERI` service flag is **not** used as a gate — it's observed to be absent on panels that fully support perimeter operations (maintainer's SDVECU+EST has no `PERI` in services yet accepts every `*PERI*` command). `EST` is likewise **not** the gate as of v0.9.4: it is necessary-but-not-sufficient — Issue #5 proved an install with `EST` active can have per-user perimeter permission disabled. The authoritative gate is `configRepoUser.alarmPartitions[id="02"].enterStates` non-empty. See `docs/findings/configrepouser-partitions.md`.
 
 ## Panel roster (from bundle, 2026-04-24 / v2.4.2)
 
