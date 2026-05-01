@@ -451,25 +451,32 @@ SUPPORTED_PANELS: frozenset[str] = frozenset(PANEL_FAMILIES.keys())
 
 
 def effective_family(
-    panel: str, services: frozenset[ServiceRequest]
+    panel: str, alarm_partitions: tuple[AlarmPartition, ...]
 ) -> PanelFamily:
-    """Return the install's effective family, demoting on missing perimeter.
+    """Return the install's effective family, demoting on missing perimeter perms.
 
-    PANEL_FAMILIES classifies panels by model. A PERI_CAPABLE model
-    (e.g. SDVECU) can still ship with perimeter sensors un-provisioned;
-    the runtime signal is `ServiceRequest.EST` in xSSrv. When EST is
-    absent on a PERI_CAPABLE install, every *PERI* arm command is
-    rejected by the panel with error_code 101 (error_mpj_exception).
+    `PANEL_FAMILIES` classifies panels by model. A `PERI_CAPABLE` model
+    (e.g. SDVECU) can still ship without per-user perimeter permission
+    — partition `02` (PERIMETRAL) has empty `enterStates`. The official
+    Verisure web app gates every `*PERI*` arm on partition-`02`
+    `enterStates` being non-empty; we mirror that gate here.
 
     This function is the single source of truth: callers (resolver,
     HA entity) decide arm targets and proto→state mapping by effective
     family rather than by `PANEL_FAMILIES[panel]` directly.
 
-    Raises KeyError if the panel is not in PANEL_FAMILIES — same
-    contract as the caller would have hit looking up the dict.
+    Raises:
+        KeyError — `panel` not in `PANEL_FAMILIES`. Same contract as
+        the caller would have hit looking up the dict directly.
     """
     family = PANEL_FAMILIES[panel]
-    if family == PanelFamily.PERI_CAPABLE and ServiceRequest.EST not in services:
+    if family != PanelFamily.PERI_CAPABLE:
+        return family
+    perimetral = next(
+        (p for p in alarm_partitions if p.id == PARTITION_ID_PERIMETRAL),
+        None,
+    )
+    if perimetral is None or not perimetral.enter_states:
         return PanelFamily.INTERIOR_ONLY
     return family
 

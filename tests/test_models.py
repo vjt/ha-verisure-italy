@@ -9,6 +9,7 @@ from verisure_italy.models import (
     PROTO_TO_STATE,
     STATE_TO_PROTO,
     SUPPORTED_PANELS,
+    AlarmPartition,
     AlarmState,
     ArmCommand,
     GeneralStatus,
@@ -294,45 +295,62 @@ def test_unsupported_command_error_carries_context() -> None:
 
 
 class TestEffectiveFamily:
-    """effective_family() — runtime perimeter-provisioning override."""
+    """`effective_family` is the single source of truth for the perimeter gate.
 
-    def test_peri_capable_with_est_stays_peri_capable(self) -> None:
-        services = frozenset({
-            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.EST,
-        })
-        assert effective_family("SDVECU", services) == PanelFamily.PERI_CAPABLE
+    Partition `02` (PERIMETRAL) `enter_states` non-empty means the user
+    has perimeter-arm permission AND the install has perimeter sensors
+    provisioned (the second is a precondition of the first). When empty,
+    the panel rejects every `*PERI*` command — we demote at the family
+    layer so the resolver never even tries.
+    """
 
-    def test_peri_capable_without_est_demotes_to_interior_only(self) -> None:
-        """Issue #4: SDVECU without EST → INTERIOR_ONLY effective family."""
-        services = frozenset({
-            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
-        })
-        assert effective_family("SDVECU", services) == PanelFamily.INTERIOR_ONLY
+    def _peri_partitions(self, *, perimetral_enter: tuple[str, ...]) -> tuple[AlarmPartition, ...]:
+        leave: tuple[str, ...] = ("01",) if perimetral_enter else ()
+        return (
+            AlarmPartition(id="01", enterStates=("01", "02"), leaveStates=("01", "02")),
+            AlarmPartition(id="02", enterStates=perimetral_enter, leaveStates=leave),
+            AlarmPartition(id="03", enterStates=(), leaveStates=()),
+        )
 
-    def test_interior_only_stays_interior_only_with_or_without_est(self) -> None:
-        """Model-level INTERIOR_ONLY is stable regardless of EST presence."""
-        no_est = frozenset({ServiceRequest.ARM, ServiceRequest.DARM})
-        with_est = no_est | {ServiceRequest.EST}
-        assert effective_family("SDVFAST", no_est) == PanelFamily.INTERIOR_ONLY
-        # An INTERIOR_ONLY model advertising EST shouldn't happen, but if
-        # it ever does the family stays INTERIOR_ONLY (model is the floor).
-        assert effective_family("SDVFAST", with_est) == PanelFamily.INTERIOR_ONLY
+    def test_peri_capable_with_perimeter_perm_stays_peri_capable(self) -> None:
+        partitions = self._peri_partitions(perimetral_enter=("01",))
 
-    def test_unknown_panel_raises_key_error(self) -> None:
-        with pytest.raises(KeyError, match="ACME9000"):
-            effective_family("ACME9000", frozenset())
+        assert effective_family("SDVECU", partitions) == PanelFamily.PERI_CAPABLE
 
-    def test_empty_services_demotes_peri_capable(self) -> None:
-        """Pre-first-refresh empty set must not silently keep PERI_CAPABLE."""
-        assert effective_family("SDVECU", frozenset()) == PanelFamily.INTERIOR_ONLY
+    def test_peri_capable_without_perimeter_perm_demotes_to_interior_only(self) -> None:
+        """laurafabry's SDVECU profile — partition 02 enterStates empty."""
+        partitions = self._peri_partitions(perimetral_enter=())
 
-    def test_all_peri_capable_models_demote_without_est(self) -> None:
-        no_est = frozenset({ServiceRequest.ARM, ServiceRequest.DARM})
-        for panel, family in PANEL_FAMILIES.items():
-            if family == PanelFamily.PERI_CAPABLE:
-                assert effective_family(panel, no_est) == PanelFamily.INTERIOR_ONLY, (
-                    f"{panel} should demote without EST"
-                )
+        assert effective_family("SDVECU", partitions) == PanelFamily.INTERIOR_ONLY
+
+    def test_interior_only_is_stable_with_or_without_partitions(self) -> None:
+        # Partitions present (e.g. only MAIN populated, no PERIMETRAL row at all)
+        partitions = (
+            AlarmPartition(id="01", enterStates=("01",), leaveStates=("01",)),
+        )
+
+        assert effective_family("SDVFAST", partitions) == PanelFamily.INTERIOR_ONLY
+
+    def test_unknown_panel_raises_keyerror(self) -> None:
+        with pytest.raises(KeyError):
+            effective_family("SOMETHING_NEW", ())
+
+    def test_missing_perimetral_partition_treated_as_no_perimeter(self) -> None:
+        """Fail-secure: if the API doesn't list partition `02` at all, no PERI."""
+        partitions = (AlarmPartition(id="01", enterStates=("01",), leaveStates=("01",)),)
+
+        assert effective_family("SDVECU", partitions) == PanelFamily.INTERIOR_ONLY
+
+    def test_every_peri_capable_panel_demotes_uniformly(self) -> None:
+        peri_capable_panels = [
+            p for p, f in PANEL_FAMILIES.items() if f == PanelFamily.PERI_CAPABLE
+        ]
+        empty_partitions = self._peri_partitions(perimetral_enter=())
+
+        for panel in peri_capable_panels:
+            assert effective_family(panel, empty_partitions) == PanelFamily.INTERIOR_ONLY, (
+                f"{panel} did not demote with empty perimeter perms"
+            )
 
 
 class TestAlarmPartition:
