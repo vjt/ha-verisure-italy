@@ -178,8 +178,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         permission (partition '02' enterStates / leaveStates empty) must
         use INTERIOR_ONLY arm targets and proto→state mapping — otherwise
         the resolver would emit *PERI* commands the panel rejects with
-        error_code 101 / error_mpj_exception (laurafabry profile, Issue #4).
-        The coordinator populates `alarm_partitions` during first refresh,
+        error_code 101 / error_mpj_exception (laurafabry profile, Issue #5
+        — superseded the v0.9.3 EST hypothesis from Issue #4). The
+        coordinator populates `alarm_partitions` during first refresh,
         before any entity is constructed, so the lookup is always valid.
         """
         return effective_family(

@@ -172,18 +172,24 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         )
 
         # Active services — populated during first refresh from xSSrv.
-        # Drives effective_family() for PERI_CAPABLE panels: an SDVECU
-        # without `EST` in services has no perimeter sensors provisioned,
-        # so arm targets must be demoted to interior-only. Frozenset starts
-        # empty; the first-refresh fetch is mandatory and `UpdateFailed`
-        # is raised if it errors — no silent fallback to model-level family,
-        # because the wrong family on a no-EST install means every arm
-        # command gets rejected with error_mpj_exception.
+        # Surfaces sub-capability flags (ARMNIGHT, ARMANNEX, …) consumed
+        # by the resolver (`_COMMAND_REQUIRES` in resolver.py). Frozenset
+        # starts empty; the first-refresh fetch is mandatory and
+        # `UpdateFailed` is raised if it errors — no silent fallback.
+        # The perimeter gate itself is NOT driven from here as of v0.9.4
+        # (see alarm_partitions below + docs/findings/configrepouser-
+        # partitions.md).
         self.active_services: frozenset[ServiceRequest] = frozenset()
         # Alarm partitions — populated alongside active_services on first
-        # refresh. Consumed by Task 7's HA entity to call the
-        # partition-aware effective_family(panel, alarm_partitions).
-        # Tuple starts empty (fail-secure: no partitions → INTERIOR_ONLY).
+        # refresh. The HA entity calls
+        # effective_family(panel, alarm_partitions) which gates `*PERI*`
+        # commands on partition `02` (PERIMETRAL) `enterStates` being
+        # non-empty. A PERI_CAPABLE model whose user lacks perimeter
+        # permission gets demoted to INTERIOR_ONLY for arm-target
+        # selection — otherwise the resolver would emit *PERI* commands
+        # the panel rejects with error_code 101 / error_mpj_exception
+        # (Issue #5, laurafabry SDVECU). Tuple starts empty (fail-secure:
+        # no partitions → INTERIOR_ONLY).
         self.alarm_partitions: tuple[AlarmPartition, ...] = ()
         self._services_discovered: bool = False
 

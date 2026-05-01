@@ -26,6 +26,10 @@ The Verisure API is undocumented. Everything here was discovered by:
   `ArmCodeRequest` / `DisarmCodeRequest` enum + decoded target→command
   resolver + panel roster (8 panels, two families) extracted from the
   web bundle
+- [`configrepouser-partitions.md`](configrepouser-partitions.md) —
+  per-user perimeter permission gate
+  (`xSSrv.installation.configRepoUser.alarmPartitions[id="02"]`)
+  that supersedes the v0.9.3 EST hypothesis (Issue #5)
 - [`timeline-api.md`](timeline-api.md) — `xSActV2` / `ActV2Timeline`
   query shape + response, signal type codes observed, basis for a
   future dashboard card

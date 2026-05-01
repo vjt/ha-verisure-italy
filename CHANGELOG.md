@@ -49,9 +49,10 @@ per-user partition permission set in
 - `TestResolverPerimeterGate` — SDVECU + empty partition-02 →
   `UnsupportedCommandError` with partition-permission detail
   (no `EST` in the message).
-- `TestEntityPartitionGate` — entity arm-target selection on
-  laurafabry profile picks `(PARTIAL, OFF)` and `(TOTAL, OFF)`
-  for arm_home and arm_away respectively.
+- `TestArmTargetsByFamily` — entity arm-target selection on the
+  laurafabry profile picks `(PARTIAL, OFF)` and `(TOTAL, OFF)` for
+  arm_home and arm_away respectively (covers both partition-02-empty
+  and partition-row-absent shapes).
 - `TestClientPartitionGate` — end-to-end through `client.arm()`:
   laurafabry-profile xSSrv response causes `UnsupportedCommandError`
   with no wire bytes sent.
