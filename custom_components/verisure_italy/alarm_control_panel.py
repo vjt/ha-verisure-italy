@@ -172,17 +172,19 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
     @property
     def _panel_family(self) -> PanelFamily:
-        """Effective family for this install (model-level, demoted on no EST).
+        """Effective family for this install (model-level, demoted on empty partition 02).
 
-        A PERI_CAPABLE model (e.g. SDVECU) without the `EST` service in
-        xSSrv has no perimeter sensors provisioned, so arm targets +
-        proto→state mapping must follow the INTERIOR_ONLY shape. The
-        coordinator populates `active_services` during first refresh,
+        A PERI_CAPABLE model (e.g. SDVECU) whose user lacks perimeter
+        permission (partition '02' enterStates / leaveStates empty) must
+        use INTERIOR_ONLY arm targets and proto→state mapping — otherwise
+        the resolver would emit *PERI* commands the panel rejects with
+        error_code 101 / error_mpj_exception (laurafabry profile, Issue #4).
+        The coordinator populates `alarm_partitions` during first refresh,
         before any entity is constructed, so the lookup is always valid.
         """
         return effective_family(
             self.coordinator.installation.panel,
-            self.coordinator.active_services,
+            self.coordinator.alarm_partitions,
         )
 
     def _update_alarm_state(self) -> None:

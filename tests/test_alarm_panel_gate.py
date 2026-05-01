@@ -29,6 +29,7 @@ from verisure_italy.exceptions import (
 from verisure_italy.models import (
     PANEL_FAMILIES,
     SUPPORTED_PANELS,
+    AlarmPartition,
     AlarmState,
     Installation,
     InteriorMode,
@@ -53,6 +54,22 @@ _DEFAULT_SERVICES: dict[PanelFamily, frozenset[ServiceRequest]] = {
         ServiceRequest.DARM,
         ServiceRequest.ARMNIGHT,
     }),
+}
+
+# Canonical default alarm_partitions per family (v0.9.4 partition-aware gate).
+# PERI_CAPABLE installs get a filled partition 02 (enterStates non-empty);
+# INTERIOR_ONLY panels have no perimeter partition.
+# Tests for the demotion case override `coordinator.alarm_partitions` to
+# simulate a user who lacks perimeter permission (partition 02 empty).
+_PARTITION_PERIMETRAL_FULL = AlarmPartition.model_validate({
+    "id": "02", "enterStates": ("01",), "leaveStates": ("01",),
+})
+_PARTITION_PERIMETRAL_EMPTY = AlarmPartition.model_validate({
+    "id": "02", "enterStates": (), "leaveStates": (),
+})
+_DEFAULT_PARTITIONS: dict[PanelFamily, tuple[AlarmPartition, ...]] = {
+    PanelFamily.PERI_CAPABLE: (_PARTITION_PERIMETRAL_FULL,),
+    PanelFamily.INTERIOR_ONLY: (),
 }
 
 
@@ -86,6 +103,13 @@ def _make_panel_entity(panel: str):
     family = PANEL_FAMILIES.get(panel)
     coordinator.active_services = (
         _DEFAULT_SERVICES[family] if family is not None else frozenset()
+    )
+    # Seed canonical-for-family partitions (v0.9.4 partition-aware gate).
+    # PERI_CAPABLE gets a filled partition 02; INTERIOR_ONLY gets empty tuple.
+    # Tests for the demotion case (laurafabry profile) override alarm_partitions
+    # to simulate a user who lacks perimeter permission (partition 02 empty).
+    coordinator.alarm_partitions = (
+        _DEFAULT_PARTITIONS[family] if family is not None else ()
     )
 
     # VerisureAlarmPanel.__init__ reads coordinator.data.alarm_state through
@@ -753,21 +777,19 @@ class TestArmTargetsByFamily:
     # --- v0.9.3: PERI_CAPABLE-no-EST entity-layer demotion (Issue #4) ---
 
     async def test_arm_home_demotes_when_peri_capable_lacks_est(self):
-        """Issue #4: SDVECU without EST in services targets PARTIAL/OFF, not PARTIAL/ON.
+        """Issue #4 (v0.9.4): SDVECU with empty partition 02 targets PARTIAL/OFF.
 
-        Entity layer reads coordinator.active_services and computes
-        effective family. Without EST a PERI_CAPABLE install behaves
-        like INTERIOR_ONLY for arm targets — otherwise the resolver
+        Entity layer reads coordinator.alarm_partitions and computes
+        effective family. A PERI_CAPABLE install whose user lacks perimeter
+        permission (partition 02 enterStates empty — laurafabry profile)
+        behaves like INTERIOR_ONLY for arm targets — otherwise the resolver
         would emit ARMDAY1PERI1 and the panel would reject it with
         code 101 error_mpj_exception.
         """
         entity, coordinator = _wire_mutation_entity("SDVECU")
-        # Override default seeded services to drop EST.
-        coordinator.active_services = frozenset({
-            ServiceRequest.ARM,
-            ServiceRequest.DARM,
-            ServiceRequest.ARMNIGHT,
-        })
+        # Simulate user who has no perimeter permission (laurafabry profile):
+        # partition 02 exists but enterStates / leaveStates are empty.
+        coordinator.alarm_partitions = (_PARTITION_PERIMETRAL_EMPTY,)
         coordinator.async_arm = AsyncMock()
 
         await entity.async_alarm_arm_home()
@@ -779,13 +801,10 @@ class TestArmTargetsByFamily:
         )
 
     async def test_arm_away_demotes_when_peri_capable_lacks_est(self):
-        """Issue #4: SDVECU without EST in services targets TOTAL/OFF, not TOTAL/ON."""
+        """Issue #4 (v0.9.4): SDVECU with empty partition 02 targets TOTAL/OFF."""
         entity, coordinator = _wire_mutation_entity("SDVECU")
-        coordinator.active_services = frozenset({
-            ServiceRequest.ARM,
-            ServiceRequest.DARM,
-            ServiceRequest.ARMNIGHT,
-        })
+        # Simulate user who has no perimeter permission (laurafabry profile).
+        coordinator.alarm_partitions = (_PARTITION_PERIMETRAL_EMPTY,)
         coordinator.async_arm = AsyncMock()
 
         await entity.async_alarm_arm_away()
