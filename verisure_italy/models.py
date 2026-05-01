@@ -368,6 +368,53 @@ class Service(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Alarm partitions — per-user permission set from xSSrv.configRepoUser.
+# IDs follow the Verisure web bundle constants (K = {MAIN:"01", PERIMETRAL:"02", ANNEX:"03"}).
+# ---------------------------------------------------------------------------
+
+PARTITION_ID_MAIN = "01"
+PARTITION_ID_PERIMETRAL = "02"
+PARTITION_ID_ANNEX = "03"
+
+
+class AlarmPartition(BaseModel):
+    """Per-user permission set for one alarm partition.
+
+    The Verisure web app reads `xSSrv.installation.configRepoUser.alarmPartitions[]`
+    and gates `*PERI*` arm on partition `02` (PERIMETRAL) having
+    `enterStates` non-empty, and `*PERI*` disarm on `leaveStates`
+    non-empty. Empty arrays mean the user lacks permission to enter /
+    leave that partition; the panel rejects the command with
+    `error_code 101 / error_mpj_exception`.
+
+    This is the authoritative perimeter gate as of v0.9.4 — supersedes
+    the v0.9.3 EST-based check, which was necessary but not sufficient
+    (laurafabry's SDVECU has EST present but partition `02` empty).
+    """
+
+    model_config = {"frozen": True, "populate_by_name": True}
+
+    id: str
+    enter_states: tuple[str, ...] = Field(alias="enterStates")
+    leave_states: tuple[str, ...] = Field(alias="leaveStates")
+
+
+class ConfigRepoUser(BaseModel):
+    """Per-user configuration block inside `xSSrv.installation`."""
+
+    model_config = {"frozen": True, "populate_by_name": True}
+
+    alarm_partitions: tuple[AlarmPartition, ...] = Field(alias="alarmPartitions")
+
+    def partition(self, partition_id: str) -> AlarmPartition | None:
+        """Return the partition with the given id, or None if absent."""
+        for p in self.alarm_partitions:
+            if p.id == partition_id:
+                return p
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Panel roster — classified by family from the Verisure web bundle.
 # See docs/findings/arm-command-vocabulary.md for the source.
 # ---------------------------------------------------------------------------

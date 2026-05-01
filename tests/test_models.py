@@ -333,3 +333,41 @@ class TestEffectiveFamily:
                 assert effective_family(panel, no_est) == PanelFamily.INTERIOR_ONLY, (
                     f"{panel} should demote without EST"
                 )
+
+
+class TestAlarmPartition:
+    """Pydantic parse for xSSrv.installation.configRepoUser.alarmPartitions[]."""
+
+    def test_parses_main_partition(self) -> None:
+        from verisure_italy.models import AlarmPartition
+
+        partition = AlarmPartition.model_validate(
+            {"id": "01", "enterStates": ["01", "02"], "leaveStates": ["01", "02"]}
+        )
+
+        assert partition.id == "01"
+        assert partition.enter_states == ("01", "02")
+        assert partition.leave_states == ("01", "02")
+
+    def test_parses_empty_arrays(self) -> None:
+        from verisure_italy.models import AlarmPartition
+
+        partition = AlarmPartition.model_validate(
+            {"id": "03", "enterStates": [], "leaveStates": []}
+        )
+
+        assert partition.id == "03"
+        assert partition.enter_states == ()
+        assert partition.leave_states == ()
+
+    def test_is_frozen(self) -> None:
+        from pydantic import ValidationError
+
+        from verisure_italy.models import AlarmPartition
+
+        partition = AlarmPartition.model_validate(
+            {"id": "01", "enterStates": [], "leaveStates": []}
+        )
+
+        with pytest.raises(ValidationError):
+            partition.id = "02"  # type: ignore[misc]
