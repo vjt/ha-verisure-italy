@@ -67,6 +67,7 @@ from .models import (
     CAMERA_IMAGE_MEDIA_TYPE,
     CAMERA_IMAGE_RESOLUTION,
     PROTO_TO_STATE,
+    AlarmPartition,
     AlarmState,
     ArmCommand,
     ArmResult,
@@ -211,6 +212,7 @@ class VerisureClient:
         self._capabilities: dict[str, str] = {}
         self._capabilities_exp: dict[str, datetime] = {}
         self._services_cache: dict[str, frozenset[ServiceRequest]] = {}
+        self._partitions_cache: dict[str, tuple[AlarmPartition, ...]] = {}
         self._last_proto: str = ""
         self._apollo_operation_id: str = secrets.token_hex(64)
         self._auth_lock = asyncio.Lock()
@@ -298,9 +300,9 @@ class VerisureClient:
 
         Returns the frozenset of active ServiceRequest codes. Services
         are static for an installation; cache is populated once per
-        session. Tests seed this cache directly via
-        `client._services_cache[installation.number] = ...` to skip the
-        xSSrv round-trip before arm/disarm.
+        session. As a side-effect, `get_services` also populates
+        `_partitions_cache[installation.number]`. Tests seed both caches
+        directly to skip the xSSrv round-trip before arm/disarm.
         """
         cached = self._services_cache.get(installation.number)
         if cached is not None:
@@ -309,6 +311,19 @@ class VerisureClient:
         active = active_services(services)
         self._services_cache[installation.number] = active
         return active
+
+    def _cached_partitions(
+        self, installation: Installation,
+    ) -> tuple[AlarmPartition, ...]:
+        """Return the installation's cached alarm partitions.
+
+        Returns `()` if the cache has not been populated yet (fail-secure:
+        empty partitions → INTERIOR_ONLY effective family → no PERI commands).
+        Populated as a side-effect of `_active_services_cached` on the first
+        arm/disarm per session. Tests seed directly via
+        `client._partitions_cache[installation.number] = (...)`.
+        """
+        return self._partitions_cache.get(installation.number, ())
 
     # -------------------------------------------------------------------
     # HTTP transport — returns raw response text, never dicts
@@ -779,10 +794,14 @@ class VerisureClient:
             srv.capabilities
         )
 
-        # Services might change if the installation is reconfigured; drop
-        # the per-installation services cache on every capabilities rotation
-        # so the next arm/disarm picks up the new active-service set.
+        # Services and partitions might change if the installation is
+        # reconfigured; drop both per-installation caches on every
+        # capabilities rotation so the next arm/disarm picks up the new
+        # active-service / partition set.
         self._services_cache.pop(installation.number, None)
+        self._partitions_cache[installation.number] = tuple(
+            srv.config_repo_user.alarm_partitions
+        )
 
         return srv.services
 
@@ -910,6 +929,7 @@ class VerisureClient:
             resolver = CommandResolver(
                 panel=installation.panel,
                 active_services=active,
+                alarm_partitions=self._cached_partitions(installation),
             )
             current_state = self._current_alarm_state()
             command = resolver.resolve(
@@ -1144,6 +1164,7 @@ class VerisureClient:
             resolver = CommandResolver(
                 panel=installation.panel,
                 active_services=active,
+                alarm_partitions=self._cached_partitions(installation),
             )
             current_state = self._current_alarm_state()
             target = AlarmState(

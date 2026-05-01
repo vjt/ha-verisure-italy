@@ -31,6 +31,7 @@ from verisure_italy.exceptions import (
     WAFBlockedError,
 )
 from verisure_italy.models import (
+    AlarmPartition,
     AlarmState,
     Installation,
     InteriorMode,
@@ -130,7 +131,7 @@ def _authenticate(client: VerisureClient) -> None:
     # yet the panel accepts ARMDAY1 / ARM1PERI1 / DARM1DARMPERI fine.
     # CommandResolver gates peri variants on effective panel family —
     # PANEL_FAMILIES at the model level, plus runtime demotion when
-    # `EST` is absent (perimeter sensors not provisioned on this install).
+    # partition 02 enterStates is empty (perimeter not provisioned).
     # See docs/findings/panel-SDVECU-probe.json.
     client._services_cache[INSTALLATION.number] = frozenset({
         ServiceRequest.ARM,
@@ -138,6 +139,14 @@ def _authenticate(client: VerisureClient) -> None:
         ServiceRequest.ARMNIGHT,
         ServiceRequest.EST,
     })
+
+    # Partition 02 (PERIMETRAL) with non-empty enterStates — this
+    # installation has perimeter access. Tests modelling a no-perimeter
+    # install should override _partitions_cache after _authenticate().
+    client._partitions_cache[INSTALLATION.number] = (
+        AlarmPartition(id="01", enterStates=("D",), leaveStates=("A",)),
+        AlarmPartition(id="02", enterStates=("B", "A"), leaveStates=("D",)),
+    )
 
     # Realistic current-state observation — the coordinator polls
     # xSStatus at startup before any arm/disarm is dispatched. Tests
@@ -1844,4 +1853,41 @@ class TestArmDisarmFailureReports:
         # diagnostic for why a capability check refused the command.
         assert "active_services: [" in records[0].message
         # No arm mutation hit the network.
+        assert not _has_call_with_operation(mock_api, "xSArmPanel")
+
+
+# ---------------------------------------------------------------------------
+# Partition-gate tests (v0.9.4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestClientPartitionGate:
+    """End-to-end through client.arm(): laurafabry profile.
+
+    SDVECU + active_services [ARM, ARMNIGHT, DARM, EST] +
+    partition 02 enterStates empty → arm to (PARTIAL, ON)
+    raises UnsupportedCommandError (no wire bytes sent).
+    """
+
+    async def test_client_demotes_on_empty_perimeter_partition(
+        self, mock_api, client,
+    ) -> None:
+        """arm() to (PARTIAL, ON) raises UnsupportedCommandError when
+        partition 02 has empty enterStates — effective family demotes to
+        INTERIOR_ONLY and the resolver refuses the PERI command locally."""
+        _authenticate(client)
+        # Override partition cache: partition 02 present but enterStates empty
+        # (laurafabry's profile — EST present, but no perimeter permission).
+        client._partitions_cache[INSTALLATION.number] = (
+            AlarmPartition(id="01", enterStates=("D",), leaveStates=("A",)),
+            AlarmPartition(id="02", enterStates=(), leaveStates=()),
+        )
+
+        target = AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON)
+
+        with pytest.raises(UnsupportedCommandError):
+            await client.arm(INSTALLATION, target)
+
+        # No arm mutation must have hit the network.
         assert not _has_call_with_operation(mock_api, "xSArmPanel")
