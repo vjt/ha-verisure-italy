@@ -8,24 +8,31 @@ Backlog for ha-verisure. Prune aggressively — completed items go in
 `CHANGELOG.md`, not here. Keep context on pending items so the next
 session can pick them up cold.
 
-Updated: 2026-04-30 (v0.9.3 shipped for Issue #4 — laurafabry
-SDVECU-no-EST. Awaiting reporter confirmation; Issue #1 still
-silent since v0.9.0).
+Updated: 2026-05-01 (v0.9.4 shipped for Issue #5 — laurafabry
+SDVECU-with-EST-but-empty-partition-02. v0.9.3 superseded.
+Awaiting reporter confirmation; Issue #1 still silent since v0.9.0).
 
 ## Immediate
 
-- **Issue #4 confirmation pending (laurafabry)** — v0.9.3 shipped
-  2026-04-30 with service-aware `effective_family()` — SDVECU
-  installs lacking `EST` in `xSSrv` now demote to `INTERIOR_ONLY`
-  and arm via `ARMDAY1` / `ARM1` (matches Verisure IT web app on
-  the same hardware). Reporter pinged on the issue with upgrade
-  instructions in Italian + full English root-cause. Close on
-  confirmation; if a new `VERISURE ARM FAILURE BEGIN` lands, treat
-  as a new vector. Reference: `docs/findings/arm-command-vocabulary.md`.
+- **Issue #5 confirmation pending (laurafabry)** — v0.9.4 shipped
+  2026-05-01 with partition-aware `effective_family(panel,
+  alarm_partitions)` — SDVECU installs whose user lacks perimeter
+  permission (partition `02` enterStates empty) now demote to
+  `INTERIOR_ONLY` and arm via `ARMDAY1` / `ARM1`. Mirrors the
+  official Verisure IT web app gate (function `z` in main bundle).
+  v0.9.3's EST-based gate was insufficient: laurafabry's SDVECU
+  has `EST` active and still rejected every `*PERI*` arm.
+  Reporter pinged on #5 with Italian upgrade instructions + full
+  English root-cause. Issue #4 cross-linked but NOT reopened
+  (resolved-by-supersession). Close #5 on confirmation; if a new
+  `VERISURE ARM FAILURE BEGIN` lands, the new partition-snapshot
+  field will pinpoint the cause. References:
+  `docs/findings/configrepouser-partitions.md`,
+  `docs/findings/arm-command-vocabulary.md`.
 
 - **Issue #1 arm failure (ewinters-ca-spark)** — no reply since the
-  2026-04-24 v0.9.0 nudge; v0.9.1 + v0.9.2 + v0.9.3 have shipped
-  since. The reporter's `xSDeviceList` had a device with `type:
+  2026-04-24 v0.9.0 nudge; v0.9.1 + v0.9.2 + v0.9.3 + v0.9.4 have
+  shipped since. The reporter's `xSDeviceList` had a device with `type:
   CENT` ("Pannello di Controllo"), which earlier notes mistakenly
   tracked as the panel model — `CENT` is the device type for the
   control-panel unit, not `installation.panel`. Actual panel model
@@ -74,9 +81,10 @@ silent since v0.9.0).
   metadata, not source, and resolves to the lexicographically-first
   dist-info — so HA's `manifest.json` requirements check fails after
   every version bump until the old dist-infos are removed. Hit
-  during the v0.9.3 deploy (CP05 S2). Cleanest fix: after the client-
-  lib deploy step, the skill should `rm -rf` any
+  during v0.9.3 (CP05 S2) and AGAIN during v0.9.4 deploy
+  (2026-05-01) — the same workaround (rename dist-info dir + patch
+  `METADATA: Version:`) had to be repeated by hand. Cleanest fix:
+  after the client-lib deploy step, the skill should `rm -rf` any
   `verisure_italy-*.dist-info` whose version doesn't match the
   freshly-deployed `verisure_italy/__init__.py:__version__`, then
-  clone the canonical dist-info from the highest-numbered remaining
-  one (or just patch its `METADATA: Version:` line in place).
+  rename the survivor (or patch its `METADATA: Version:` in place).
