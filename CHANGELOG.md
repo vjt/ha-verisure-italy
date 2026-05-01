@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.4 — TBD (v0.9.3 superseded)
+## 0.9.4 — 2026-05-01 (v0.9.3 superseded)
 
 Bug-fix release for Issue #5 (`laurafabry`). The v0.9.3 fix
 targeted the wrong root cause: the EST-based `effective_family`
