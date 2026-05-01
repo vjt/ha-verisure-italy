@@ -46,7 +46,7 @@ from verisure_italy.exceptions import (
     OperationTimeoutError,
     UnexpectedStateError,
 )
-from verisure_italy.models import PROTO_TO_STATE, ZoneException
+from verisure_italy.models import PROTO_TO_STATE, AlarmPartition, ZoneException
 
 from .const import (
     CONF_DEVICE_ID,
@@ -180,6 +180,11 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         # because the wrong family on a no-EST install means every arm
         # command gets rejected with error_mpj_exception.
         self.active_services: frozenset[ServiceRequest] = frozenset()
+        # Alarm partitions — populated alongside active_services on first
+        # refresh. Consumed by Task 7's HA entity to call the
+        # partition-aware effective_family(panel, alarm_partitions).
+        # Tuple starts empty (fail-secure: no partitions → INTERIOR_ONLY).
+        self.alarm_partitions: tuple[AlarmPartition, ...] = ()
         self._services_discovered: bool = False
 
         # Camera state — populated during first refresh
@@ -377,6 +382,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                     f"xSSrv schema drift: {err}"
                 ) from err
             self.active_services = parse_active_services(services)
+            self.alarm_partitions = self.client.cached_partitions(self.installation)
             self._services_discovered = True
             _LOGGER.info(
                 "Active services on %s panel: %s",

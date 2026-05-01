@@ -1900,7 +1900,7 @@ class TestClientPartitionGate:
 
         Pins down the contract that "not yet populated" and
         "provisioned without perimeter permission" produce identical
-        gate behaviour — see _cached_partitions docstring.
+        gate behaviour — see cached_partitions docstring.
         """
         _authenticate(client)
         # Explicit cache miss — the install number is not present.

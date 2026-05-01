@@ -312,15 +312,17 @@ class VerisureClient:
         self._services_cache[installation.number] = active
         return active
 
-    def _cached_partitions(
+    def cached_partitions(
         self, installation: Installation,
     ) -> tuple[AlarmPartition, ...]:
         """Return the installation's cached alarm partitions.
 
         Returns `()` if the cache has not been populated yet (fail-secure:
         empty partitions → INTERIOR_ONLY effective family → no PERI commands).
-        Populated as a side-effect of `_active_services_cached` on the first
-        arm/disarm per session. Tests seed directly via
+        Populated as a side-effect of `get_services` — called on first
+        coordinator refresh and on any arm/disarm via `_active_services_cached`.
+        The HA coordinator reads this after `get_services` returns to expose
+        `coordinator.alarm_partitions`. Tests seed directly via
         `client._partitions_cache[installation.number] = (...)`.
 
         Treats `not yet populated` and `provisioned without perimeter
@@ -937,7 +939,7 @@ class VerisureClient:
             resolver = CommandResolver(
                 panel=installation.panel,
                 active_services=active,
-                alarm_partitions=self._cached_partitions(installation),
+                alarm_partitions=self.cached_partitions(installation),
             )
             current_state = self._current_alarm_state()
             command = resolver.resolve(
@@ -1172,7 +1174,7 @@ class VerisureClient:
             resolver = CommandResolver(
                 panel=installation.panel,
                 active_services=active,
-                alarm_partitions=self._cached_partitions(installation),
+                alarm_partitions=self.cached_partitions(installation),
             )
             current_state = self._current_alarm_state()
             target = AlarmState(
