@@ -372,9 +372,9 @@ class Service(BaseModel):
 # IDs follow the Verisure web bundle constants (K = {MAIN:"01", PERIMETRAL:"02", ANNEX:"03"}).
 # ---------------------------------------------------------------------------
 
-PARTITION_ID_MAIN = "01"
-PARTITION_ID_PERIMETRAL = "02"
-PARTITION_ID_ANNEX = "03"
+PARTITION_ID_MAIN: str = "01"
+PARTITION_ID_PERIMETRAL: str = "02"
+PARTITION_ID_ANNEX: str = "03"
 
 
 class AlarmPartition(BaseModel):
