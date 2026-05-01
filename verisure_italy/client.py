@@ -278,10 +278,10 @@ class VerisureClient:
         construction (hashed numinst, no names/addresses/tokens) and can be
         pasted verbatim into a GitHub issue.
         """
-        # Empty frozenset is the correct pre-auth fallback for reporting —
-        # not a silent-degradation bypass; we want the failure dump even if
-        # the cache hasn't been populated yet (e.g. an error during the
-        # first service fetch itself).
+        # Empty frozenset / empty tuple are the correct pre-auth fallbacks
+        # for reporting — not a silent-degradation bypass; we want the
+        # failure dump even if the cache hasn't been populated yet (e.g. an
+        # error during the first service fetch itself).
         active = self._services_cache.get(installation.number, frozenset())
         report = format_failure_report(
             operation=operation,
@@ -289,6 +289,7 @@ class VerisureClient:
             command=command,
             active_services=active,
             current_proto=self._last_proto,
+            alarm_partitions=self.cached_partitions(installation),
             error=error,
         )
         _LOGGER.error("%s", report)

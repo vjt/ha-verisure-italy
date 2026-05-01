@@ -31,7 +31,7 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
-from .models import PANEL_FAMILIES, ArmCommand, Installation, ServiceRequest
+from .models import PANEL_FAMILIES, AlarmPartition, ArmCommand, Installation, ServiceRequest
 
 if TYPE_CHECKING:
     from .client import VerisureClient
@@ -206,6 +206,7 @@ def format_failure_report(
     command: ArmCommand | None,
     active_services: frozenset[ServiceRequest],
     current_proto: str,
+    alarm_partitions: tuple[AlarmPartition, ...],
     error: VerisureError,
 ) -> str:
     """Format a structured failure report wrapped in BEGIN/END cut markers.
@@ -217,7 +218,9 @@ def format_failure_report(
 
     `operation` must be one of "arm" / "disarm". `command` may be None if
     the failure occurred before the resolver picked a command. `current_proto`
-    may be "" if no state has been observed.
+    may be "" if no state has been observed. `alarm_partitions` is the
+    cached snapshot from `client.cached_partitions(installation)` — an empty
+    tuple is valid (cache miss before first service fetch).
 
     Returns the formatted multi-line string. Does no IO.
     """
@@ -232,6 +235,17 @@ def format_failure_report(
 
     command_str = command.value if command is not None else "N/A"
 
+    # Compact partition snapshot: "01:E[A,B]/L[D] 02:E[]/L[]"
+    # Empty tuple → "[]" so the field is always present and unambiguous.
+    if alarm_partitions:
+        parts = " ".join(
+            f"{p.id}:E[{','.join(p.enter_states)}]/L[{','.join(p.leave_states)}]"
+            for p in alarm_partitions
+        )
+        partitions_str = parts
+    else:
+        partitions_str = "[]"
+
     # Where possible pull error_code off OperationFailedError etc.
     error_code = getattr(error, "error_code", None)
     error_code_str = repr(error_code) if error_code is not None else "null"
@@ -243,6 +257,7 @@ def format_failure_report(
         f"panel: {installation.panel}",
         f"family: {family_str}",
         f"numinst_hash: {_hash_numinst(installation.number)}",
+        f"alarm_partitions: {partitions_str}",
         f"current_proto: {current_proto!r}",
         f"command_selected: {command_str}",
         f"active_services: [{services_sorted}]",

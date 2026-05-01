@@ -32,6 +32,7 @@ from verisure_italy.exceptions import (
     UnsupportedCommandError,
 )
 from verisure_italy.models import (
+    AlarmPartition,
     ArmCommand,
     Installation,
     ServiceRequest,
@@ -399,6 +400,7 @@ def test_failure_report_has_begin_and_end_markers() -> None:
         command=ArmCommand.ARM_TOTAL_PERIMETER,
         active_services=frozenset({ServiceRequest.ARM, ServiceRequest.DARM}),
         current_proto="D",
+        alarm_partitions=(),
         error=OperationFailedError(
             "panel rejected",
             error_code="alarm-manager.timeout",
@@ -416,6 +418,7 @@ def test_failure_report_disarm_marker() -> None:
         command=ArmCommand.DISARM_ALL,
         active_services=frozenset({ServiceRequest.DARM, ServiceRequest.PERI}),
         current_proto="A",
+        alarm_partitions=(),
         error=OperationFailedError("boom", error_code=None, error_type=None),
     )
     assert "=== VERISURE DISARM FAILURE BEGIN ===" in report
@@ -431,6 +434,7 @@ def test_failure_report_contains_required_fields() -> None:
             ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
         }),
         current_proto="D",
+        alarm_partitions=(),
         error=OperationFailedError("timeout", error_code="AM.42", error_type="BLOCKING"),
     )
     # required keys
@@ -460,6 +464,7 @@ def test_failure_report_redacts_pii() -> None:
         command=ArmCommand.ARM_TOTAL,
         active_services=frozenset({ServiceRequest.ARM}),
         current_proto="D",
+        alarm_partitions=(),
         error=OperationFailedError("boom", error_code=None, error_type=None),
     )
     # Raw numinst MUST NOT leak
@@ -485,6 +490,7 @@ def test_failure_report_handles_none_command() -> None:
         command=None,
         active_services=frozenset(),
         current_proto="",
+        alarm_partitions=(),
         error=UnexpectedStateError("X"),
     )
     assert "command_selected: N/A" in report
@@ -499,6 +505,7 @@ def test_failure_report_handles_unknown_panel_family() -> None:
         command=None,
         active_services=frozenset(),
         current_proto="D",
+        alarm_partitions=(),
         error=OperationFailedError("nope", error_code=None, error_type=None),
     )
     assert "family: UNKNOWN" in report
@@ -514,10 +521,59 @@ def test_failure_report_active_services_are_sorted() -> None:
             ServiceRequest.PERI, ServiceRequest.ARM, ServiceRequest.DARM,
         }),
         current_proto="D",
+        alarm_partitions=(),
         error=OperationFailedError("x", error_code=None, error_type=None),
     )
     # Alphabetical: ARM, DARM, PERI
     assert "active_services: [ARM, DARM, PERI]" in report
+
+
+def _make_partitions(*specs: tuple[str, list[str], list[str]]) -> tuple[AlarmPartition, ...]:
+    """Build a tuple of AlarmPartition from (id, enter_states, leave_states) triples."""
+    return tuple(
+        AlarmPartition.model_validate({
+            "id": pid,
+            "enterStates": enters,
+            "leaveStates": leaves,
+        })
+        for pid, enters, leaves in specs
+    )
+
+
+def test_failure_report_includes_alarm_partitions_line() -> None:
+    """Partition snapshot renders compactly in the failure block."""
+    partitions = _make_partitions(
+        ("01", ["A", "B"], ["D"]),
+        ("02", [], []),
+        ("03", ["T"], ["D"]),
+    )
+    report = format_failure_report(
+        operation="arm",
+        installation=_installation(),
+        command=ArmCommand.ARM_TOTAL,
+        active_services=frozenset({ServiceRequest.ARM}),
+        current_proto="D",
+        alarm_partitions=partitions,
+        error=OperationFailedError("boom", error_code=None, error_type=None),
+    )
+    assert "alarm_partitions:" in report
+    assert "01:E[A,B]/L[D]" in report
+    assert "02:E[]/L[]" in report
+    assert "03:E[T]/L[D]" in report
+
+
+def test_failure_report_empty_partitions_renders_cleanly() -> None:
+    """Empty tuple renders as an empty partition list, not as a crash."""
+    report = format_failure_report(
+        operation="disarm",
+        installation=_installation(panel="SDVECU"),
+        command=ArmCommand.DISARM_ALL,
+        active_services=frozenset(),
+        current_proto="A",
+        alarm_partitions=(),
+        error=OperationFailedError("timeout", error_code=None, error_type=None),
+    )
+    assert "alarm_partitions: []" in report
 
 
 def test_failure_report_unsupported_command_error_includes_missing_services() -> None:
@@ -533,6 +589,7 @@ def test_failure_report_unsupported_command_error_includes_missing_services() ->
         command=ArmCommand.ARM_TOTAL_PERIMETER,
         active_services=frozenset({ServiceRequest.ARM, ServiceRequest.DARM}),
         current_proto="D",
+        alarm_partitions=(),
         error=err,
     )
     assert "error_type: UnsupportedCommandError" in report
