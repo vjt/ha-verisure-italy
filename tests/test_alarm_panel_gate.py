@@ -774,10 +774,10 @@ class TestArmTargetsByFamily:
             interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
         )
 
-    # --- v0.9.3: PERI_CAPABLE-no-EST entity-layer demotion (Issue #4) ---
+    # --- Issue #5 (v0.9.4): PERI_CAPABLE entity-layer demotion via partition gate ---
 
-    async def test_arm_home_demotes_when_peri_capable_lacks_est(self):
-        """Issue #4 (v0.9.4): SDVECU with empty partition 02 targets PARTIAL/OFF.
+    async def test_arm_home_demotes_when_peri_capable_partition_perimetral_empty(self):
+        """Issue #5: SDVECU with empty partition 02 targets PARTIAL/OFF.
 
         Entity layer reads coordinator.alarm_partitions and computes
         effective family. A PERI_CAPABLE install whose user lacks perimeter
@@ -800,8 +800,8 @@ class TestArmTargetsByFamily:
             interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
         )
 
-    async def test_arm_away_demotes_when_peri_capable_lacks_est(self):
-        """Issue #4 (v0.9.4): SDVECU with empty partition 02 targets TOTAL/OFF."""
+    async def test_arm_away_demotes_when_peri_capable_partition_perimetral_empty(self):
+        """Issue #5: SDVECU with empty partition 02 targets TOTAL/OFF."""
         entity, coordinator = _wire_mutation_entity("SDVECU")
         # Simulate user who has no perimeter permission (laurafabry profile).
         coordinator.alarm_partitions = (_PARTITION_PERIMETRAL_EMPTY,)
@@ -813,6 +813,27 @@ class TestArmTargetsByFamily:
         target = coordinator.async_arm.call_args.args[0]
         assert target == AlarmState(
             interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+        )
+
+    async def test_arm_home_demotes_when_peri_capable_has_no_partition_row(self):
+        """Empty alarm_partitions tuple — partition 02 absent entirely.
+
+        Different failure mode from `_partition_perimetral_empty`: the
+        coordinator could legitimately ship `()` if the upstream schema
+        ever drops the partition rows for a user. effective_family() is
+        contractually identical for both shapes — pin the entity-layer
+        contract for this branch too.
+        """
+        entity, coordinator = _wire_mutation_entity("SDVECU")
+        coordinator.alarm_partitions = ()
+        coordinator.async_arm = AsyncMock()
+
+        await entity.async_alarm_arm_home()
+
+        coordinator.async_arm.assert_awaited_once()
+        target = coordinator.async_arm.call_args.args[0]
+        assert target == AlarmState(
+            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
         )
 
 
