@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.5 — 2026-05-03 (HACS metadata fix)
+
+Integration-only bump. No code changes; the `verisure-italy`
+Python package stays at 0.9.4.
+
+### Fixes
+
+- **Lower `homeassistant` floor in `manifest.json`** from `2026.4.0`
+  to `2026.2.0`, matching `hacs.json`. The 2026.4.0 floor was set
+  arbitrarily during early-April work on Issue #3 and never
+  required by code — every `homeassistant.*` symbol used by the
+  integration has been stable since 2026.2 or earlier. Users on
+  HA Core 2026.2.x–2026.3.x reported "Repository not found" /
+  "Archivio digitale non trovato" because HACS hides repos whose
+  `manifest.json` floor exceeds the installed HA version.
+
 ## 0.9.4 — 2026-05-01 (v0.9.3 superseded)
 
 Bug-fix release for Issue #5 (`laurafabry`). The v0.9.3 fix
