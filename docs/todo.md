@@ -8,8 +8,8 @@ Backlog for ha-verisure. Prune aggressively — completed items go in
 `CHANGELOG.md`, not here. Keep context on pending items so the next
 session can pick them up cold.
 
-Updated: 2026-05-01 (v0.9.4 shipped for Issue #5; #5 + #6 closed by
-reporter; Issue #1 re-pinged with v0.9.4 ask).
+Updated: 2026-05-04 (v0.9.6 shipped for Issue #7 — optional
+`configRepoUser`; Issue #1 still awaiting reporter response).
 
 ## Immediate
 
@@ -67,11 +67,13 @@ reporter; Issue #1 re-pinged with v0.9.4 ask).
   `*.dist-info` dirs behind. `importlib.metadata.version()` reads
   metadata, not source, and resolves to the lexicographically-first
   dist-info — so HA's `manifest.json` requirements check fails after
-  every version bump until the old dist-infos are removed. Hit
-  during v0.9.3 (CP05 S2) and AGAIN during v0.9.4 deploy
-  (2026-05-01) — the same workaround (rename dist-info dir + patch
-  `METADATA: Version:`) had to be repeated by hand. Cleanest fix:
-  after the client-lib deploy step, the skill should `rm -rf` any
-  `verisure_italy-*.dist-info` whose version doesn't match the
-  freshly-deployed `verisure_italy/__init__.py:__version__`, then
-  rename the survivor (or patch its `METADATA: Version:` in place).
+  every version bump until the old dist-infos are removed. Hit during
+  v0.9.3 (CP05 S2), v0.9.4 (2026-05-01), and v0.9.6 (2026-05-04 —
+  this time `pip install --force-reinstall` of the wheel kept BOTH
+  dist-infos and `pip show` reported the older one until manual
+  `rm -rf verisure_italy-0.9.4.dist-info`). Three repeats now —
+  automate. Cleanest fix: after the client-lib deploy step, the skill
+  should `rm -rf` any `verisure_italy-*.dist-info` whose version
+  doesn't match the freshly-deployed
+  `verisure_italy/__init__.py:__version__`, then either pip-install
+  the wheel or patch the survivor's `METADATA: Version:` in place.
