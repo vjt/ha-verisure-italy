@@ -1,5 +1,6 @@
 __pycache__/
-.claude/settings.local.json
+.claude/*
+!.claude/skills
 *.py[cod]
 *.egg-info/
 dist/
@@ -14,3 +15,4 @@ build/
 .env
 e2e_*.py
 *.jpg
+.gh

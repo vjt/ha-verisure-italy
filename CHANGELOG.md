@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.9.6 — 2026-05-04 (Issue #7 — optional `configRepoUser`)
+
+Bug-fix release for Issue #7 (`alan210874`, SDVFAST). The v0.9.4
+partition gate added strict parsing of
+`xSSrv.installation.configRepoUser`, which the API returns as
+`null` on installs without per-user partition permissions. The
+strict model raised `ValidationError` at `get_services()`,
+crashed the coordinator's first refresh, and HA marked every
+entity as "no longer provided".
+
+### Fixes
+
+- **`_ServiceInstallation.config_repo_user` now `Optional`.**
+  Mirrors upstream `securitas-direct-new-api` (`responses.py:184`),
+  which has always treated the field as `dict | None`.
+- **`get_services()` falls back to empty partitions tuple** when
+  `configRepoUser` is absent. `effective_family()` already demotes
+  `PERI_CAPABLE` to `INTERIOR_ONLY` on empty partitions, so the
+  fallback is the conservative path. `INTERIOR_ONLY` panels (e.g.
+  SDVFAST) ignore partitions entirely — the empty tuple is a no-op
+  there.
+
+### Tests
+
+- `TestSrvEnvelopeWithConfigRepoUser` — parses `null` and missing
+  `configRepoUser` payloads (`tests/test_responses.py`).
+- `TestGetServices.test_null_config_repo_user_yields_empty_partitions`
+  — end-to-end through the client (`tests/test_client.py`).
+
 ## 0.9.5 — 2026-05-03 (HACS metadata fix)
 
 Integration-only bump. No code changes; the `verisure-italy`

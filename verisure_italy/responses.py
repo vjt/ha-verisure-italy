@@ -38,7 +38,9 @@ class _ServiceInstallation(BaseModel):
     numinst: str
     capabilities: str
     services: list[Service]
-    config_repo_user: ConfigRepoUser = Field(alias="configRepoUser")
+    config_repo_user: ConfigRepoUser | None = Field(
+        default=None, alias="configRepoUser"
+    )
 
 
 class _SrvData(BaseModel):

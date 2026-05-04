@@ -758,6 +758,31 @@ class TestGetServices:
         assert INSTALLATION.number in client._capabilities_exp
         assert client._capabilities_exp[INSTALLATION.number] > datetime.now(tz=UTC)
 
+    async def test_null_config_repo_user_yields_empty_partitions(
+        self, mock_api, client
+    ):
+        """Issue #7 — install with no per-user config still parses, demotes safely."""
+        _authenticate(client)
+        body = json.dumps({
+            "data": {
+                "xSSrv": {
+                    "res": "OK",
+                    "msg": "",
+                    "installation": {
+                        "numinst": INSTALLATION.number,
+                        "capabilities": _make_jwt(),
+                        "services": [],
+                        "configRepoUser": None,
+                    },
+                }
+            }
+        })
+        mock_api.post(API_URL, body=body)
+
+        await client.get_services(INSTALLATION)
+
+        assert client._partitions_cache[INSTALLATION.number] == ()
+
 
 # ---------------------------------------------------------------------------
 # Alarm status tests

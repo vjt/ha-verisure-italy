@@ -39,3 +39,46 @@ class TestSrvEnvelopeWithConfigRepoUser:
         assert partitions[1].id == "02"
         assert partitions[1].enter_states == ("01",)
         assert partitions[2].enter_states == ()
+
+    def test_parses_with_null_config_repo_user(self) -> None:
+        """Issue #7 — some installs return configRepoUser=null. Must parse."""
+        from verisure_italy.responses import ServicesEnvelope
+
+        envelope = ServicesEnvelope.model_validate(
+            {
+                "data": {
+                    "xSSrv": {
+                        "res": "OK",
+                        "msg": "",
+                        "installation": {
+                            "numinst": "9999999",
+                            "capabilities": "",
+                            "services": [],
+                            "configRepoUser": None,
+                        },
+                    }
+                }
+            }
+        )
+        assert envelope.data.xSSrv.installation.config_repo_user is None
+
+    def test_parses_with_missing_config_repo_user(self) -> None:
+        """configRepoUser absent from payload — same as null."""
+        from verisure_italy.responses import ServicesEnvelope
+
+        envelope = ServicesEnvelope.model_validate(
+            {
+                "data": {
+                    "xSSrv": {
+                        "res": "OK",
+                        "msg": "",
+                        "installation": {
+                            "numinst": "9999999",
+                            "capabilities": "",
+                            "services": [],
+                        },
+                    }
+                }
+            }
+        )
+        assert envelope.data.xSSrv.installation.config_repo_user is None

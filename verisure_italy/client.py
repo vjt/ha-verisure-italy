@@ -809,9 +809,17 @@ class VerisureClient:
         # by _active_services_cached when next consulted); partitions
         # are written directly since they're already in their final
         # tuple shape on the parsed envelope.
+        #
+        # `configRepoUser` is absent on some installs (Issue #7 — observed
+        # on SDVFAST). Treat as empty partitions: effective_family() then
+        # demotes PERI_CAPABLE to INTERIOR_ONLY, which is the conservative
+        # path. INTERIOR_ONLY panels (e.g. SDVFAST) ignore partitions, so
+        # the empty tuple is a no-op there.
         self._services_cache.pop(installation.number, None)
-        self._partitions_cache[installation.number] = tuple(
-            srv.config_repo_user.alarm_partitions
+        self._partitions_cache[installation.number] = (
+            tuple(srv.config_repo_user.alarm_partitions)
+            if srv.config_repo_user is not None
+            else ()
         )
 
         return srv.services
