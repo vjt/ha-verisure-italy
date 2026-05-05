@@ -30,6 +30,9 @@ jobs:
       - name: Run ruff
         run: python -m ruff check verisure_italy/ tests/ custom_components/
       
+      - name: Run ruff format check
+        run: python -m ruff format --check verisure_italy/ tests/ custom_components/
+      
       - name: Run pyright
         run: python -m pyright
       
