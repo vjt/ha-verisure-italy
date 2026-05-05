@@ -4,8 +4,9 @@
 
 # Verisure Italy for Home Assistant
 
-> Leggi il [post sul blog](https://sindro.me/posts/2026-04-04-verisure-italy-home-assistant/)
-> per la storia completa: perché l'ho costruito, come funziona e come installarlo.
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/vjt/ha-verisure-italy?include_prereleases&sort=semver)](https://github.com/vjt/ha-verisure-italy/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Home Assistant custom component for **Verisure Italy** alarm systems.
 
@@ -13,6 +14,10 @@ Talks directly to `customers.verisure.it/owa-api/graphql`. Fully
 replaces the Verisure mobile app for alarm control and camera monitoring.
 
 > **Not affiliated with Verisure Group or Securitas Direct.**
+
+📖 Long-form walk-through: **[How I replaced the Verisure app with Home Assistant](https://sindro.me/posts/2026-04-04-verisure-italy-home-assistant/)** ([🇮🇹 italiano](https://sindro.me/it/posts/2026-04-04-verisure-italy-home-assistant/))
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=vjt&repository=ha-verisure-italy&category=integration)
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/vjt/ha-verisure-italy/master/docs/screenshots/06-dashboard.png" alt="Verisure Dashboard" width="600">
@@ -30,7 +35,9 @@ replaces the Verisure mobile app for alarm control and camera monitoring.
 
 ## Installation (HACS)
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=vjt&repository=ha-verisure-italy&category=integration)
+The fastest path: click the **Open in HACS** badge above. It opens your
+HA instance's HACS UI prepared to add this repo as a custom integration
+— review and confirm.
 
 Or manually:
 
