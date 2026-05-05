@@ -31,16 +31,25 @@ _PERI = AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.ON)
 # Note: ARMDAY and PERI are NOT listed as separate active services on
 # SDVECU, yet the panel accepts ARMDAY1, ARM1PERI1, ARMDAY1PERI1, and
 # DARM1DARMPERI fine. See docs/findings/panel-SDVECU-probe.json.
-_SDVECU_SERVICES = frozenset({
-    ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
-})
+_SDVECU_SERVICES = frozenset(
+    {
+        ServiceRequest.ARM,
+        ServiceRequest.DARM,
+        ServiceRequest.ARMNIGHT,
+    }
+)
 # SDVFAST (issue #3 reporter probe): explicit ARMDAY / ARMNIGHT /
 # ARMINTFPART / ARMPARTFINT entries, no PERI. Interior-only family.
-_SDVFAST_SERVICES = frozenset({
-    ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
-    ServiceRequest.ARMNIGHT, ServiceRequest.ARMINTFPART,
-    ServiceRequest.ARMPARTFINT,
-})
+_SDVFAST_SERVICES = frozenset(
+    {
+        ServiceRequest.ARM,
+        ServiceRequest.DARM,
+        ServiceRequest.ARMDAY,
+        ServiceRequest.ARMNIGHT,
+        ServiceRequest.ARMINTFPART,
+        ServiceRequest.ARMPARTFINT,
+    }
+)
 
 # Partition tuples — used to drive effective_family() in the resolver.
 # A positive partition 02 (non-empty enterStates) = perimeter provisioned.
@@ -80,6 +89,7 @@ def _r(
 
 # --- Disarm paths ---
 
+
 def test_disarm_from_total_peri_uses_disarm_all() -> None:
     r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     assert r.resolve(target=_OFF, current=_TOTAL_PERI) == ArmCommand.DISARM_ALL
@@ -96,6 +106,7 @@ def test_disarm_sdvfast_uses_simple_disarm() -> None:
 
 
 # --- Arm from off ---
+
 
 def test_arm_total_from_off_peri_capable() -> None:
     r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
@@ -124,6 +135,7 @@ def test_arm_partial_from_off_interior_only() -> None:
 # ARMINTFPART / ARMPARTFINT in xSSrv and rejects those commands on the
 # wire with "Request not valid for Central Unit"; for SDVECU we fall
 # through to the target-only arm command (which IS accepted).
+
 
 def test_sdvfast_transition_partial_to_total_uses_intfpart() -> None:
     """SDVFAST has ARMINTFPART active → single-step transition."""
@@ -159,6 +171,7 @@ def test_sdvecu_total_peri_to_partial_peri_uses_arm_partial_peri() -> None:
 
 # --- Perimeter-only (SDVECU only) ---
 
+
 def test_arm_perimeter_only() -> None:
     r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     assert r.resolve(target=_PERI, current=_OFF) == ArmCommand.ARM_PERIMETER
@@ -173,17 +186,20 @@ def test_arm_perimeter_rejected_on_interior_only_panel() -> None:
 
 # --- Capability gating ---
 
+
 def test_arm_night_rejected_without_armnight_service() -> None:
     """ARMNIGHT is a reliably-reported sub-capability; its absence gates."""
     services = frozenset({ServiceRequest.ARM, ServiceRequest.DARM})
     r = _r("SDVECU", services, _PARTITIONS_WITH_PERIMETER)
     target_night = AlarmState(
-        interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+        interior=InteriorMode.TOTAL,
+        perimeter=PerimeterMode.OFF,
     )
     # ARM_NIGHT is unreachable via AlarmState today (no NIGHT variant in
     # InteriorMode), so this test uses the capability-gate path directly
     # to ensure the mapping still rejects when ARMNIGHT is missing.
     from verisure_italy.resolver import _COMMAND_REQUIRES
+
     assert ServiceRequest.ARMNIGHT in _COMMAND_REQUIRES[ArmCommand.ARM_NIGHT]
     # Sanity: ARM_TOTAL (no NIGHT dep) does pass with the minimal set.
     assert r.resolve(target=target_night, current=_OFF) == ArmCommand.ARM_TOTAL
@@ -205,8 +221,10 @@ def test_base_arm_service_required_for_every_arm_variant() -> None:
 
 # --- Degenerate ---
 
+
 def test_noop_when_target_equals_current() -> None:
     from verisure_italy.exceptions import SameStateError
+
     r = _r("SDVECU", _SDVECU_SERVICES, _PARTITIONS_WITH_PERIMETER)
     with pytest.raises(SameStateError, match="already in target state"):
         r.resolve(target=_OFF, current=_OFF)
@@ -219,6 +237,7 @@ def test_unknown_panel_rejected() -> None:
 
 
 # --- Cross-perimeter armed transitions (security guard) ---
+
 
 def test_cross_peri_armed_to_armed_rejected() -> None:
     """Cross-perimeter transition from any armed state must raise.
@@ -256,15 +275,20 @@ def test_cross_peri_from_peri_only_to_total_does_not_trigger() -> None:
 # enterStates: if empty, effective_family() demotes PERI_CAPABLE → INTERIOR_ONLY.
 # Diagnostic message names the partition-permission gap, not EST.
 
+
 class TestResolverPerimeterGate:
     """Partition gate for arm/disarm — supersedes v0.9.3 EST-based gate."""
 
     def test_sdvecu_with_perimeter_picks_armday1peri1(self) -> None:
         resolver = CommandResolver(
             panel="SDVECU",
-            active_services=frozenset({
-                ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
-            }),
+            active_services=frozenset(
+                {
+                    ServiceRequest.ARM,
+                    ServiceRequest.DARM,
+                    ServiceRequest.ARMNIGHT,
+                }
+            ),
             alarm_partitions=_PARTITIONS_WITH_PERIMETER,
         )
 
@@ -279,9 +303,13 @@ class TestResolverPerimeterGate:
         """laurafabry profile — partition 02 empty -> INTERIOR_ONLY effective family."""
         resolver = CommandResolver(
             panel="SDVECU",
-            active_services=frozenset({
-                ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
-            }),
+            active_services=frozenset(
+                {
+                    ServiceRequest.ARM,
+                    ServiceRequest.DARM,
+                    ServiceRequest.ARMNIGHT,
+                }
+            ),
             alarm_partitions=_PARTITIONS_WITHOUT_PERIMETER,
         )
 
@@ -306,9 +334,13 @@ class TestResolverPerimeterGate:
         """Demoted install picks the interior-only command, no exception."""
         resolver = CommandResolver(
             panel="SDVECU",
-            active_services=frozenset({
-                ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMNIGHT,
-            }),
+            active_services=frozenset(
+                {
+                    ServiceRequest.ARM,
+                    ServiceRequest.DARM,
+                    ServiceRequest.ARMNIGHT,
+                }
+            ),
             alarm_partitions=_PARTITIONS_WITHOUT_PERIMETER,
         )
 

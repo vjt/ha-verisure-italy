@@ -42,12 +42,20 @@ from verisure_italy.models import (
 # INTERIOR_ONLY panels have no perimeter partition.
 # Tests for the demotion case override `coordinator.alarm_partitions` to
 # simulate a user who lacks perimeter permission (partition 02 empty).
-_PARTITION_PERIMETRAL_FULL = AlarmPartition.model_validate({
-    "id": "02", "enterStates": ("01",), "leaveStates": ("01",),
-})
-_PARTITION_PERIMETRAL_EMPTY = AlarmPartition.model_validate({
-    "id": "02", "enterStates": (), "leaveStates": (),
-})
+_PARTITION_PERIMETRAL_FULL = AlarmPartition.model_validate(
+    {
+        "id": "02",
+        "enterStates": ("01",),
+        "leaveStates": ("01",),
+    }
+)
+_PARTITION_PERIMETRAL_EMPTY = AlarmPartition.model_validate(
+    {
+        "id": "02",
+        "enterStates": (),
+        "leaveStates": (),
+    }
+)
 _DEFAULT_PARTITIONS: dict[PanelFamily, tuple[AlarmPartition, ...]] = {
     PanelFamily.PERI_CAPABLE: (_PARTITION_PERIMETRAL_FULL,),
     PanelFamily.INTERIOR_ONLY: (),
@@ -62,7 +70,10 @@ async def _noop_suppress():
 
 def _make_installation(panel: str) -> Installation:
     return Installation(
-        number="1234567", alias="Home", panel=panel, type="home",
+        number="1234567",
+        alias="Home",
+        panel=panel,
+        type="home",
     )
 
 
@@ -85,9 +96,7 @@ def _make_panel_entity(panel: str):
     # active_services is NOT seeded — effective_family() reads alarm_partitions
     # only (v0.9.4+); no entity-level code consumes active_services directly.
     family = PANEL_FAMILIES.get(panel)
-    coordinator.alarm_partitions = (
-        _DEFAULT_PARTITIONS[family] if family is not None else ()
-    )
+    coordinator.alarm_partitions = _DEFAULT_PARTITIONS[family] if family is not None else ()
 
     # VerisureAlarmPanel.__init__ reads coordinator.data.alarm_state through
     # _STATE_MAP — bypass __init__ to skip HA entity wiring we don't need here.
@@ -118,10 +127,13 @@ class TestCheckPanelSupported:
             "custom_components.verisure_italy.alarm_control_panel.run_probe",
             AsyncMock(return_value=fake_probe),
         )
-        with caplog.at_level(
-            logging.WARNING,
-            logger="custom_components.verisure_italy.alarm_control_panel",
-        ), pytest.raises(UnsupportedPanelError) as exc:
+        with (
+            caplog.at_level(
+                logging.WARNING,
+                logger="custom_components.verisure_italy.alarm_control_panel",
+            ),
+            pytest.raises(UnsupportedPanelError) as exc,
+        ):
             await entity._check_panel_supported("arm")
 
         assert exc.value.panel == "CENT"
@@ -143,10 +155,13 @@ class TestCheckPanelSupported:
             "custom_components.verisure_italy.alarm_control_panel.run_probe",
             AsyncMock(side_effect=RuntimeError("network hiccup")),
         )
-        with caplog.at_level(
-            logging.ERROR,
-            logger="custom_components.verisure_italy.alarm_control_panel",
-        ), pytest.raises(UnsupportedPanelError):
+        with (
+            caplog.at_level(
+                logging.ERROR,
+                logger="custom_components.verisure_italy.alarm_control_panel",
+            ),
+            pytest.raises(UnsupportedPanelError),
+        ):
             await entity._check_panel_supported("arm")
 
         assert any("Probe failed" in r.message for r in caplog.records)
@@ -165,23 +180,23 @@ class TestCheckPanelSupported:
             "custom_components.verisure_italy.alarm_control_panel.run_probe",
             AsyncMock(return_value=fake_probe),
         )
-        with caplog.at_level(
-            logging.WARNING,
-            logger="custom_components.verisure_italy.alarm_control_panel",
-        ), pytest.raises(UnsupportedPanelError):
+        with (
+            caplog.at_level(
+                logging.WARNING,
+                logger="custom_components.verisure_italy.alarm_control_panel",
+            ),
+            pytest.raises(UnsupportedPanelError),
+        ):
             await entity._check_panel_supported("arm")
 
-        block = next(
-            r for r in caplog.records
-            if "VERISURE PROBE BEGIN" in r.message
-        )
+        block = next(r for r in caplog.records if "VERISURE PROBE BEGIN" in r.message)
         # Extract JSON between markers
         raw = block.message
         begin = raw.index("VERISURE PROBE BEGIN") + len("VERISURE PROBE BEGIN")
         end = raw.index("=== VERISURE PROBE END ===")
         payload = raw[begin:end].strip()
         # First chars are "===\n" from the marker; strip until first `{`
-        payload = payload[payload.index("{"):]
+        payload = payload[payload.index("{") :]
         parsed = json.loads(payload)
         assert parsed["installation"]["panel"] == "ACME9000"
 
@@ -189,6 +204,7 @@ class TestCheckPanelSupported:
 # ---------------------------------------------------------------------------
 # SUPPORTED_PANELS membership — one parametric test per panel
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("panel", sorted(SUPPORTED_PANELS))
 def test_every_supported_panel_is_gate_admissible(panel: str) -> None:
@@ -209,8 +225,14 @@ def test_unknown_panel_not_in_supported_panels() -> None:
 def test_supported_panels_has_exactly_the_roster_from_findings() -> None:
     """Panel roster must match docs/findings/arm-command-vocabulary.md."""
     expected = {
-        "SDVECU", "SDVECUD", "SDVECUW", "SDVECU-D", "SDVECU-W",
-        "MODPRO", "SDVFAST", "SDVFSW",
+        "SDVECU",
+        "SDVECUD",
+        "SDVECUW",
+        "SDVECU-D",
+        "SDVECU-W",
+        "MODPRO",
+        "SDVFAST",
+        "SDVFSW",
     }
     assert expected == SUPPORTED_PANELS
 
@@ -218,6 +240,7 @@ def test_supported_panels_has_exactly_the_roster_from_findings() -> None:
 # ---------------------------------------------------------------------------
 # _STATE_MAP primary values — the three states exposed in the HA UI
 # ---------------------------------------------------------------------------
+
 
 def test_primary_state_map_disarmed() -> None:
     state = AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF)
@@ -246,7 +269,9 @@ def test_operation_failed_template_points_at_marker_block_arm() -> None:
     )
 
     text = _OPERATION_FAILED_NOTIFICATION_TEMPLATE.format(
-        operation="Arm", message="Panel busy", op_upper="ARM",
+        operation="Arm",
+        message="Panel busy",
+        op_upper="ARM",
     )
     assert "VERISURE ARM FAILURE BEGIN" in text
     assert "VERISURE ARM FAILURE END" in text
@@ -261,7 +286,9 @@ def test_operation_failed_template_points_at_marker_block_disarm() -> None:
     )
 
     text = _OPERATION_FAILED_NOTIFICATION_TEMPLATE.format(
-        operation="Disarm", message="timeout", op_upper="DISARM",
+        operation="Disarm",
+        message="timeout",
+        op_upper="DISARM",
     )
     assert "VERISURE DISARM FAILURE BEGIN" in text
     assert "VERISURE DISARM FAILURE END" in text
@@ -331,9 +358,7 @@ class TestSupportedFeaturesDynamic:
 class TestAsyncArmRefusesArmedToArmed:
     """Code-layer belt-and-braces: _async_arm must not hit the wire."""
 
-    async def test_arm_home_while_armed_away_is_refused(
-        self, caplog
-    ) -> None:
+    async def test_arm_home_while_armed_away_is_refused(self, caplog) -> None:
         entity, coordinator = _make_panel_entity("SDVECU")
         entity._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY  # type: ignore[attr-defined]
         coordinator.async_arm = AsyncMock()
@@ -345,13 +370,9 @@ class TestAsyncArmRefusesArmedToArmed:
             await entity.async_alarm_arm_home()
 
         coordinator.async_arm.assert_not_called()
-        assert any(
-            "already armed" in r.message for r in caplog.records
-        )
+        assert any("already armed" in r.message for r in caplog.records)
 
-    async def test_arm_away_while_armed_home_is_refused(
-        self, caplog
-    ) -> None:
+    async def test_arm_away_while_armed_home_is_refused(self, caplog) -> None:
         entity, coordinator = _make_panel_entity("SDVECU")
         entity._attr_alarm_state = AlarmControlPanelState.ARMED_HOME  # type: ignore[attr-defined]
         coordinator.async_arm = AsyncMock()
@@ -363,13 +384,9 @@ class TestAsyncArmRefusesArmedToArmed:
             await entity.async_alarm_arm_away()
 
         coordinator.async_arm.assert_not_called()
-        assert any(
-            "already armed" in r.message for r in caplog.records
-        )
+        assert any("already armed" in r.message for r in caplog.records)
 
-    async def test_arm_same_mode_twice_is_ignored_silently(
-        self, caplog
-    ) -> None:
+    async def test_arm_same_mode_twice_is_ignored_silently(self, caplog) -> None:
         """Same-mode arm is the existing no-op path — must not hit wire either."""
         entity, coordinator = _make_panel_entity("SDVECU")
         entity._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY  # type: ignore[attr-defined]
@@ -419,9 +436,7 @@ class TestSameStateBenignRace:
 
         coordinator.async_arm.assert_awaited_once()
         entity._update_alarm_state.assert_called()
-        assert any(
-            "no-op" in r.message.lower() for r in caplog.records
-        )
+        assert any("no-op" in r.message.lower() for r in caplog.records)
         # No failure-notification side-effects
         for call in entity.hass.services.async_call.call_args_list:
             args = call.args
@@ -442,9 +457,7 @@ class TestSameStateBenignRace:
 
         coordinator.async_disarm.assert_awaited_once()
         entity._update_alarm_state.assert_called()
-        assert any(
-            "no-op" in r.message.lower() for r in caplog.records
-        )
+        assert any("no-op" in r.message.lower() for r in caplog.records)
 
 
 class TestHandleCoordinatorUpdateClearsStaleForceContext:
@@ -454,10 +467,14 @@ class TestHandleCoordinatorUpdateClearsStaleForceContext:
         import datetime as _dt
 
         from custom_components.verisure_italy.coordinator import ForceArmContext
+
         return ForceArmContext(
-            reference_id="ref-xxx", suid="suid-yyy", mode="armed_home",
+            reference_id="ref-xxx",
+            suid="suid-yyy",
+            mode="armed_home",
             target=AlarmState(
-                interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+                interior=InteriorMode.PARTIAL,
+                perimeter=PerimeterMode.ON,
             ),
             exceptions=[],
             created_at=_dt.datetime.now(_dt.UTC),
@@ -465,12 +482,14 @@ class TestHandleCoordinatorUpdateClearsStaleForceContext:
 
     def _armed_home(self):
         return AlarmState(
-            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+            interior=InteriorMode.PARTIAL,
+            perimeter=PerimeterMode.ON,
         )
 
     def _disarmed(self):
         return AlarmState(
-            interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.OFF,
+            perimeter=PerimeterMode.OFF,
         )
 
     def test_stale_context_cleared_when_panel_armed(self, caplog):
@@ -487,20 +506,22 @@ class TestHandleCoordinatorUpdateClearsStaleForceContext:
         coordinator.async_update_listeners = MagicMock()
 
         from unittest.mock import patch
-        with patch.object(
-            entity.__class__.__mro__[1],  # CoordinatorEntity
-            "_handle_coordinator_update",
-            return_value=None,
-        ), caplog.at_level(
-            logging.INFO,
-            logger="custom_components.verisure_italy.alarm_control_panel",
+
+        with (
+            patch.object(
+                entity.__class__.__mro__[1],  # CoordinatorEntity
+                "_handle_coordinator_update",
+                return_value=None,
+            ),
+            caplog.at_level(
+                logging.INFO,
+                logger="custom_components.verisure_italy.alarm_control_panel",
+            ),
         ):
             entity._handle_coordinator_update()
 
         assert coordinator.force_context is None
-        assert any(
-            "stale force-arm" in r.message.lower() for r in caplog.records
-        )
+        assert any("stale force-arm" in r.message.lower() for r in caplog.records)
 
     def test_context_kept_when_panel_still_disarmed(self):
         entity, coordinator = _wire_mutation_entity("SDVECU")
@@ -512,6 +533,7 @@ class TestHandleCoordinatorUpdateClearsStaleForceContext:
         coordinator.async_update_listeners = MagicMock()
 
         from unittest.mock import patch
+
         with patch.object(
             entity.__class__.__mro__[1],
             "_handle_coordinator_update",
@@ -545,15 +567,15 @@ class TestFailSecureOnTimeout:
         assert entity._attr_alarm_state is None
         entity._update_alarm_state.assert_not_called()
         coordinator.async_request_refresh.assert_awaited_once()
-        assert any(
-            "UNKNOWN" in r.message for r in caplog.records
-        )
+        assert any("UNKNOWN" in r.message for r in caplog.records)
 
     async def test_arm_failed_reverts_and_refreshes_not(self, caplog):
         entity, coordinator = _wire_mutation_entity("SDVECU")
         coordinator.async_arm = AsyncMock(
             side_effect=OperationFailedError(
-                "rejected", error_code=None, error_type=None,
+                "rejected",
+                error_code=None,
+                error_type=None,
             ),
         )
 
@@ -599,7 +621,8 @@ class TestForceArmAudit:
             suid="suid-456",
             mode="armed_home",
             target=AlarmState(
-                interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+                interior=InteriorMode.PARTIAL,
+                perimeter=PerimeterMode.ON,
             ),
             exceptions=[
                 ZoneException(
@@ -613,7 +636,8 @@ class TestForceArmAudit:
         coordinator.force_context = ctx
         coordinator.data = VerisureStatusData(
             alarm_state=AlarmState(
-                interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
+                interior=InteriorMode.OFF,
+                perimeter=PerimeterMode.OFF,
             ),
             proto_code=ProtoCode.DISARMED,
             timestamp="2026-01-01T00:00:00",
@@ -671,7 +695,9 @@ class TestForceArmAudit:
         entity, coordinator, _ctx = self._wire()
         coordinator.async_arm = AsyncMock(
             side_effect=OperationFailedError(
-                "rejected", error_code="106", error_type=None,
+                "rejected",
+                error_code="106",
+                error_type=None,
             ),
         )
 
@@ -712,7 +738,8 @@ class TestArmTargetsByFamily:
         coordinator.async_arm.assert_awaited_once()
         target = coordinator.async_arm.call_args.args[0]
         assert target == AlarmState(
-            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+            interior=InteriorMode.PARTIAL,
+            perimeter=PerimeterMode.ON,
         )
 
     async def test_arm_home_on_interior_only_targets_partial_off(self):
@@ -724,7 +751,8 @@ class TestArmTargetsByFamily:
         coordinator.async_arm.assert_awaited_once()
         target = coordinator.async_arm.call_args.args[0]
         assert target == AlarmState(
-            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.PARTIAL,
+            perimeter=PerimeterMode.OFF,
         )
 
     async def test_arm_away_on_peri_capable_targets_total_perimeter(self):
@@ -736,7 +764,8 @@ class TestArmTargetsByFamily:
         coordinator.async_arm.assert_awaited_once()
         target = coordinator.async_arm.call_args.args[0]
         assert target == AlarmState(
-            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON,
+            interior=InteriorMode.TOTAL,
+            perimeter=PerimeterMode.ON,
         )
 
     async def test_arm_away_on_interior_only_targets_total_off(self):
@@ -748,7 +777,8 @@ class TestArmTargetsByFamily:
         coordinator.async_arm.assert_awaited_once()
         target = coordinator.async_arm.call_args.args[0]
         assert target == AlarmState(
-            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.TOTAL,
+            perimeter=PerimeterMode.OFF,
         )
 
     # --- Issue #5 (v0.9.4): PERI_CAPABLE entity-layer demotion via partition gate ---
@@ -774,7 +804,8 @@ class TestArmTargetsByFamily:
         coordinator.async_arm.assert_awaited_once()
         target = coordinator.async_arm.call_args.args[0]
         assert target == AlarmState(
-            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.PARTIAL,
+            perimeter=PerimeterMode.OFF,
         )
 
     async def test_arm_away_demotes_when_peri_capable_partition_perimetral_empty(self):
@@ -789,7 +820,8 @@ class TestArmTargetsByFamily:
         coordinator.async_arm.assert_awaited_once()
         target = coordinator.async_arm.call_args.args[0]
         assert target == AlarmState(
-            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.TOTAL,
+            perimeter=PerimeterMode.OFF,
         )
 
     async def test_arm_home_demotes_when_peri_capable_has_no_partition_row(self):
@@ -810,7 +842,8 @@ class TestArmTargetsByFamily:
         coordinator.async_arm.assert_awaited_once()
         target = coordinator.async_arm.call_args.args[0]
         assert target == AlarmState(
-            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.PARTIAL,
+            perimeter=PerimeterMode.OFF,
         )
 
 
@@ -819,35 +852,30 @@ class TestStateMapByFamily:
 
     def test_interior_only_partial_off_is_armed_home(self):
         state = AlarmState(
-            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.PARTIAL,
+            perimeter=PerimeterMode.OFF,
         )
-        assert (
-            _STATE_MAP[PanelFamily.INTERIOR_ONLY][state]
-            == AlarmControlPanelState.ARMED_HOME
-        )
+        assert _STATE_MAP[PanelFamily.INTERIOR_ONLY][state] == AlarmControlPanelState.ARMED_HOME
 
     def test_interior_only_total_off_is_armed_away(self):
         state = AlarmState(
-            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.TOTAL,
+            perimeter=PerimeterMode.OFF,
         )
-        assert (
-            _STATE_MAP[PanelFamily.INTERIOR_ONLY][state]
-            == AlarmControlPanelState.ARMED_AWAY
-        )
+        assert _STATE_MAP[PanelFamily.INTERIOR_ONLY][state] == AlarmControlPanelState.ARMED_AWAY
 
     def test_interior_only_disarmed(self):
         state = AlarmState(
-            interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.OFF,
+            perimeter=PerimeterMode.OFF,
         )
-        assert (
-            _STATE_MAP[PanelFamily.INTERIOR_ONLY][state]
-            == AlarmControlPanelState.DISARMED
-        )
+        assert _STATE_MAP[PanelFamily.INTERIOR_ONLY][state] == AlarmControlPanelState.DISARMED
 
     def test_peri_capable_partial_off_is_custom_bypass(self):
         """PERI_CAPABLE regression: proto P (interior-only) stays CUSTOM_BYPASS."""
         state = AlarmState(
-            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.PARTIAL,
+            perimeter=PerimeterMode.OFF,
         )
         assert (
             _STATE_MAP[PanelFamily.PERI_CAPABLE][state]
@@ -857,7 +885,8 @@ class TestStateMapByFamily:
     def test_peri_capable_total_off_is_custom_bypass(self):
         """PERI_CAPABLE regression: proto T (interior-only) stays CUSTOM_BYPASS."""
         state = AlarmState(
-            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.TOTAL,
+            perimeter=PerimeterMode.OFF,
         )
         assert (
             _STATE_MAP[PanelFamily.PERI_CAPABLE][state]
@@ -867,7 +896,8 @@ class TestStateMapByFamily:
     def test_interior_only_has_no_peri_states(self):
         """Perimeter-involving states are impossible on INTERIOR_ONLY panels."""
         peri_on = AlarmState(
-            interior=InteriorMode.OFF, perimeter=PerimeterMode.ON,
+            interior=InteriorMode.OFF,
+            perimeter=PerimeterMode.ON,
         )
         assert peri_on not in _STATE_MAP[PanelFamily.INTERIOR_ONLY]
 
@@ -885,7 +915,8 @@ class TestUpdateAlarmStateByFamily:
         entity = self._entity_with_state(
             "SDVFAST",
             AlarmState(
-                interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF,
+                interior=InteriorMode.PARTIAL,
+                perimeter=PerimeterMode.OFF,
             ),
         )
         entity._update_alarm_state()
@@ -895,7 +926,8 @@ class TestUpdateAlarmStateByFamily:
         entity = self._entity_with_state(
             "SDVFAST",
             AlarmState(
-                interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+                interior=InteriorMode.TOTAL,
+                perimeter=PerimeterMode.OFF,
             ),
         )
         entity._update_alarm_state()
@@ -906,7 +938,8 @@ class TestUpdateAlarmStateByFamily:
         entity = self._entity_with_state(
             "SDVFAST",
             AlarmState(
-                interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+                interior=InteriorMode.PARTIAL,
+                perimeter=PerimeterMode.ON,
             ),
         )
         with pytest.raises(KeyError):

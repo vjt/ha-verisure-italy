@@ -66,8 +66,7 @@ class UnexpectedStateError(VerisureError):
 
     def __init__(self, proto_code: str) -> None:
         super().__init__(
-            f"Unexpected alarm proto code: {proto_code!r}. "
-            f"Human verification required."
+            f"Unexpected alarm proto code: {proto_code!r}. Human verification required."
         )
         self.proto_code = proto_code
 
@@ -179,17 +178,14 @@ class UnsupportedCommandError(VerisureError):
     ) -> None:
         if not missing_services and detail is None:
             raise ValueError(
-                "UnsupportedCommandError requires missing_services or detail; "
-                "got both empty."
+                "UnsupportedCommandError requires missing_services or detail; got both empty."
             )
         self.command = command
         self.panel = panel
         self.missing_services = missing_services
         self.detail = detail
         if detail is not None:
-            message = (
-                f"Panel {panel!r} cannot honour {command.value!r}: {detail}"
-            )
+            message = f"Panel {panel!r} cannot honour {command.value!r}: {detail}"
         else:
             missing = ", ".join(sorted(s.value for s in missing_services))
             message = (

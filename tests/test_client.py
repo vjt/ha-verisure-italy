@@ -90,6 +90,7 @@ def no_sleep(monkeypatch: pytest.MonkeyPatch):
     Retries use real-time backoff (seconds). Tests must never block on
     wall-clock waits.
     """
+
     async def _fast_sleep(_seconds: float) -> None:
         return None
 
@@ -133,12 +134,14 @@ def _authenticate(client: VerisureClient) -> None:
     # PANEL_FAMILIES at the model level, plus runtime demotion when
     # partition 02 enterStates is empty (perimeter not provisioned).
     # See docs/findings/panel-SDVECU-probe.json.
-    client._services_cache[INSTALLATION.number] = frozenset({
-        ServiceRequest.ARM,
-        ServiceRequest.DARM,
-        ServiceRequest.ARMNIGHT,
-        ServiceRequest.EST,
-    })
+    client._services_cache[INSTALLATION.number] = frozenset(
+        {
+            ServiceRequest.ARM,
+            ServiceRequest.DARM,
+            ServiceRequest.ARMNIGHT,
+            ServiceRequest.EST,
+        }
+    )
 
     # Partition 02 (PERIMETRAL) with non-empty enterStates — this
     # installation has perimeter access. Tests modelling a no-perimeter
@@ -162,130 +165,144 @@ def _authenticate(client: VerisureClient) -> None:
 
 def _login_ok(token: str | None = None) -> str:
     token = token or _make_jwt()
-    return json.dumps({
-        "data": {
-            "xSLoginToken": {
-                "res": "OK",
-                "msg": "Login successful",
-                "hash": token,
-                "refreshToken": "refresh-abc",
-                "needDeviceAuthorization": False,
+    return json.dumps(
+        {
+            "data": {
+                "xSLoginToken": {
+                    "res": "OK",
+                    "msg": "Login successful",
+                    "hash": token,
+                    "refreshToken": "refresh-abc",
+                    "needDeviceAuthorization": False,
+                }
             }
         }
-    })
+    )
 
 
 def _login_2fa_required() -> str:
-    return json.dumps({
-        "data": {
-            "xSLoginToken": {
-                "res": "OK",
-                "msg": "",
-                "hash": None,
-                "refreshToken": None,
-                "needDeviceAuthorization": True,
+    return json.dumps(
+        {
+            "data": {
+                "xSLoginToken": {
+                    "res": "OK",
+                    "msg": "",
+                    "hash": None,
+                    "refreshToken": None,
+                    "needDeviceAuthorization": True,
+                }
             }
         }
-    })
+    )
 
 
 def _login_null_hash() -> str:
-    return json.dumps({
-        "data": {
-            "xSLoginToken": {
-                "res": "OK",
-                "msg": "",
-                "hash": None,
-                "refreshToken": None,
-                "needDeviceAuthorization": False,
+    return json.dumps(
+        {
+            "data": {
+                "xSLoginToken": {
+                    "res": "OK",
+                    "msg": "",
+                    "hash": None,
+                    "refreshToken": None,
+                    "needDeviceAuthorization": False,
+                }
             }
         }
-    })
+    )
 
 
 def _installation_list() -> str:
-    return json.dumps({
-        "data": {
-            "xSInstallations": {
-                "installations": [
-                    {
-                        "number": INSTALLATION.number,
-                        "alias": INSTALLATION.alias,
-                        "panel": INSTALLATION.panel,
-                        "type": INSTALLATION.type,
-                        "name": INSTALLATION.name,
-                        "surname": INSTALLATION.surname,
-                        "address": INSTALLATION.address,
-                        "city": INSTALLATION.city,
-                        "postcode": INSTALLATION.postcode,
-                        "province": INSTALLATION.province,
-                        "email": INSTALLATION.email,
-                        "phone": INSTALLATION.phone,
-                    }
-                ]
+    return json.dumps(
+        {
+            "data": {
+                "xSInstallations": {
+                    "installations": [
+                        {
+                            "number": INSTALLATION.number,
+                            "alias": INSTALLATION.alias,
+                            "panel": INSTALLATION.panel,
+                            "type": INSTALLATION.type,
+                            "name": INSTALLATION.name,
+                            "surname": INSTALLATION.surname,
+                            "address": INSTALLATION.address,
+                            "city": INSTALLATION.city,
+                            "postcode": INSTALLATION.postcode,
+                            "province": INSTALLATION.province,
+                            "email": INSTALLATION.email,
+                            "phone": INSTALLATION.phone,
+                        }
+                    ]
+                }
             }
         }
-    })
+    )
 
 
 def _services_response(capabilities_token: str | None = None) -> str:
     cap = capabilities_token or _make_jwt()
-    return json.dumps({
-        "data": {
-            "xSSrv": {
-                "res": "OK",
-                "msg": "",
-                "installation": {
-                    "numinst": INSTALLATION.number,
-                    "capabilities": cap,
-                    "services": [
-                        {
-                            "idService": 11,
-                            "active": True,
-                            "visible": True,
-                            "request": "EST",
-                            "description": "Alarm Status",
-                        },
-                        {
-                            "idService": 506,
-                            "active": True,
-                            "visible": True,
-                            "request": "TIMELINE",
-                            "description": "Timeline",
-                        },
-                    ],
-                    "configRepoUser": {"alarmPartitions": []},
-                },
+    return json.dumps(
+        {
+            "data": {
+                "xSSrv": {
+                    "res": "OK",
+                    "msg": "",
+                    "installation": {
+                        "numinst": INSTALLATION.number,
+                        "capabilities": cap,
+                        "services": [
+                            {
+                                "idService": 11,
+                                "active": True,
+                                "visible": True,
+                                "request": "EST",
+                                "description": "Alarm Status",
+                            },
+                            {
+                                "idService": 506,
+                                "active": True,
+                                "visible": True,
+                                "request": "TIMELINE",
+                                "description": "Timeline",
+                            },
+                        ],
+                        "configRepoUser": {"alarmPartitions": []},
+                    },
+                }
             }
         }
-    })
+    )
 
 
 def _check_alarm_response(reference_id: str = "ref-123") -> str:
-    return json.dumps({
-        "data": {
-            "xSCheckAlarm": {
-                "res": "OK",
-                "msg": "",
-                "referenceId": reference_id,
+    return json.dumps(
+        {
+            "data": {
+                "xSCheckAlarm": {
+                    "res": "OK",
+                    "msg": "",
+                    "referenceId": reference_id,
+                }
             }
         }
-    })
+    )
 
 
 def _alarm_status_pending() -> str:
-    return json.dumps({
-        "data": {
-            "xSCheckAlarmStatus": {
-                "res": "WAIT",
-                "msg": "pending",
-                "status": "0",
-                "numinst": INSTALLATION.number,
-                "protomResponse": "",
-                "protomResponseDate": "",
+    return json.dumps(
+        {
+            "data": {
+                "xSCheckAlarmStatus": {
+                    "res": "WAIT",
+                    "msg": "pending",
+                    "status": "0",
+                    "numinst": INSTALLATION.number,
+                    "protomResponse": "",
+                    "protomResponseDate": "",
+                }
             }
         }
-    })
+    )
 
 
 def _alarm_status_complete(proto_code: str = "A") -> str:
@@ -297,87 +314,99 @@ def _alarm_status_complete(proto_code: str = "A") -> str:
         "E": "active_perimetral_alarm_msg",
         "T": "total_armed",
     }
-    return json.dumps({
-        "data": {
-            "xSCheckAlarmStatus": {
-                "res": "OK",
-                "msg": msg_map[proto_code],
-                "status": "0",
-                "numinst": INSTALLATION.number,
-                "protomResponse": proto_code,
-                "protomResponseDate": "2026-04-02T10:30:00",
+    return json.dumps(
+        {
+            "data": {
+                "xSCheckAlarmStatus": {
+                    "res": "OK",
+                    "msg": msg_map[proto_code],
+                    "status": "0",
+                    "numinst": INSTALLATION.number,
+                    "protomResponse": proto_code,
+                    "protomResponseDate": "2026-04-02T10:30:00",
+                }
             }
         }
-    })
+    )
 
 
 def _general_status(status: str = "A") -> str:
-    return json.dumps({
-        "data": {
-            "xSStatus": {
-                "status": status,
-                "timestampUpdate": "2026-04-02T10:30:00",
+    return json.dumps(
+        {
+            "data": {
+                "xSStatus": {
+                    "status": status,
+                    "timestampUpdate": "2026-04-02T10:30:00",
+                }
             }
         }
-    })
+    )
 
 
 def _arm_panel_response(reference_id: str = "arm-ref-123") -> str:
-    return json.dumps({
-        "data": {
-            "xSArmPanel": {
-                "res": "OK",
-                "msg": "",
-                "referenceId": reference_id,
+    return json.dumps(
+        {
+            "data": {
+                "xSArmPanel": {
+                    "res": "OK",
+                    "msg": "",
+                    "referenceId": reference_id,
+                }
             }
         }
-    })
+    )
 
 
 def _arm_panel_rejected() -> str:
-    return json.dumps({
-        "data": {
-            "xSArmPanel": {
-                "res": "ERROR",
-                "msg": "Panel busy",
-                "referenceId": "",
+    return json.dumps(
+        {
+            "data": {
+                "xSArmPanel": {
+                    "res": "ERROR",
+                    "msg": "Panel busy",
+                    "referenceId": "",
+                }
             }
         }
-    })
+    )
 
 
 def _arm_status_pending() -> str:
-    return json.dumps({
-        "data": {
-            "xSArmStatus": {
-                "res": "WAIT",
-                "msg": "pending",
-                "status": "0",
-                "numinst": INSTALLATION.number,
-                "protomResponse": "",
-                "protomResponseDate": "",
-                "requestId": "",
-                "error": None,
+    return json.dumps(
+        {
+            "data": {
+                "xSArmStatus": {
+                    "res": "WAIT",
+                    "msg": "pending",
+                    "status": "0",
+                    "numinst": INSTALLATION.number,
+                    "protomResponse": "",
+                    "protomResponseDate": "",
+                    "requestId": "",
+                    "error": None,
+                }
             }
         }
-    })
+    )
 
 
 def _arm_status_complete(proto_code: str = "A") -> str:
-    return json.dumps({
-        "data": {
-            "xSArmStatus": {
-                "res": "OK",
-                "msg": "armed",
-                "status": "0",
-                "numinst": INSTALLATION.number,
-                "protomResponse": proto_code,
-                "protomResponseDate": "2026-04-02T10:30:00",
-                "requestId": "req-123",
-                "error": None,
+    return json.dumps(
+        {
+            "data": {
+                "xSArmStatus": {
+                    "res": "OK",
+                    "msg": "armed",
+                    "status": "0",
+                    "numinst": INSTALLATION.number,
+                    "protomResponse": proto_code,
+                    "protomResponseDate": "2026-04-02T10:30:00",
+                    "requestId": "req-123",
+                    "error": None,
+                }
             }
         }
-    })
+    )
 
 
 def _arm_status_with_error(
@@ -386,142 +415,160 @@ def _arm_status_with_error(
     reference_id: str = "error-ref-123",
     suid: str = "error-suid-456",
 ) -> str:
-    return json.dumps({
-        "data": {
-            "xSArmStatus": {
-                "res": "ERROR",
-                "msg": "alarm-manager.exceptions",
-                "status": None,
-                "protomResponse": None,
-                "protomResponseDate": None,
-                "numinst": None,
-                "requestId": None,
-                "error": {
-                    "code": "EXCEPTIONS",
-                    "type": error_type,
-                    "allowForcing": allow_forcing,
-                    "exceptionsNumber": 1,
-                    "referenceId": reference_id,
-                    "suid": suid,
-                },
+    return json.dumps(
+        {
+            "data": {
+                "xSArmStatus": {
+                    "res": "ERROR",
+                    "msg": "alarm-manager.exceptions",
+                    "status": None,
+                    "protomResponse": None,
+                    "protomResponseDate": None,
+                    "numinst": None,
+                    "requestId": None,
+                    "error": {
+                        "code": "EXCEPTIONS",
+                        "type": error_type,
+                        "allowForcing": allow_forcing,
+                        "exceptionsNumber": 1,
+                        "referenceId": reference_id,
+                        "suid": suid,
+                    },
+                }
             }
         }
-    })
+    )
 
 
 def _get_exceptions_response(
     exceptions: list[dict[str, str]] | None = None,
 ) -> str:
     if exceptions is None:
-        exceptions = [
-            {"status": "OPEN", "deviceType": "MAGNETIC", "alias": "finestracucina"}
-        ]
-    return json.dumps({
-        "data": {
-            "xSGetExceptions": {
-                "res": "OK",
-                "msg": None,
-                "exceptions": exceptions,
+        exceptions = [{"status": "OPEN", "deviceType": "MAGNETIC", "alias": "finestracucina"}]
+    return json.dumps(
+        {
+            "data": {
+                "xSGetExceptions": {
+                    "res": "OK",
+                    "msg": None,
+                    "exceptions": exceptions,
+                }
             }
         }
-    })
+    )
 
 
 def _disarm_panel_response(reference_id: str = "disarm-ref-123") -> str:
-    return json.dumps({
-        "data": {
-            "xSDisarmPanel": {
-                "res": "OK",
-                "msg": "",
-                "referenceId": reference_id,
+    return json.dumps(
+        {
+            "data": {
+                "xSDisarmPanel": {
+                    "res": "OK",
+                    "msg": "",
+                    "referenceId": reference_id,
+                }
             }
         }
-    })
+    )
 
 
 def _disarm_panel_rejected() -> str:
-    return json.dumps({
-        "data": {
-            "xSDisarmPanel": {
-                "res": "ERROR",
-                "msg": "Panel not responding",
-                "referenceId": "",
+    return json.dumps(
+        {
+            "data": {
+                "xSDisarmPanel": {
+                    "res": "ERROR",
+                    "msg": "Panel not responding",
+                    "referenceId": "",
+                }
             }
         }
-    })
+    )
 
 
 def _disarm_status_pending() -> str:
-    return json.dumps({
-        "data": {
-            "xSDisarmStatus": {
-                "res": "WAIT",
-                "msg": "pending",
-                "numinst": INSTALLATION.number,
-                "protomResponse": "",
-                "protomResponseDate": "",
-                "requestId": "",
-                "error": None,
+    return json.dumps(
+        {
+            "data": {
+                "xSDisarmStatus": {
+                    "res": "WAIT",
+                    "msg": "pending",
+                    "numinst": INSTALLATION.number,
+                    "protomResponse": "",
+                    "protomResponseDate": "",
+                    "requestId": "",
+                    "error": None,
+                }
             }
         }
-    })
+    )
 
 
 def _disarm_status_complete() -> str:
-    return json.dumps({
-        "data": {
-            "xSDisarmStatus": {
-                "res": "OK",
-                "msg": "inactive_alarm",
-                "numinst": INSTALLATION.number,
-                "protomResponse": "D",
-                "protomResponseDate": "2026-04-02T10:31:00",
-                "requestId": "req-456",
-                "error": None,
+    return json.dumps(
+        {
+            "data": {
+                "xSDisarmStatus": {
+                    "res": "OK",
+                    "msg": "inactive_alarm",
+                    "numinst": INSTALLATION.number,
+                    "protomResponse": "D",
+                    "protomResponseDate": "2026-04-02T10:31:00",
+                    "requestId": "req-456",
+                    "error": None,
+                }
             }
         }
-    })
+    )
 
 
 def _send_otp_ok() -> str:
-    return json.dumps({
-        "data": {
-            "xSSendOtp": {
-                "res": "OK",
-                "msg": "OTP sent",
+    return json.dumps(
+        {
+            "data": {
+                "xSSendOtp": {
+                    "res": "OK",
+                    "msg": "OTP sent",
+                }
             }
         }
-    })
+    )
 
 
 def _error_session_expired() -> str:
-    return json.dumps({
-        "errors": [
-            {
-                "message": "Session expired",
-                "data": {"status": 403},
-            }
-        ]
-    })
+    return json.dumps(
+        {
+            "errors": [
+                {
+                    "message": "Session expired",
+                    "data": {"status": 403},
+                }
+            ]
+        }
+    )
 
 
 def _error_2fa_required() -> str:
-    return json.dumps({
-        "errors": [
-            {
-                "message": "Need device authorization",
-                "data": {"needDeviceAuthorization": True},
-            }
-        ]
-    })
+    return json.dumps(
+        {
+            "errors": [
+                {
+                    "message": "Need device authorization",
+                    "data": {"needDeviceAuthorization": True},
+                }
+            ]
+        }
+    )
 
 
 def _error_generic(message: str = "Something went wrong") -> str:
-    return json.dumps({
-        "errors": [
-            {"message": message},
-        ]
-    })
+    return json.dumps(
+        {
+            "errors": [
+                {"message": message},
+            ]
+        }
+    )
 
 
 def _find_call_with_operation(mock_api: aioresponses, op_name: str):
@@ -537,9 +584,7 @@ def _find_call_with_operation(mock_api: aioresponses, op_name: str):
             if body.get("operationName") == op_name:
                 matches.append(call)
     if not matches:
-        raise AssertionError(
-            f"No aioresponses call found with operationName={op_name!r}"
-        )
+        raise AssertionError(f"No aioresponses call found with operationName={op_name!r}")
     return matches[-1]
 
 
@@ -597,9 +642,7 @@ class TestLogin:
         with pytest.raises(AuthenticationError, match="null auth token"):
             await client.login()
 
-    async def test_graphql_error_propagates_as_api_error(
-        self, mock_api, client, no_sleep
-    ):
+    async def test_graphql_error_propagates_as_api_error(self, mock_api, client, no_sleep):
         """Transient GraphQL errors during login must NOT be classified as
         AuthenticationError. That would trigger ConfigEntryAuthFailed and
         lock the integration out for hours on an upstream server bug
@@ -617,9 +660,7 @@ class TestLogin:
         with pytest.raises(APIResponseError, match="Cannot read properties"):
             await client.login()
 
-    async def test_transient_graphql_error_retried_then_succeeds(
-        self, mock_api, client, no_sleep
-    ):
+    async def test_transient_graphql_error_retried_then_succeeds(self, mock_api, client, no_sleep):
         """A single transient GraphQL error should be retried and not leak
         to the caller if a subsequent attempt succeeds.
         """
@@ -650,9 +691,7 @@ class TestLogout:
         assert client._login_timestamp == 0
         assert client._refresh_token == ""
 
-    async def test_clears_state_even_on_error(
-        self, mock_api, client, no_sleep
-    ):
+    async def test_clears_state_even_on_error(self, mock_api, client, no_sleep):
         _authenticate(client)
         # 5xx is retried — register 3 mocks, one per attempt
         for _ in range(3):
@@ -701,26 +740,30 @@ class TestListInstallations:
         ``type``) — only ``number``, ``panel``, ``alias`` are required.
         """
         _authenticate(client)
-        body = json.dumps({
-            "data": {
-                "xSInstallations": {
-                    "installations": [{
-                        "number": "1234567",
-                        "alias": "Casa",
-                        "panel": "SDVECU",
-                        "type": None,
-                        "name": None,
-                        "surname": None,
-                        "address": None,
-                        "city": None,
-                        "postcode": None,
-                        "province": None,
-                        "email": None,
-                        "phone": None,
-                    }]
+        body = json.dumps(
+            {
+                "data": {
+                    "xSInstallations": {
+                        "installations": [
+                            {
+                                "number": "1234567",
+                                "alias": "Casa",
+                                "panel": "SDVECU",
+                                "type": None,
+                                "name": None,
+                                "surname": None,
+                                "address": None,
+                                "city": None,
+                                "postcode": None,
+                                "province": None,
+                                "email": None,
+                                "phone": None,
+                            }
+                        ]
+                    }
                 }
             }
-        })
+        )
         mock_api.post(API_URL, body=body)
 
         installations = await client.list_installations()
@@ -758,25 +801,25 @@ class TestGetServices:
         assert INSTALLATION.number in client._capabilities_exp
         assert client._capabilities_exp[INSTALLATION.number] > datetime.now(tz=UTC)
 
-    async def test_null_config_repo_user_yields_empty_partitions(
-        self, mock_api, client
-    ):
+    async def test_null_config_repo_user_yields_empty_partitions(self, mock_api, client):
         """Issue #7 — install with no per-user config still parses, demotes safely."""
         _authenticate(client)
-        body = json.dumps({
-            "data": {
-                "xSSrv": {
-                    "res": "OK",
-                    "msg": "",
-                    "installation": {
-                        "numinst": INSTALLATION.number,
-                        "capabilities": _make_jwt(),
-                        "services": [],
-                        "configRepoUser": None,
-                    },
+        body = json.dumps(
+            {
+                "data": {
+                    "xSSrv": {
+                        "res": "OK",
+                        "msg": "",
+                        "installation": {
+                            "numinst": INSTALLATION.number,
+                            "capabilities": _make_jwt(),
+                            "services": [],
+                            "configRepoUser": None,
+                        },
+                    }
                 }
             }
-        })
+        )
         mock_api.post(API_URL, body=body)
 
         await client.get_services(INSTALLATION)
@@ -981,19 +1024,24 @@ class TestDisarm:
         client.set_last_proto("A")  # Armed — resolver must resolve before HTTP call.
 
         mock_api.post(API_URL, body=_disarm_panel_response())
-        mock_api.post(API_URL, body=json.dumps({
-            "data": {
-                "xSDisarmStatus": {
-                    "res": "ERROR",
-                    "msg": "alarm-manager.error_no_response_to_request",
-                    "numinst": None,
-                    "protomResponse": "",
-                    "protomResponseDate": "2026-04-02T20:30:59Z",
-                    "requestId": "",
-                    "error": None,
+        mock_api.post(
+            API_URL,
+            body=json.dumps(
+                {
+                    "data": {
+                        "xSDisarmStatus": {
+                            "res": "ERROR",
+                            "msg": "alarm-manager.error_no_response_to_request",
+                            "numinst": None,
+                            "protomResponse": "",
+                            "protomResponseDate": "2026-04-02T20:30:59Z",
+                            "requestId": "",
+                            "error": None,
+                        }
+                    }
                 }
-            }
-        }))
+            ),
+        )
 
         with pytest.raises(OperationFailedError, match="Panel rejected operation"):
             await client.disarm(INSTALLATION)
@@ -1018,9 +1066,7 @@ class TestDisarm:
 class TestHTTPErrors:
     async def test_waf_blocked_403(self, mock_api, client):
         _authenticate(client)
-        mock_api.post(
-            API_URL, status=403, body="_Incapsula_Resource blocked by WAF"
-        )
+        mock_api.post(API_URL, status=403, body="_Incapsula_Resource blocked by WAF")
 
         with pytest.raises(WAFBlockedError, match="Incapsula"):
             await client.list_installations()
@@ -1049,9 +1095,7 @@ class TestHTTPErrors:
         with pytest.raises(APIResponseError, match="HTTP 429"):
             await client.list_installations()
 
-    async def test_connection_error_exhausts_retries(
-        self, mock_api, client, no_sleep
-    ):
+    async def test_connection_error_exhausts_retries(self, mock_api, client, no_sleep):
         """Network-level failure is transient — retried 3 times total."""
         _authenticate(client)
         for _ in range(3):
@@ -1122,9 +1166,7 @@ class TestTransientRetry:
         assert len(result) == 1
         assert result[0].number == INSTALLATION.number
 
-    async def test_connection_error_then_success(
-        self, mock_api, client, no_sleep
-    ):
+    async def test_connection_error_then_success(self, mock_api, client, no_sleep):
         """One TCP reset is absorbed — caller sees only the success."""
         _authenticate(client)
         mock_api.post(
@@ -1140,9 +1182,7 @@ class TestTransientRetry:
 
         assert len(result) == 1
 
-    async def test_graphql_js_bug_then_success(
-        self, mock_api, client, no_sleep
-    ):
+    async def test_graphql_js_bug_then_success(self, mock_api, client, no_sleep):
         """The Mode B regression scenario: the Verisure backend JS undefined
         bug must be treated as transient and absorbed, not classified as
         credentials failure.
@@ -1172,17 +1212,13 @@ class TestTransientRetry:
     async def test_waf_not_retried(self, mock_api, client, no_sleep):
         """WAF blocking demands a cold-off — never retried."""
         _authenticate(client)
-        mock_api.post(
-            API_URL, status=403, body="_Incapsula_Resource blocked"
-        )
+        mock_api.post(API_URL, status=403, body="_Incapsula_Resource blocked")
         # If retry were attempted, next call would have no mock and fail
 
         with pytest.raises(WAFBlockedError):
             await client.list_installations()
 
-    async def test_session_expired_not_retried(
-        self, mock_api, client, no_sleep
-    ):
+    async def test_session_expired_not_retried(self, mock_api, client, no_sleep):
         """Session expiry has its own recovery path — don't retry in-place."""
         _authenticate(client)
         mock_api.post(API_URL, body=_error_session_expired())
@@ -1222,9 +1258,7 @@ class TestSessionExpiredInvalidation:
     See docs/findings/unavailable-flapping.md for the 2026-04-20 incident.
     """
 
-    async def test_session_expired_clears_auth_and_capabilities(
-        self, mock_api, client
-    ):
+    async def test_session_expired_clears_auth_and_capabilities(self, mock_api, client):
         """SessionExpired on an installation-scoped operation clears both
         the auth token and the capabilities token for that installation.
         """
@@ -1241,9 +1275,7 @@ class TestSessionExpiredInvalidation:
         assert INSTALLATION.number not in client._capabilities
         assert INSTALLATION.number not in client._capabilities_exp
 
-    async def test_session_expired_on_list_installations_clears_auth(
-        self, mock_api, client
-    ):
+    async def test_session_expired_on_list_installations_clears_auth(self, mock_api, client):
         """SessionExpired on a non-installation operation still clears auth
         (installation-less operations only rely on auth_token).
         """
@@ -1343,15 +1375,11 @@ class TestForceArm:
         mock_api.post(API_URL, body=_arm_status_complete("A"))
 
         target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
-        result = await client.arm(
-            INSTALLATION, target, force_arming_remote_id="error-ref-123"
-        )
+        result = await client.arm(INSTALLATION, target, force_arming_remote_id="error-ref-123")
 
         assert result.proto_code == ProtoCode.TOTAL_PERIMETER
 
-    async def test_arm_non_blocking_without_allow_forcing_raises_failed(
-        self, mock_api, client
-    ):
+    async def test_arm_non_blocking_without_allow_forcing_raises_failed(self, mock_api, client):
         """NON_BLOCKING error without allowForcing raises OperationFailedError."""
         _authenticate(client)
         mock_api.post(API_URL, body=_arm_panel_response())
@@ -1367,9 +1395,12 @@ class TestForceArm:
         mock_api.post(API_URL, body=_arm_panel_response())
         mock_api.post(API_URL, body=_arm_status_with_error())
         # First exceptions poll returns WAIT
-        mock_api.post(API_URL, body=json.dumps({
-            "data": {"xSGetExceptions": {"res": "WAIT", "msg": None, "exceptions": None}}
-        }))
+        mock_api.post(
+            API_URL,
+            body=json.dumps(
+                {"data": {"xSGetExceptions": {"res": "WAIT", "msg": None, "exceptions": None}}}
+            ),
+        )
         # Second returns OK with data
         mock_api.post(API_URL, body=_get_exceptions_response())
 
@@ -1384,10 +1415,15 @@ class TestForceArm:
         _authenticate(client)
         mock_api.post(API_URL, body=_arm_panel_response())
         mock_api.post(API_URL, body=_arm_status_with_error())
-        mock_api.post(API_URL, body=_get_exceptions_response([
-            {"status": "OPEN", "deviceType": "MAGNETIC", "alias": "finestracucina"},
-            {"status": "OPEN", "deviceType": "MAGNETIC", "alias": "portaingresso"},
-        ]))
+        mock_api.post(
+            API_URL,
+            body=_get_exceptions_response(
+                [
+                    {"status": "OPEN", "deviceType": "MAGNETIC", "alias": "finestracucina"},
+                    {"status": "OPEN", "deviceType": "MAGNETIC", "alias": "portaingresso"},
+                ]
+            ),
+        )
 
         target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
         with pytest.raises(ArmingExceptionError) as exc_info:
@@ -1428,20 +1464,25 @@ class TestUnknownProtoCode:
         _authenticate(client)
         client.set_last_proto("A")  # Armed — resolver must resolve before HTTP call.
         mock_api.post(API_URL, body=_disarm_panel_response())
-        mock_api.post(API_URL, body=json.dumps({
-            "data": {
-                "xSDisarmStatus": {
-                    "res": "OK",
-                    "msg": "disarmed",
-                    "status": "0",
-                    "numinst": INSTALLATION.number,
-                    "protomResponse": "Z",
-                    "protomResponseDate": "2026-04-02T10:30:00",
-                    "requestId": "req-123",
-                    "error": None,
+        mock_api.post(
+            API_URL,
+            body=json.dumps(
+                {
+                    "data": {
+                        "xSDisarmStatus": {
+                            "res": "OK",
+                            "msg": "disarmed",
+                            "status": "0",
+                            "numinst": INSTALLATION.number,
+                            "protomResponse": "Z",
+                            "protomResponseDate": "2026-04-02T10:30:00",
+                            "requestId": "req-123",
+                            "error": None,
+                        }
+                    }
                 }
-            }
-        }))
+            ),
+        )
 
         result = await client.disarm(INSTALLATION)
         with pytest.raises(UnexpectedStateError) as exc_info:
@@ -1456,47 +1497,55 @@ class TestUnknownProtoCode:
 
 def _validate_device_otp_challenge() -> str:
     """Response when device needs OTP — returns error with auth hash + phones."""
-    return json.dumps({
-        "errors": [{
-            "message": "Unauthorized",
-            "data": {
-                "status": 401,
-                "auth-otp-hash": "otp-hash-abc",
-                "auth-phones": [
-                    {"id": 1, "phone": "+39333***1234"},
-                    {"id": 2, "phone": "+39333***5678"},
-                ],
-            },
-        }]
-    })
+    return json.dumps(
+        {
+            "errors": [
+                {
+                    "message": "Unauthorized",
+                    "data": {
+                        "status": 401,
+                        "auth-otp-hash": "otp-hash-abc",
+                        "auth-phones": [
+                            {"id": 1, "phone": "+39333***1234"},
+                            {"id": 2, "phone": "+39333***5678"},
+                        ],
+                    },
+                }
+            ]
+        }
+    )
 
 
 def _validate_device_success() -> str:
     """Response when device validation succeeds (Verisure IT: hash=null)."""
-    return json.dumps({
-        "data": {
-            "xSValidateDevice": {
-                "res": "OK",
-                "msg": "Device validated",
-                "hash": None,
-                "refreshToken": None,
+    return json.dumps(
+        {
+            "data": {
+                "xSValidateDevice": {
+                    "res": "OK",
+                    "msg": "Device validated",
+                    "hash": None,
+                    "refreshToken": None,
+                }
             }
         }
-    })
+    )
 
 
 def _validate_device_success_with_token() -> str:
     """Response when device validation returns a new auth token."""
-    return json.dumps({
-        "data": {
-            "xSValidateDevice": {
-                "res": "OK",
-                "msg": "Device validated",
-                "hash": _make_jwt(),
-                "refreshToken": "refresh-new",
+    return json.dumps(
+        {
+            "data": {
+                "xSValidateDevice": {
+                    "res": "OK",
+                    "msg": "Device validated",
+                    "hash": _make_jwt(),
+                    "refreshToken": "refresh-new",
+                }
             }
         }
-    })
+    )
 
 
 class TestValidateDevice:
@@ -1545,22 +1594,30 @@ class TestArmResolverWireIn:
     """Arm path uses CommandResolver with current state from _last_proto."""
 
     async def test_arm_total_from_partial_uses_transition_command_on_sdvfast(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """SDVFAST has ARMINTFPART active → single-step transition to TOTAL."""
         _authenticate(client)
         sdvfast_installation = INSTALLATION.model_copy(update={"panel": "SDVFAST"})
-        client._services_cache[INSTALLATION.number] = frozenset({
-            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
-            ServiceRequest.ARMNIGHT, ServiceRequest.ARMINTFPART,
-            ServiceRequest.ARMPARTFINT,
-        })
+        client._services_cache[INSTALLATION.number] = frozenset(
+            {
+                ServiceRequest.ARM,
+                ServiceRequest.DARM,
+                ServiceRequest.ARMDAY,
+                ServiceRequest.ARMNIGHT,
+                ServiceRequest.ARMINTFPART,
+                ServiceRequest.ARMPARTFINT,
+            }
+        )
         client.set_last_proto("P")  # currently PARTIAL interior
         mock_api.post(API_URL, body=_arm_panel_response())
         mock_api.post(API_URL, body=_arm_status_complete("T"))
 
         target = AlarmState(
-            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.TOTAL,
+            perimeter=PerimeterMode.OFF,
         )
         result = await client.arm(sdvfast_installation, target)
 
@@ -1570,7 +1627,9 @@ class TestArmResolverWireIn:
         assert result.proto_code == ProtoCode.TOTAL
 
     async def test_sdvecu_total_peri_to_partial_peri_sends_armday1peri1(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """Live-observed regression: SDVECU rejects ARMPARTFINTDAY1.
 
@@ -1583,7 +1642,8 @@ class TestArmResolverWireIn:
         mock_api.post(API_URL, body=_arm_status_complete("B"))
 
         target = AlarmState(
-            interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON,
+            interior=InteriorMode.PARTIAL,
+            perimeter=PerimeterMode.ON,
         )
         await client.arm(INSTALLATION, target)
 
@@ -1592,7 +1652,9 @@ class TestArmResolverWireIn:
         assert body["variables"]["request"] == "ARMDAY1PERI1"
 
     async def test_arm_total_perimeter_from_off_uses_base_command(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """Arming TOTAL+PERI from disarmed sends ARM1PERI1."""
         _authenticate(client)
@@ -1601,7 +1663,8 @@ class TestArmResolverWireIn:
         mock_api.post(API_URL, body=_arm_status_complete("A"))
 
         target = AlarmState(
-            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON,
+            interior=InteriorMode.TOTAL,
+            perimeter=PerimeterMode.ON,
         )
         await client.arm(INSTALLATION, target)
 
@@ -1610,29 +1673,32 @@ class TestArmResolverWireIn:
         assert body["variables"]["request"] == "ARM1PERI1"
 
     async def test_arm_refuses_peri_target_on_interior_only_panel(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """SDVFAST can't do perimeter arm — refuse locally, zero bytes sent."""
         from verisure_italy.exceptions import UnsupportedCommandError
 
         _authenticate(client)
         # Swap to an interior-only panel
-        sdvfast_installation = INSTALLATION.model_copy(
-            update={"panel": "SDVFAST"}
-        )
+        sdvfast_installation = INSTALLATION.model_copy(update={"panel": "SDVFAST"})
         # Seed SDVFAST's actual active services (no PERI)
-        client._services_cache[INSTALLATION.number] = frozenset({
-            ServiceRequest.ARM,
-            ServiceRequest.DARM,
-            ServiceRequest.ARMDAY,
-            ServiceRequest.ARMNIGHT,
-            ServiceRequest.ARMINTFPART,
-            ServiceRequest.ARMPARTFINT,
-        })
+        client._services_cache[INSTALLATION.number] = frozenset(
+            {
+                ServiceRequest.ARM,
+                ServiceRequest.DARM,
+                ServiceRequest.ARMDAY,
+                ServiceRequest.ARMNIGHT,
+                ServiceRequest.ARMINTFPART,
+                ServiceRequest.ARMPARTFINT,
+            }
+        )
         client.set_last_proto("D")
 
         target = AlarmState(
-            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON,
+            interior=InteriorMode.TOTAL,
+            perimeter=PerimeterMode.ON,
         )
         with pytest.raises(UnsupportedCommandError) as exc:
             await client.arm(sdvfast_installation, target)
@@ -1642,7 +1708,9 @@ class TestArmResolverWireIn:
         assert not _has_call_with_operation(mock_api, "xSArmPanel")
 
     async def test_arm_without_current_state_raises(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """No _last_proto observation yet — arm refuses, no HTTP call."""
         _authenticate(client)
@@ -1651,7 +1719,8 @@ class TestArmResolverWireIn:
         client._last_proto = ""
 
         target = AlarmState(
-            interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON,
+            interior=InteriorMode.TOTAL,
+            perimeter=PerimeterMode.ON,
         )
         with pytest.raises(StateNotObservedError, match="no current-state observation"):
             await client.arm(INSTALLATION, target)
@@ -1668,17 +1737,24 @@ class TestDisarmResolverWireIn:
     """Disarm path uses CommandResolver to pick DARM1 vs DARM1DARMPERI."""
 
     async def test_disarm_sdvfast_sends_darm1_not_darm1darmperi(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """Interior-only panel: DARM1 regardless of apparent proto state."""
         _authenticate(client)
         # SDVFAST — interior-only panel, no PERI service active.
         sdvfast_installation = INSTALLATION.model_copy(update={"panel": "SDVFAST"})
-        client._services_cache[INSTALLATION.number] = frozenset({
-            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
-            ServiceRequest.ARMNIGHT, ServiceRequest.ARMINTFPART,
-            ServiceRequest.ARMPARTFINT,
-        })
+        client._services_cache[INSTALLATION.number] = frozenset(
+            {
+                ServiceRequest.ARM,
+                ServiceRequest.DARM,
+                ServiceRequest.ARMDAY,
+                ServiceRequest.ARMNIGHT,
+                ServiceRequest.ARMINTFPART,
+                ServiceRequest.ARMPARTFINT,
+            }
+        )
         # Even if _last_proto is "T" (total) — no perimeter possible on this family.
         client.set_last_proto("T")
         mock_api.post(API_URL, body=_disarm_panel_response())
@@ -1691,7 +1767,9 @@ class TestDisarmResolverWireIn:
         assert body["variables"]["request"] == "DARM1"
 
     async def test_disarm_sdvecu_from_total_peri_sends_disarm_all(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """Peri-capable panel arming total+peri: DARM1DARMPERI."""
         _authenticate(client)
@@ -1706,7 +1784,9 @@ class TestDisarmResolverWireIn:
         assert body["variables"]["request"] == "DARM1DARMPERI"
 
     async def test_disarm_sdvecu_from_total_only_sends_darm1(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """Peri-capable panel, but perimeter currently OFF: DARM1 is enough."""
         _authenticate(client)
@@ -1721,7 +1801,9 @@ class TestDisarmResolverWireIn:
         assert body["variables"]["request"] == "DARM1"
 
     async def test_disarm_without_current_state_raises(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """No _last_proto observation yet — disarm refuses, no HTTP call."""
         _authenticate(client)
@@ -1740,7 +1822,9 @@ class TestServicesCache:
     """Services cache behaviour: populate on first use, clear on auth rotation."""
 
     async def test_second_arm_does_not_refetch_services(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """Cache hit on second arm — no extra xSSrv round-trip."""
         _authenticate(client)
@@ -1765,7 +1849,9 @@ class TestServicesCache:
         assert not _has_call_with_operation(mock_api, "Srv")
 
     async def test_cache_cleared_on_capabilities_rotation(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ):
         """When capabilities refresh path fires, services cache is invalidated."""
         _authenticate(client)
@@ -1795,7 +1881,10 @@ class TestArmDisarmFailureReports:
     """Arm/disarm emit a single structured failure report on error paths."""
 
     async def test_arm_failure_emits_marker_block(
-        self, mock_api, client, caplog,
+        self,
+        mock_api,
+        client,
+        caplog,
     ):
         """On OperationFailedError the client logs one BEGIN/END block at ERROR."""
         _authenticate(client)
@@ -1809,9 +1898,7 @@ class TestArmDisarmFailureReports:
         ):
             await client.arm(INSTALLATION, target)
 
-        records = [
-            r for r in caplog.records if "VERISURE ARM FAILURE BEGIN" in r.message
-        ]
+        records = [r for r in caplog.records if "VERISURE ARM FAILURE BEGIN" in r.message]
         assert len(records) == 1
         block = records[0].message
         assert "VERISURE ARM FAILURE END" in block
@@ -1820,18 +1907,28 @@ class TestArmDisarmFailureReports:
         assert "error_type: OperationFailedError" in block
 
     async def test_disarm_failure_emits_marker_block(
-        self, mock_api, client, caplog,
+        self,
+        mock_api,
+        client,
+        caplog,
     ):
         _authenticate(client)
         client.set_last_proto("A")
         # Force a panel rejection on disarm.
-        mock_api.post(API_URL, body=json.dumps({
-            "data": {
-                "xSDisarmPanel": {
-                    "res": "ERROR", "msg": "Panel busy", "referenceId": "",
+        mock_api.post(
+            API_URL,
+            body=json.dumps(
+                {
+                    "data": {
+                        "xSDisarmPanel": {
+                            "res": "ERROR",
+                            "msg": "Panel busy",
+                            "referenceId": "",
+                        }
+                    }
                 }
-            }
-        }))
+            ),
+        )
 
         with (
             caplog.at_level(logging.ERROR, logger="verisure_italy.client"),
@@ -1839,24 +1936,29 @@ class TestArmDisarmFailureReports:
         ):
             await client.disarm(INSTALLATION)
 
-        records = [
-            r for r in caplog.records
-            if "VERISURE DISARM FAILURE BEGIN" in r.message
-        ]
+        records = [r for r in caplog.records if "VERISURE DISARM FAILURE BEGIN" in r.message]
         assert len(records) == 1
         assert "command_selected: DARM1DARMPERI" in records[0].message
 
     async def test_arm_unsupported_command_emits_block_before_http(
-        self, mock_api, client, caplog,
+        self,
+        mock_api,
+        client,
+        caplog,
     ):
         """UnsupportedCommandError raises PRE-HTTP; the block must still log."""
         _authenticate(client)
         sdvfast_installation = INSTALLATION.model_copy(update={"panel": "SDVFAST"})
-        client._services_cache[INSTALLATION.number] = frozenset({
-            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
-            ServiceRequest.ARMNIGHT, ServiceRequest.ARMINTFPART,
-            ServiceRequest.ARMPARTFINT,
-        })
+        client._services_cache[INSTALLATION.number] = frozenset(
+            {
+                ServiceRequest.ARM,
+                ServiceRequest.DARM,
+                ServiceRequest.ARMDAY,
+                ServiceRequest.ARMNIGHT,
+                ServiceRequest.ARMINTFPART,
+                ServiceRequest.ARMPARTFINT,
+            }
+        )
         client.set_last_proto("D")
         target = AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON)
 
@@ -1866,9 +1968,7 @@ class TestArmDisarmFailureReports:
         ):
             await client.arm(sdvfast_installation, target)
 
-        records = [
-            r for r in caplog.records if "VERISURE ARM FAILURE BEGIN" in r.message
-        ]
+        records = [r for r in caplog.records if "VERISURE ARM FAILURE BEGIN" in r.message]
         assert len(records) == 1
         assert "panel: SDVFAST" in records[0].message
         assert "error_type: UnsupportedCommandError" in records[0].message
@@ -1896,7 +1996,9 @@ class TestClientPartitionGate:
     """
 
     async def test_client_demotes_on_empty_perimeter_partition(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ) -> None:
         """arm() to (PARTIAL, ON) raises UnsupportedCommandError when
         partition 02 has empty enterStates — effective family demotes to
@@ -1918,7 +2020,9 @@ class TestClientPartitionGate:
         assert not _has_call_with_operation(mock_api, "xSArmPanel")
 
     async def test_client_demotes_when_partition_cache_empty(
-        self, mock_api, client,
+        self,
+        mock_api,
+        client,
     ) -> None:
         """Cache-miss is fail-secure: empty/unpopulated partitions →
         INTERIOR_ONLY effective family → resolver refuses PERI command.

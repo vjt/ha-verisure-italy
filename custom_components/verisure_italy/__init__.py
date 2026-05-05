@@ -31,9 +31,7 @@ type VerisureConfigEntry = ConfigEntry[VerisureCoordinator]
 PLATFORMS = ["alarm_control_panel", "button", "camera"]
 
 
-async def async_migrate_entry(
-    hass: HomeAssistant, entry: ConfigEntry
-) -> bool:
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate config entry between schema versions.
 
     v1 → v2: synthesize CONF_INSTALLATION from the three legacy scalars
@@ -51,14 +49,13 @@ async def async_migrate_entry(
         hass.config_entries.async_update_entry(entry, data=data, version=2)
         _LOGGER.info(
             "Migrated config entry %s to v2 (numinst=%s)",
-            entry.entry_id, entry.data[CONF_INSTALLATION_NUMBER],
+            entry.entry_id,
+            entry.data[CONF_INSTALLATION_NUMBER],
         )
     return True
 
 
-async def async_setup_entry(
-    hass: HomeAssistant, entry: VerisureConfigEntry
-) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: VerisureConfigEntry) -> bool:
     """Set up Verisure Italy from a config entry."""
     coordinator = VerisureCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
@@ -84,9 +81,7 @@ async def async_setup_entry(
     return True
 
 
-async def _async_options_updated(
-    hass: HomeAssistant, entry: VerisureConfigEntry
-) -> None:
+async def _async_options_updated(hass: HomeAssistant, entry: VerisureConfigEntry) -> None:
     """Apply options changes without reloading the integration."""
     coordinator = entry.runtime_data
     opts = entry.options
@@ -106,20 +101,15 @@ async def _async_options_updated(
     )
 
 
-async def async_unload_entry(
-    hass: HomeAssistant, entry: VerisureConfigEntry
-) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: VerisureConfigEntry) -> bool:
     """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(
-        entry, PLATFORMS
-    )
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         await entry.runtime_data.async_shutdown()
 
     # Remove services and dashboard if no more entries
     remaining = [
-        e for e in hass.config_entries.async_entries(DOMAIN)
-        if e.entry_id != entry.entry_id
+        e for e in hass.config_entries.async_entries(DOMAIN) if e.entry_id != entry.entry_id
     ]
     if not remaining:
         hass.services.async_remove(DOMAIN, "force_arm")
@@ -160,10 +150,15 @@ def _register_services(hass: HomeAssistant) -> None:
             await entity.async_force_arm_cancel()
 
     hass.services.async_register(
-        DOMAIN, "force_arm", async_force_arm, schema=vol.Schema({}),
+        DOMAIN,
+        "force_arm",
+        async_force_arm,
+        schema=vol.Schema({}),
     )
     hass.services.async_register(
-        DOMAIN, "force_arm_cancel", async_force_arm_cancel,
+        DOMAIN,
+        "force_arm_cancel",
+        async_force_arm_cancel,
         schema=vol.Schema({}),
     )
 
@@ -175,6 +170,8 @@ def _register_services(hass: HomeAssistant) -> None:
             coordinator.notify_camera_entities()
 
     hass.services.async_register(
-        DOMAIN, "capture_cameras", async_capture_cameras,
+        DOMAIN,
+        "capture_cameras",
+        async_capture_cameras,
         schema=vol.Schema({}),
     )

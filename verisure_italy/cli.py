@@ -86,7 +86,8 @@ def _load_session() -> CachedSession:
     if mode != 0:
         _LOGGER.warning(
             "Session file %s has broad permissions (0%o) — should be 0600.",
-            path, path.stat().st_mode & 0o777,
+            path,
+            path.stat().st_mode & 0o777,
         )
     return CachedSession.model_validate_json(path.read_text())
 
@@ -154,7 +155,9 @@ async def _handle_two_factor(client: VerisureClient) -> None:
 
 
 async def _build_authenticated_client(
-    session: CachedSession, http: ClientSession, password: str,
+    session: CachedSession,
+    http: ClientSession,
+    password: str,
 ) -> VerisureClient:
     """Rehydrate a VerisureClient from cached session + fresh password.
 
@@ -179,7 +182,8 @@ async def _build_authenticated_client(
 
 
 async def _select_installation(
-    client: VerisureClient, preferred_index: int | None,
+    client: VerisureClient,
+    preferred_index: int | None,
 ) -> Installation:
     """Return the chosen installation (preferred_index is 0-based)."""
     installations = await client.list_installations()
@@ -194,8 +198,7 @@ async def _select_installation(
         return installations[0]
     if not 0 <= preferred_index < len(installations):
         raise VerisureError(
-            f"--installation {preferred_index} out of range "
-            f"(have {len(installations)})."
+            f"--installation {preferred_index} out of range (have {len(installations)})."
         )
     return installations[preferred_index]
 
@@ -212,9 +215,7 @@ async def cmd_login(args: argparse.Namespace) -> int:
     non-interactive use (CI, e2e smoke).
     """
     username = (
-        args.username
-        or os.environ.get("VERISURE_USERNAME")
-        or input("Verisure email: ").strip()
+        args.username or os.environ.get("VERISURE_USERNAME") or input("Verisure email: ").strip()
     )
     password = os.environ.get("VERISURE_PASSWORD") or getpass.getpass("Password: ")
     session = await _login_flow(username, password)
@@ -226,9 +227,8 @@ async def cmd_login(args: argparse.Namespace) -> int:
 async def cmd_probe(args: argparse.Namespace) -> int:
     """Load cached session, run probe, print redacted JSON to stdout."""
     session = _load_session()
-    password = (
-        os.environ.get("VERISURE_PASSWORD")
-        or getpass.getpass(f"Password for {session.username}: ")
+    password = os.environ.get("VERISURE_PASSWORD") or getpass.getpass(
+        f"Password for {session.username}: "
     )
     async with ClientSession() as http:
         client = await _build_authenticated_client(session, http, password)
@@ -270,14 +270,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument(
-        "-v", "--verbose", action="count", default=0,
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
         help="Enable debug logging (-v for INFO, -vv for DEBUG).",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     p_login = subparsers.add_parser("login", help="Authenticate and cache session.")
     p_login.add_argument(
-        "--username", help="Verisure account email (prompted if omitted).",
+        "--username",
+        help="Verisure account email (prompted if omitted).",
     )
     p_login.set_defaults(func=cmd_login)
 
@@ -286,11 +290,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Dump panel capabilities as redacted JSON (read-only).",
     )
     p_probe.add_argument(
-        "--installation", type=int, default=None,
+        "--installation",
+        type=int,
+        default=None,
         help="0-based index of installation to probe (default: first).",
     )
     p_probe.add_argument(
-        "--pretty", action="store_true",
+        "--pretty",
+        action="store_true",
         help="Pretty-print JSON output.",
     )
     p_probe.set_defaults(func=cmd_probe)

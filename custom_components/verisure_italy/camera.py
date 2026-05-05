@@ -35,10 +35,7 @@ async def async_setup_entry(
         _LOGGER.debug("No camera devices found, skipping camera setup")
         return
 
-    entities = [
-        VerisureCamera(coordinator, camera)
-        for camera in coordinator.camera_devices
-    ]
+    entities = [VerisureCamera(coordinator, camera) for camera in coordinator.camera_devices]
     async_add_entities(entities)
     coordinator.camera_entities = list(entities)
 

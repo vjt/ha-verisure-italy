@@ -204,36 +204,42 @@ class TestCameraModels:
         assert len(img.image) > 0
 
     def test_photo_device_model(self) -> None:
-        dev = PhotoDevice.model_validate({
-            "id": "dev1",
-            "idSignal": "sig1",
-            "code": "5",
-            "name": "Camera",
-            "quality": "high",
-            "images": [
-                {"id": "img1", "image": _JPEG_BASE64, "type": "BINARY"},
-                {"id": "img2", "image": "header_data", "type": "HEADER"},
-            ],
-        })
+        dev = PhotoDevice.model_validate(
+            {
+                "id": "dev1",
+                "idSignal": "sig1",
+                "code": "5",
+                "name": "Camera",
+                "quality": "high",
+                "images": [
+                    {"id": "img1", "image": _JPEG_BASE64, "type": "BINARY"},
+                    {"id": "img2", "image": "header_data", "type": "HEADER"},
+                ],
+            }
+        )
         assert len(dev.images) == 2
         assert dev.images[0].type == "BINARY"
         assert dev.images[1].type == "HEADER"
 
     def test_request_images_result(self) -> None:
-        r = RequestImagesResult.model_validate({
-            "res": "OK",
-            "msg": "success",
-            "referenceId": "ref123",
-        })
+        r = RequestImagesResult.model_validate(
+            {
+                "res": "OK",
+                "msg": "success",
+                "referenceId": "ref123",
+            }
+        )
         assert r.reference_id == "ref123"
 
     def test_request_images_status_result(self) -> None:
-        r = RequestImagesStatusResult.model_validate({
-            "res": "WAIT",
-            "msg": "processing image",
-            "numinst": "1234567",
-            "status": "pending",
-        })
+        r = RequestImagesStatusResult.model_validate(
+            {
+                "res": "WAIT",
+                "msg": "processing image",
+                "numinst": "1234567",
+                "status": "pending",
+            }
+        )
         assert r.res == "WAIT"
         assert r.msg is not None
         assert "processing" in r.msg
@@ -263,42 +269,44 @@ class TestCameraEnvelopes:
     """Response envelope parsing for camera operations."""
 
     def test_device_list_envelope(self) -> None:
-        raw = json.dumps({
-            "data": {
-                "xSDeviceList": {
-                    "res": "OK",
-                    "devices": [
-                        {
-                            "id": "cam1",
-                            "code": "5",
-                            "zoneId": "QR05",
-                            "name": "Camera Sala",
-                            "type": "QR",
-                            "isActive": True,
-                            "serialNumber": "ABC",
-                        },
-                        {
-                            "id": "pir1",
-                            "code": "2",
-                            "zoneId": None,
-                            "name": "PIR Ingresso",
-                            "type": "YR",
-                            "isActive": True,
-                            "serialNumber": None,
-                        },
-                        {
-                            "id": "sensor1",
-                            "code": "1",
-                            "zoneId": "MC01",
-                            "name": "Sensore Porta",
-                            "type": "MC",
-                            "isActive": True,
-                            "serialNumber": None,
-                        },
-                    ],
+        raw = json.dumps(
+            {
+                "data": {
+                    "xSDeviceList": {
+                        "res": "OK",
+                        "devices": [
+                            {
+                                "id": "cam1",
+                                "code": "5",
+                                "zoneId": "QR05",
+                                "name": "Camera Sala",
+                                "type": "QR",
+                                "isActive": True,
+                                "serialNumber": "ABC",
+                            },
+                            {
+                                "id": "pir1",
+                                "code": "2",
+                                "zoneId": None,
+                                "name": "PIR Ingresso",
+                                "type": "YR",
+                                "isActive": True,
+                                "serialNumber": None,
+                            },
+                            {
+                                "id": "sensor1",
+                                "code": "1",
+                                "zoneId": "MC01",
+                                "name": "Sensore Porta",
+                                "type": "MC",
+                                "isActive": True,
+                                "serialNumber": None,
+                            },
+                        ],
+                    }
                 }
             }
-        })
+        )
         envelope = DeviceListEnvelope.model_validate_json(raw)
         devices = envelope.data.xSDeviceList.devices
         assert len(devices) == 3
@@ -307,71 +315,79 @@ class TestCameraEnvelopes:
         assert devices[2].device_type == "MC"
 
     def test_request_images_envelope(self) -> None:
-        raw = json.dumps({
-            "data": {
-                "xSRequestImages": {
-                    "res": "OK",
-                    "msg": None,
-                    "referenceId": "ref-abc-123",
+        raw = json.dumps(
+            {
+                "data": {
+                    "xSRequestImages": {
+                        "res": "OK",
+                        "msg": None,
+                        "referenceId": "ref-abc-123",
+                    }
                 }
             }
-        })
+        )
         envelope = RequestImagesEnvelope.model_validate_json(raw)
         assert envelope.data.xSRequestImages.reference_id == "ref-abc-123"
 
     def test_request_images_status_envelope(self) -> None:
-        raw = json.dumps({
-            "data": {
-                "xSRequestImagesStatus": {
-                    "res": "OK",
-                    "msg": "done",
-                    "numinst": "1234567",
-                    "status": "completed",
+        raw = json.dumps(
+            {
+                "data": {
+                    "xSRequestImagesStatus": {
+                        "res": "OK",
+                        "msg": "done",
+                        "numinst": "1234567",
+                        "status": "completed",
+                    }
                 }
             }
-        })
+        )
         envelope = RequestImagesStatusEnvelope.model_validate_json(raw)
         assert envelope.data.xSRequestImagesStatus.res == "OK"
 
     def test_thumbnail_envelope(self) -> None:
-        raw = json.dumps({
-            "data": {
-                "xSGetThumbnail": {
-                    "idSignal": "sig1",
-                    "deviceId": "dev1",
-                    "deviceCode": "5",
-                    "deviceAlias": "Camera",
-                    "timestamp": "2026-04-03T12:00:00Z",
-                    "signalType": "ALARM",
-                    "image": _JPEG_BASE64,
-                    "type": "JPEG",
-                    "quality": "high",
+        raw = json.dumps(
+            {
+                "data": {
+                    "xSGetThumbnail": {
+                        "idSignal": "sig1",
+                        "deviceId": "dev1",
+                        "deviceCode": "5",
+                        "deviceAlias": "Camera",
+                        "timestamp": "2026-04-03T12:00:00Z",
+                        "signalType": "ALARM",
+                        "image": _JPEG_BASE64,
+                        "type": "JPEG",
+                        "quality": "high",
+                    }
                 }
             }
-        })
+        )
         envelope = ThumbnailEnvelope.model_validate_json(raw)
         assert envelope.data.xSGetThumbnail.id_signal == "sig1"
         assert envelope.data.xSGetThumbnail.image == _JPEG_BASE64
 
     def test_photo_images_envelope(self) -> None:
-        raw = json.dumps({
-            "data": {
-                "xSGetPhotoImages": {
-                    "devices": [
-                        {
-                            "id": "dev1",
-                            "idSignal": "sig1",
-                            "code": "5",
-                            "name": "Camera",
-                            "quality": "high",
-                            "images": [
-                                {"id": "img1", "image": _JPEG_BASE64, "type": "BINARY"},
-                            ],
-                        }
-                    ]
+        raw = json.dumps(
+            {
+                "data": {
+                    "xSGetPhotoImages": {
+                        "devices": [
+                            {
+                                "id": "dev1",
+                                "idSignal": "sig1",
+                                "code": "5",
+                                "name": "Camera",
+                                "quality": "high",
+                                "images": [
+                                    {"id": "img1", "image": _JPEG_BASE64, "type": "BINARY"},
+                                ],
+                            }
+                        ]
+                    }
                 }
             }
-        })
+        )
         envelope = PhotoImagesEnvelope.model_validate_json(raw)
         devices = envelope.data.xSGetPhotoImages.devices
         assert devices is not None
@@ -379,9 +395,7 @@ class TestCameraEnvelopes:
         assert len(devices[0].images) == 1
 
     def test_photo_images_envelope_null_devices(self) -> None:
-        raw = json.dumps({
-            "data": {"xSGetPhotoImages": {"devices": None}}
-        })
+        raw = json.dumps({"data": {"xSGetPhotoImages": {"devices": None}}})
         envelope = PhotoImagesEnvelope.model_validate_json(raw)
         assert envelope.data.xSGetPhotoImages.devices is None
 
@@ -399,13 +413,21 @@ class TestListCameraDevices:
         self, client: VerisureClient, mock_api: aioresponses
     ) -> None:
         def _dev(
-            dev_id: str, code: str, zone: str | None,
-            name: str, typ: str, active: bool = True,
+            dev_id: str,
+            code: str,
+            zone: str | None,
+            name: str,
+            typ: str,
+            active: bool = True,
         ) -> dict[str, str | bool | None]:
             return {
-                "id": dev_id, "code": code, "zoneId": zone,
-                "name": name, "type": typ,
-                "isActive": active, "serialNumber": None,
+                "id": dev_id,
+                "code": code,
+                "zoneId": zone,
+                "name": name,
+                "type": typ,
+                "isActive": active,
+                "serialNumber": None,
             }
 
         response = {
@@ -431,13 +453,20 @@ class TestListCameraDevices:
         self, client: VerisureClient, mock_api: aioresponses
     ) -> None:
         def _dev(
-            dev_id: str, code: str, zone: str,
-            name: str, active: bool,
+            dev_id: str,
+            code: str,
+            zone: str,
+            name: str,
+            active: bool,
         ) -> dict[str, str | bool | None]:
             return {
-                "id": dev_id, "code": code, "zoneId": zone,
-                "name": name, "type": "QR",
-                "isActive": active, "serialNumber": None,
+                "id": dev_id,
+                "code": code,
+                "zoneId": zone,
+                "name": name,
+                "type": "QR",
+                "isActive": active,
+                "serialNumber": None,
             }
 
         response = {
@@ -469,11 +498,17 @@ class TestListCameraDevices:
             "data": {
                 "xSDeviceList": {
                     "res": "OK",
-                    "devices": [{
-                        "id": "cam1", "code": "5", "zoneId": "QR05",
-                        "name": "Null-Active Camera", "type": "QR",
-                        "isActive": None, "serialNumber": None,
-                    }],
+                    "devices": [
+                        {
+                            "id": "cam1",
+                            "code": "5",
+                            "zoneId": "QR05",
+                            "name": "Null-Active Camera",
+                            "type": "QR",
+                            "isActive": None,
+                            "serialNumber": None,
+                        }
+                    ],
                 }
             }
         }
@@ -490,11 +525,17 @@ class TestListCameraDevices:
             "data": {
                 "xSDeviceList": {
                     "res": "OK",
-                    "devices": [{
-                        "id": "pir1", "code": "3", "zoneId": None,
-                        "name": "PIR", "type": "YR",
-                        "isActive": True, "serialNumber": None,
-                    }],
+                    "devices": [
+                        {
+                            "id": "pir1",
+                            "code": "3",
+                            "zoneId": None,
+                            "name": "PIR",
+                            "type": "YR",
+                            "isActive": True,
+                            "serialNumber": None,
+                        }
+                    ],
                 }
             }
         }
@@ -510,11 +551,17 @@ class TestListCameraDevices:
             "data": {
                 "xSDeviceList": {
                     "res": "OK",
-                    "devices": [{
-                        "id": "weird-id", "code": "abc",
-                        "zoneId": None, "name": "Weird", "type": "QR",
-                        "isActive": True, "serialNumber": None,
-                    }],
+                    "devices": [
+                        {
+                            "id": "weird-id",
+                            "code": "abc",
+                            "zoneId": None,
+                            "name": "Weird",
+                            "type": "QR",
+                            "isActive": True,
+                            "serialNumber": None,
+                        }
+                    ],
                 }
             }
         }
@@ -523,12 +570,8 @@ class TestListCameraDevices:
         assert cameras == []
 
     @pytest.mark.asyncio
-    async def test_empty_device_list(
-        self, client: VerisureClient, mock_api: aioresponses
-    ) -> None:
-        response = {
-            "data": {"xSDeviceList": {"res": "OK", "devices": []}}
-        }
+    async def test_empty_device_list(self, client: VerisureClient, mock_api: aioresponses) -> None:
+        response = {"data": {"xSDeviceList": {"res": "OK", "devices": []}}}
         mock_api.post(API_URL, payload=response)
         cameras = await client.list_camera_devices(INSTALLATION)
         assert cameras == []
@@ -538,12 +581,13 @@ class TestGetThumbnail:
     """Client.get_thumbnail: fetches and parses thumbnail response."""
 
     @pytest.mark.asyncio
-    async def test_returns_thumbnail(
-        self, client: VerisureClient, mock_api: aioresponses
-    ) -> None:
+    async def test_returns_thumbnail(self, client: VerisureClient, mock_api: aioresponses) -> None:
         camera = CameraDevice(
-            id="cam1", code=5, zone_id="QR05",
-            name="Camera", device_type="QR",
+            id="cam1",
+            code=5,
+            zone_id="QR05",
+            name="Camera",
+            device_type="QR",
         )
         response = {
             "data": {
@@ -579,18 +623,20 @@ class TestGetPhotoImages:
         response = {
             "data": {
                 "xSGetPhotoImages": {
-                    "devices": [{
-                        "id": "dev1",
-                        "idSignal": "sig1",
-                        "code": "5",
-                        "name": "Camera",
-                        "quality": "high",
-                        "images": [
-                            {"id": "img1", "image": small_jpeg, "type": "BINARY"},
-                            {"id": "img2", "image": large_jpeg, "type": "BINARY"},
-                            {"id": "img3", "image": "header_data", "type": "HEADER"},
-                        ],
-                    }]
+                    "devices": [
+                        {
+                            "id": "dev1",
+                            "idSignal": "sig1",
+                            "code": "5",
+                            "name": "Camera",
+                            "quality": "high",
+                            "images": [
+                                {"id": "img1", "image": small_jpeg, "type": "BINARY"},
+                                {"id": "img2", "image": large_jpeg, "type": "BINARY"},
+                                {"id": "img3", "image": "header_data", "type": "HEADER"},
+                            ],
+                        }
+                    ]
                 }
             }
         }
@@ -603,9 +649,7 @@ class TestGetPhotoImages:
     async def test_returns_none_on_no_devices(
         self, client: VerisureClient, mock_api: aioresponses
     ) -> None:
-        response = {
-            "data": {"xSGetPhotoImages": {"devices": None}}
-        }
+        response = {"data": {"xSGetPhotoImages": {"devices": None}}}
         mock_api.post(API_URL, payload=response)
         result = await client.get_photo_images(INSTALLATION, "sig1", "ALARM")
         assert result is None
@@ -617,16 +661,18 @@ class TestGetPhotoImages:
         response = {
             "data": {
                 "xSGetPhotoImages": {
-                    "devices": [{
-                        "id": "dev1",
-                        "idSignal": "sig1",
-                        "code": "5",
-                        "name": "Camera",
-                        "quality": None,
-                        "images": [
-                            {"id": "img1", "image": "header_only", "type": "HEADER"},
-                        ],
-                    }]
+                    "devices": [
+                        {
+                            "id": "dev1",
+                            "idSignal": "sig1",
+                            "code": "5",
+                            "name": "Camera",
+                            "quality": None,
+                            "images": [
+                                {"id": "img1", "image": "header_only", "type": "HEADER"},
+                            ],
+                        }
+                    ]
                 }
             }
         }
@@ -635,23 +681,23 @@ class TestGetPhotoImages:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_rejects_non_jpeg(
-        self, client: VerisureClient, mock_api: aioresponses
-    ) -> None:
+    async def test_rejects_non_jpeg(self, client: VerisureClient, mock_api: aioresponses) -> None:
         not_jpeg = base64.b64encode(b"not a jpeg image at all").decode()
         response = {
             "data": {
                 "xSGetPhotoImages": {
-                    "devices": [{
-                        "id": "dev1",
-                        "idSignal": "sig1",
-                        "code": "5",
-                        "name": "Camera",
-                        "quality": None,
-                        "images": [
-                            {"id": "img1", "image": not_jpeg, "type": "BINARY"},
-                        ],
-                    }]
+                    "devices": [
+                        {
+                            "id": "dev1",
+                            "idSignal": "sig1",
+                            "code": "5",
+                            "name": "Camera",
+                            "quality": None,
+                            "images": [
+                                {"id": "img1", "image": not_jpeg, "type": "BINARY"},
+                            ],
+                        }
+                    ]
                 }
             }
         }
@@ -668,8 +714,11 @@ class TestRequestImages:
         self, client: VerisureClient, mock_api: aioresponses
     ) -> None:
         camera = CameraDevice(
-            id="cam1", code=5, zone_id="QR05",
-            name="Camera", device_type="QR",
+            id="cam1",
+            code=5,
+            zone_id="QR05",
+            name="Camera",
+            device_type="QR",
         )
         response = {
             "data": {
@@ -691,8 +740,11 @@ class TestRequestImages:
         from verisure_italy.exceptions import OperationFailedError
 
         camera = CameraDevice(
-            id="cam1", code=5, zone_id="QR05",
-            name="Camera", device_type="QR",
+            id="cam1",
+            code=5,
+            zone_id="QR05",
+            name="Camera",
+            device_type="QR",
         )
         response = {
             "data": {
@@ -716,8 +768,11 @@ class TestCheckRequestImagesStatus:
         self, client: VerisureClient, mock_api: aioresponses
     ) -> None:
         camera = CameraDevice(
-            id="cam1", code=5, zone_id="QR05",
-            name="Camera", device_type="QR",
+            id="cam1",
+            code=5,
+            zone_id="QR05",
+            name="Camera",
+            device_type="QR",
         )
         response = {
             "data": {
@@ -730,9 +785,7 @@ class TestCheckRequestImagesStatus:
             }
         }
         mock_api.post(API_URL, payload=response)
-        done = await client.check_request_images_status(
-            INSTALLATION, camera, "ref123", 1
-        )
+        done = await client.check_request_images_status(INSTALLATION, camera, "ref123", 1)
         assert done is False
 
     @pytest.mark.asyncio
@@ -740,8 +793,11 @@ class TestCheckRequestImagesStatus:
         self, client: VerisureClient, mock_api: aioresponses
     ) -> None:
         camera = CameraDevice(
-            id="cam1", code=5, zone_id="QR05",
-            name="Camera", device_type="QR",
+            id="cam1",
+            code=5,
+            zone_id="QR05",
+            name="Camera",
+            device_type="QR",
         )
         response = {
             "data": {
@@ -754,7 +810,5 @@ class TestCheckRequestImagesStatus:
             }
         }
         mock_api.post(API_URL, payload=response)
-        done = await client.check_request_images_status(
-            INSTALLATION, camera, "ref123", 2
-        )
+        done = await client.check_request_images_status(INSTALLATION, camera, "ref123", 2)
         assert done is True

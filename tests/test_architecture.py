@@ -61,9 +61,7 @@ class TestNoAnyInAnnotations:
             if isinstance(node, ast.ImportFrom) and node.module == "typing":
                 for alias in node.names:
                     if alias.name == "Any":
-                        violations.append(
-                            f"{filepath}:{node.lineno}: imports `Any` from typing"
-                        )
+                        violations.append(f"{filepath}:{node.lineno}: imports `Any` from typing")
 
             # Check annotations for Any usage
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -82,11 +80,12 @@ class TestNoAnyInAnnotations:
                         )
 
             # Check variable annotations
-            if isinstance(node, ast.AnnAssign) and node.annotation and self._annotation_contains_any(node.annotation):  # noqa: E501
-                    violations.append(
-                        f"{filepath}:{node.lineno}: variable annotation "
-                        f"contains `Any`"
-                    )
+            if (
+                isinstance(node, ast.AnnAssign)
+                and node.annotation
+                and self._annotation_contains_any(node.annotation)
+            ):  # noqa: E501
+                violations.append(f"{filepath}:{node.lineno}: variable annotation contains `Any`")
 
         return violations
 
@@ -99,15 +98,15 @@ class TestNoAnyInAnnotations:
         if isinstance(node, ast.Attribute) and node.attr == "Any":
             return True
         if isinstance(node, ast.Subscript):
-            return self._annotation_contains_any(
-                node.value
-            ) or self._annotation_contains_any(node.slice)
+            return self._annotation_contains_any(node.value) or self._annotation_contains_any(
+                node.slice
+            )
         if isinstance(node, ast.Tuple):
             return any(self._annotation_contains_any(e) for e in node.elts)
         if isinstance(node, ast.BinOp):  # X | Y union syntax
-            return self._annotation_contains_any(
-                node.left
-            ) or self._annotation_contains_any(node.right)
+            return self._annotation_contains_any(node.left) or self._annotation_contains_any(
+                node.right
+            )
         return False
 
     @pytest.mark.parametrize("filepath", _collect_python_files(), ids=str)
@@ -121,9 +120,7 @@ class TestNoAnyInAnnotations:
         tree = _parse_file(filepath)
         violations = self._find_any_usage(tree, filepath)
         if violations:
-            msg = f"Found `Any` usage in {filepath}:\n" + "\n".join(
-                f"  {v}" for v in violations
-            )
+            msg = f"Found `Any` usage in {filepath}:\n" + "\n".join(f"  {v}" for v in violations)
             pytest.fail(msg)
 
 
@@ -149,10 +146,12 @@ class TestNoBareDict:
                         )
 
             # Check variable annotations
-            if isinstance(node, ast.AnnAssign) and node.annotation and self._is_bare_dict(node.annotation):  # noqa: E501
-                    violations.append(
-                        f"{filepath}:{node.lineno}: variable annotation is bare `dict`"
-                    )
+            if (
+                isinstance(node, ast.AnnAssign)
+                and node.annotation
+                and self._is_bare_dict(node.annotation)
+            ):  # noqa: E501
+                violations.append(f"{filepath}:{node.lineno}: variable annotation is bare `dict`")
 
         return violations
 
@@ -169,9 +168,7 @@ class TestNoBareDict:
         tree = _parse_file(filepath)
         violations = self._find_bare_dict(tree, filepath)
         if violations:
-            msg = f"Found bare `dict` in {filepath}:\n" + "\n".join(
-                f"  {v}" for v in violations
-            )
+            msg = f"Found bare `dict` in {filepath}:\n" + "\n".join(f"  {v}" for v in violations)
             pytest.fail(msg)
 
 
@@ -189,8 +186,7 @@ class TestNoObjectAnnotation:
                 is_dunder_exempt = node.name in self._OBJECT_ALLOWED_DUNDERS
                 if node.returns and self._is_object(node.returns):
                     violations.append(
-                        f"{filepath}:{node.lineno}: function `{node.name}` "
-                        f"return type is `object`"
+                        f"{filepath}:{node.lineno}: function `{node.name}` return type is `object`"
                     )
                 for arg in node.args.args + node.args.kwonlyargs:
                     if arg.annotation and self._is_object(arg.annotation):
@@ -201,10 +197,12 @@ class TestNoObjectAnnotation:
                             f"in `{node.name}` annotated with `object`"
                         )
 
-            if isinstance(node, ast.AnnAssign) and node.annotation and self._is_object(node.annotation):  # noqa: E501
-                    violations.append(
-                        f"{filepath}:{node.lineno}: variable annotation is `object`"
-                    )
+            if (
+                isinstance(node, ast.AnnAssign)
+                and node.annotation
+                and self._is_object(node.annotation)
+            ):  # noqa: E501
+                violations.append(f"{filepath}:{node.lineno}: variable annotation is `object`")
 
         return violations
 

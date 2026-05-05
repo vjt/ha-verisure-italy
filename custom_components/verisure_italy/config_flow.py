@@ -73,9 +73,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         return self._client
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Step 1: Username and password."""
         errors: dict[str, str] = {}
 
@@ -106,9 +104,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 # transient or upstream issues that aren't credential-fault.
                 # Map to a form-level cannot_connect so the user retries
                 # instead of seeing a raw traceback.
-                _LOGGER.error(
-                    "Login network error: %s", err.message
-                )
+                _LOGGER.error("Login network error: %s", err.message)
                 errors["base"] = "cannot_connect"
                 self._client = None
             except ValidationError as err:
@@ -121,10 +117,12 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({
-                vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str,
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_USERNAME): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
             errors=errors,
         )
 
@@ -135,30 +133,26 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
         # Auto-skip if only one phone
         if len(self._otp_phones) == 1:
             client = await self._get_client()
-            await client.send_otp(
-                self._otp_phones[0].id, self._otp_hash
-            )
+            await client.send_otp(self._otp_phones[0].id, self._otp_hash)
             self._selected_phone = self._otp_phones[0]
             return await self.async_step_2fa_code()
 
         if user_input is not None:
             phone_id = int(user_input["phone"])
-            self._selected_phone = next(
-                p for p in self._otp_phones if p.id == phone_id
-            )
+            self._selected_phone = next(p for p in self._otp_phones if p.id == phone_id)
             client = await self._get_client()
             await client.send_otp(phone_id, self._otp_hash)
             return await self.async_step_2fa_code()
 
-        phone_options = {
-            str(p.id): p.phone for p in self._otp_phones
-        }
+        phone_options = {str(p.id): p.phone for p in self._otp_phones}
 
         return self.async_show_form(
             step_id="2fa_phone",
-            data_schema=vol.Schema({
-                vol.Required("phone"): vol.In(phone_options),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required("phone"): vol.In(phone_options),
+                }
+            ),
         )
 
     async def async_step_2fa_code(
@@ -190,9 +184,11 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="2fa_code",
-            data_schema=vol.Schema({
-                vol.Required("code"): str,
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required("code"): str,
+                }
+            ),
             errors=errors,
             description_placeholders={"phone": phone_display},
         )
@@ -216,24 +212,21 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             number = user_input["installation"]
-            inst = next(
-                i for i in self._installations if i.number == number
-            )
+            inst = next(i for i in self._installations if i.number == number)
             await self.async_set_unique_id(inst.number)
             self._abort_if_unique_id_configured()
             await client.get_services(inst)
             return self._create_entry(inst)
 
-        options = {
-            i.number: f"{i.alias} ({i.address})"
-            for i in self._installations
-        }
+        options = {i.number: f"{i.alias} ({i.address})" for i in self._installations}
 
         return self.async_show_form(
             step_id="installation",
-            data_schema=vol.Schema({
-                vol.Required("installation"): vol.In(options),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required("installation"): vol.In(options),
+                }
+            ),
         )
 
     def _create_entry(self, installation: Installation) -> ConfigFlowResult:
@@ -258,9 +251,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
 
     # --- Reauth: HA-initiated credential refresh on ConfigEntryAuthFailed ---
 
-    async def async_step_reauth(
-        self, entry_data: dict[str, str]
-    ) -> ConfigFlowResult:
+    async def async_step_reauth(self, entry_data: dict[str, str]) -> ConfigFlowResult:
         """Handle reauth triggered by ConfigEntryAuthFailed."""
         self._username = entry_data[CONF_USERNAME]
         return await self.async_step_reauth_confirm()
@@ -311,7 +302,6 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
                 self._client = None
             else:
-
                 return self.async_update_reload_and_abort(
                     entry,
                     data={
@@ -325,13 +315,15 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({
-                vol.Required(
-                    CONF_USERNAME,
-                    default=self._username,
-                ): str,
-                vol.Required(CONF_PASSWORD): str,
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_USERNAME,
+                        default=self._username,
+                    ): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
             errors=errors,
         )
 
@@ -341,29 +333,25 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
         """Reauth: select phone for OTP."""
         if len(self._otp_phones) == 1:
             client = await self._get_client()
-            await client.send_otp(
-                self._otp_phones[0].id, self._otp_hash
-            )
+            await client.send_otp(self._otp_phones[0].id, self._otp_hash)
             self._selected_phone = self._otp_phones[0]
             return await self.async_step_reauth_2fa_code()
 
         if user_input is not None:
             phone_id = int(user_input["phone"])
-            self._selected_phone = next(
-                p for p in self._otp_phones if p.id == phone_id
-            )
+            self._selected_phone = next(p for p in self._otp_phones if p.id == phone_id)
             client = await self._get_client()
             await client.send_otp(phone_id, self._otp_hash)
             return await self.async_step_reauth_2fa_code()
 
-        phone_options = {
-            str(p.id): p.phone for p in self._otp_phones
-        }
+        phone_options = {str(p.id): p.phone for p in self._otp_phones}
         return self.async_show_form(
             step_id="reauth_2fa_phone",
-            data_schema=vol.Schema({
-                vol.Required("phone"): vol.In(phone_options),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required("phone"): vol.In(phone_options),
+                }
+            ),
         )
 
     async def async_step_reauth_2fa_code(
@@ -388,7 +376,6 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Reauth 2FA response schema mismatch: %s", err)
                 errors["base"] = "unknown"
             else:
-
                 return self.async_update_reload_and_abort(
                     entry,
                     data={
@@ -403,9 +390,11 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
         phone_display = self._selected_phone.phone if self._selected_phone else "unknown"
         return self.async_show_form(
             step_id="reauth_2fa_code",
-            data_schema=vol.Schema({
-                vol.Required("code"): str,
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required("code"): str,
+                }
+            ),
             errors=errors,
             description_placeholders={"phone": phone_display},
         )
@@ -446,23 +435,25 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._client = None
             except ValidationError as err:
                 _LOGGER.exception(
-                    "Reconfigure response schema mismatch: %s", err,
+                    "Reconfigure response schema mismatch: %s",
+                    err,
                 )
                 errors["base"] = "unknown"
                 self._client = None
             else:
-
                 return self._update_entry(entry)
 
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=vol.Schema({
-                vol.Required(
-                    CONF_USERNAME,
-                    default=entry.data[CONF_USERNAME],
-                ): str,
-                vol.Required(CONF_PASSWORD): str,
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_USERNAME,
+                        default=entry.data[CONF_USERNAME],
+                    ): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
             errors=errors,
         )
 
@@ -472,29 +463,25 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
         """Reconfigure: select phone for OTP."""
         if len(self._otp_phones) == 1:
             client = await self._get_client()
-            await client.send_otp(
-                self._otp_phones[0].id, self._otp_hash
-            )
+            await client.send_otp(self._otp_phones[0].id, self._otp_hash)
             self._selected_phone = self._otp_phones[0]
             return await self.async_step_reconfigure_2fa_code()
 
         if user_input is not None:
             phone_id = int(user_input["phone"])
-            self._selected_phone = next(
-                p for p in self._otp_phones if p.id == phone_id
-            )
+            self._selected_phone = next(p for p in self._otp_phones if p.id == phone_id)
             client = await self._get_client()
             await client.send_otp(phone_id, self._otp_hash)
             return await self.async_step_reconfigure_2fa_code()
 
-        phone_options = {
-            str(p.id): p.phone for p in self._otp_phones
-        }
+        phone_options = {str(p.id): p.phone for p in self._otp_phones}
         return self.async_show_form(
             step_id="reconfigure_2fa_phone",
-            data_schema=vol.Schema({
-                vol.Required("phone"): vol.In(phone_options),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required("phone"): vol.In(phone_options),
+                }
+            ),
         )
 
     async def async_step_reconfigure_2fa_code(
@@ -517,19 +504,21 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except ValidationError as err:
                 _LOGGER.exception(
-                    "Reconfigure 2FA response schema mismatch: %s", err,
+                    "Reconfigure 2FA response schema mismatch: %s",
+                    err,
                 )
                 errors["base"] = "unknown"
             else:
-
                 return self._update_entry(entry)
 
         phone_display = self._selected_phone.phone if self._selected_phone else "unknown"
         return self.async_show_form(
             step_id="reconfigure_2fa_code",
-            data_schema=vol.Schema({
-                vol.Required("code"): str,
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required("code"): str,
+                }
+            ),
             errors=errors,
             description_placeholders={"phone": phone_display},
         )
@@ -559,9 +548,7 @@ class VerisureItConfigFlow(ConfigFlow, domain=DOMAIN):
 class VerisureItOptionsFlow(OptionsFlow):
     """Options flow for Verisure Italy."""
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(data=user_input)
@@ -569,18 +556,20 @@ class VerisureItOptionsFlow(OptionsFlow):
         opts = self.config_entry.options
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema({
-                vol.Required(
-                    CONF_POLL_INTERVAL,
-                    default=opts.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
-                ): vol.All(int, vol.Range(min=3, max=300)),
-                vol.Required(
-                    CONF_POLL_TIMEOUT,
-                    default=opts.get(CONF_POLL_TIMEOUT, DEFAULT_POLL_TIMEOUT),
-                ): vol.All(int, vol.Range(min=15, max=120)),
-                vol.Required(
-                    CONF_POLL_DELAY,
-                    default=opts.get(CONF_POLL_DELAY, DEFAULT_POLL_DELAY),
-                ): vol.All(int, vol.Range(min=1, max=10)),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_POLL_INTERVAL,
+                        default=opts.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
+                    ): vol.All(int, vol.Range(min=3, max=300)),
+                    vol.Required(
+                        CONF_POLL_TIMEOUT,
+                        default=opts.get(CONF_POLL_TIMEOUT, DEFAULT_POLL_TIMEOUT),
+                    ): vol.All(int, vol.Range(min=15, max=120)),
+                    vol.Required(
+                        CONF_POLL_DELAY,
+                        default=opts.get(CONF_POLL_DELAY, DEFAULT_POLL_DELAY),
+                    ): vol.All(int, vol.Range(min=1, max=10)),
+                }
+            ),
         )

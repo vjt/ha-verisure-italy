@@ -167,9 +167,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         # the three scalars during v1→v2 migration). Metadata fields default
         # to None when absent — matching the soften-on-schema-drift design
         # in Installation. No empty-string placeholders.
-        self.installation = Installation.model_validate(
-            config_entry.data[CONF_INSTALLATION]
-        )
+        self.installation = Installation.model_validate(config_entry.data[CONF_INSTALLATION])
 
         # Active services — populated during first refresh from xSSrv.
         # Surfaces sub-capability flags (ARMNIGHT, ARMANNEX, …) consumed
@@ -277,7 +275,8 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         """
         try:
             await self.client.arm(
-                self.installation, target,
+                self.installation,
+                target,
                 force_arming_remote_id=force_arming_remote_id,
                 suid=suid,
             )
@@ -285,7 +284,8 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             _LOGGER.info("Session expired during arm — re-authenticating")
             await self.client.login()
             await self.client.arm(
-                self.installation, target,
+                self.installation,
+                target,
                 force_arming_remote_id=force_arming_remote_id,
                 suid=suid,
             )
@@ -313,20 +313,14 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             _LOGGER.debug("Poll suppressed — serving cached snapshot")
             return self.data
         try:
-            status: GeneralStatus = await self.client.get_general_status(
-                self.installation
-            )
+            status: GeneralStatus = await self.client.get_general_status(self.installation)
         except SessionExpiredError:
             _LOGGER.debug("Session expired, re-authenticating")
             try:
                 await self.client.login()
-                status = await self.client.get_general_status(
-                    self.installation
-                )
+                status = await self.client.get_general_status(self.installation)
             except (AuthenticationError, TwoFactorRequiredError) as err:
-                raise ConfigEntryAuthFailed(
-                    f"Re-authentication failed: {err.message}"
-                ) from err
+                raise ConfigEntryAuthFailed(f"Re-authentication failed: {err.message}") from err
             except (APIConnectionError, APIResponseError, WAFBlockedError) as err:
                 # Transient network error during re-login must NOT bubble out
                 # unhandled (DataUpdateCoordinator would log "Unexpected
@@ -335,9 +329,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                 # re-auth dialog even though the user's creds are fine.
                 # Treat as a transient update failure; the coordinator
                 # retries on the next poll interval.
-                raise UpdateFailed(
-                    f"Re-authentication network error: {err.message}"
-                ) from err
+                raise UpdateFailed(f"Re-authentication network error: {err.message}") from err
         except (AuthenticationError, TwoFactorRequiredError) as err:
             raise ConfigEntryAuthFailed(err.message) from err
         except (APIConnectionError, APIResponseError, WAFBlockedError) as err:
@@ -366,9 +358,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             )
             raise UpdateFailed(err.message) from err
         except ValidationError as err:
-            raise UpdateFailed(
-                f"API response format changed: {err}"
-            ) from err
+            raise UpdateFailed(f"API response format changed: {err}") from err
 
         # Fetch active services on first successful refresh. Drives
         # effective_family() — must complete before any arm command, so
@@ -380,13 +370,9 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             try:
                 services = await self.client.get_services(self.installation)
             except (APIConnectionError, APIResponseError, WAFBlockedError) as err:
-                raise UpdateFailed(
-                    f"Active-services fetch failed: {err.message}"
-                ) from err
+                raise UpdateFailed(f"Active-services fetch failed: {err.message}") from err
             except ValidationError as err:
-                raise UpdateFailed(
-                    f"xSSrv schema drift: {err}"
-                ) from err
+                raise UpdateFailed(f"xSSrv schema drift: {err}") from err
             self.active_services = parse_active_services(services)
             self.alarm_partitions = self.client.cached_partitions(self.installation)
             self._services_discovered = True
@@ -400,9 +386,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         if not self._cameras_discovered:
             self._cameras_discovered = True
             try:
-                self.camera_devices = await self.client.list_camera_devices(
-                    self.installation
-                )
+                self.camera_devices = await self.client.list_camera_devices(self.installation)
                 _LOGGER.info(
                     "Discovered %d cameras: %s",
                     len(self.camera_devices),
@@ -459,10 +443,10 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                     await asyncio.sleep(delay)
                 return await self.capture_single_camera(camera)
 
-            results = await asyncio.gather(*(
-                _launch(camera, i * 2.0)
-                for i, camera in enumerate(self.camera_devices)
-            ), return_exceptions=True)
+            results = await asyncio.gather(
+                *(_launch(camera, i * 2.0) for i, camera in enumerate(self.camera_devices)),
+                return_exceptions=True,
+            )
 
             ok = 0
             for r in results:
@@ -490,9 +474,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             for camera in self.camera_devices:
                 await self._fetch_thumbnail(camera)
 
-    async def capture_single_camera(
-        self, camera: CameraDevice, _retries_left: int = 2
-    ) -> bool:
+    async def capture_single_camera(self, camera: CameraDevice, _retries_left: int = 2) -> bool:
         """Capture a single camera image. Returns True on success.
 
         Uses capture_image for the thumbnail, then tries get_photo_images
@@ -501,9 +483,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         """
         self.camera_capturing.add(camera.zone_id)
         try:
-            image_bytes = await self.client.capture_image(
-                self.installation, camera
-            )
+            image_bytes = await self.client.capture_image(self.installation, camera)
         except (
             APIConnectionError,
             APIResponseError,
@@ -518,15 +498,17 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                 backoff = 3 * (3 - _retries_left)  # 3s, 6s
                 _LOGGER.info(
                     "Capture failed for %s: %s — retrying in %ds (%d left)",
-                    camera.name, err.message, backoff, _retries_left,
+                    camera.name,
+                    err.message,
+                    backoff,
+                    _retries_left,
                 )
                 await asyncio.sleep(backoff)
-                return await self.capture_single_camera(
-                    camera, _retries_left=_retries_left - 1
-                )
+                return await self.capture_single_camera(camera, _retries_left=_retries_left - 1)
             _LOGGER.warning(
                 "Capture failed for %s: %s (no more retries)",
-                camera.name, err.message,
+                camera.name,
+                err.message,
             )
             return False
 
@@ -536,9 +518,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
                 _overlay_text, image_bytes, camera.name, now
             )
-            _LOGGER.info(
-                "Captured %s: %d bytes", camera.name, len(image_bytes)
-            )
+            _LOGGER.info("Captured %s: %d bytes", camera.name, len(image_bytes))
 
             # Try to upgrade to full-resolution image (some panels have higher-res)
             await self._try_full_image(camera, now)
@@ -546,21 +526,17 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         finally:
             self.camera_capturing.discard(camera.zone_id)
 
-    async def _try_full_image(
-        self, camera: CameraDevice, timestamp: datetime
-    ) -> None:
+    async def _try_full_image(self, camera: CameraDevice, timestamp: datetime) -> None:
         """Try to fetch full-res image using the latest thumbnail's id_signal."""
         try:
-            thumbnail = await self.client.get_thumbnail(
-                self.installation, camera
-            )
+            thumbnail = await self.client.get_thumbnail(self.installation, camera)
         except (
-            APIConnectionError, APIResponseError,
-            WAFBlockedError, SessionExpiredError,
+            APIConnectionError,
+            APIResponseError,
+            WAFBlockedError,
+            SessionExpiredError,
         ) as err:
-            _LOGGER.debug(
-                "Thumbnail fetch failed for %s: %s", camera.name, err.message
-            )
+            _LOGGER.debug("Thumbnail fetch failed for %s: %s", camera.name, err.message)
             return
 
         if not thumbnail.id_signal or not thumbnail.signal_type:
@@ -571,12 +547,12 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                 self.installation, thumbnail.id_signal, thumbnail.signal_type
             )
         except (
-            APIConnectionError, APIResponseError,
-            WAFBlockedError, SessionExpiredError,
+            APIConnectionError,
+            APIResponseError,
+            WAFBlockedError,
+            SessionExpiredError,
         ) as err:
-            _LOGGER.debug(
-                "Full image fetch failed for %s: %s", camera.name, err.message
-            )
+            _LOGGER.debug("Full image fetch failed for %s: %s", camera.name, err.message)
             return
 
         if full_image is not None and len(full_image) > len(
@@ -587,15 +563,14 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             )
             _LOGGER.info(
                 "Upgraded %s to full image: %d bytes",
-                camera.name, len(full_image),
+                camera.name,
+                len(full_image),
             )
 
     async def _fetch_thumbnail(self, camera: CameraDevice) -> None:
         """Fetch the latest cached thumbnail for a camera."""
         try:
-            thumbnail = await self.client.get_thumbnail(
-                self.installation, camera
-            )
+            thumbnail = await self.client.get_thumbnail(self.installation, camera)
         except (
             APIConnectionError,
             APIResponseError,
@@ -604,7 +579,8 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         ) as err:
             _LOGGER.warning(
                 "Thumbnail fetch failed for %s: %s",
-                camera.name, err.message,
+                camera.name,
+                err.message,
             )
             return
 
@@ -613,9 +589,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
 
         decoded = base64.b64decode(thumbnail.image)
         if len(decoded) < 2 or decoded[0] != 0xFF or decoded[1] != 0xD8:
-            _LOGGER.warning(
-                "Thumbnail for %s is not valid JPEG", camera.name
-            )
+            _LOGGER.warning("Thumbnail for %s is not valid JPEG", camera.name)
             return
 
         # Parse timestamp from API or use now
@@ -629,7 +603,8 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                 _LOGGER.warning(
                     "Thumbnail timestamp %r from %s is not ISO-8601; "
                     "overlaying local time instead",
-                    thumbnail.timestamp, camera.name,
+                    thumbnail.timestamp,
+                    camera.name,
                 )
                 ts = datetime.now()  # local time for overlay
             self.camera_timestamps[camera.zone_id] = thumbnail.timestamp
@@ -640,6 +615,4 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         self.camera_images[camera.zone_id] = await self.hass.async_add_executor_job(
             _overlay_text, decoded, camera.name, ts
         )
-        _LOGGER.info(
-            "Loaded cached thumbnail for %s: %d bytes", camera.name, len(decoded)
-        )
+        _LOGGER.info("Loaded cached thumbnail for %s: %d bytes", camera.name, len(decoded))

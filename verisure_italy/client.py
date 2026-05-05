@@ -144,9 +144,14 @@ _DEBUG_RESPONSE_MAX_BYTES = 4096
 
 # Keys scrubbed from GraphQL variables before logging. These are
 # credentials or opaque device identifiers — never written to logs.
-_SENSITIVE_VAR_KEYS: frozenset[str] = frozenset({
-    "password", "idDevice", "idDeviceIndigitall", "uuid",
-})
+_SENSITIVE_VAR_KEYS: frozenset[str] = frozenset(
+    {
+        "password",
+        "idDevice",
+        "idDeviceIndigitall",
+        "uuid",
+    }
+)
 
 # Type aliases
 PollFn = Callable[[Installation, str, int], Awaitable[OperationResult]]
@@ -158,10 +163,7 @@ def _sanitize_vars(variables: GraphQLVars | None) -> dict[str, str | int | bool 
     """Return a copy of GraphQL variables safe to write to debug logs."""
     if variables is None:
         return {}
-    return {
-        k: ("<redacted>" if k in _SENSITIVE_VAR_KEYS else v)
-        for k, v in variables.items()
-    }
+    return {k: ("<redacted>" if k in _SENSITIVE_VAR_KEYS else v) for k, v in variables.items()}
 
 
 def generate_uuid() -> str:
@@ -217,9 +219,7 @@ class VerisureClient:
         self._apollo_operation_id: str = secrets.token_hex(64)
         self._auth_lock = asyncio.Lock()
 
-    def set_poll_params(
-        self, *, timeout: float | None = None, delay: float | None = None
-    ) -> None:
+    def set_poll_params(self, *, timeout: float | None = None, delay: float | None = None) -> None:
         """Update poll parameters at runtime."""
         if timeout is not None:
             self._poll_timeout = timeout
@@ -244,7 +244,9 @@ class VerisureClient:
         if proto_code != self._last_proto:
             _LOGGER.debug(
                 "last_proto: %r -> %r (source=%s)",
-                self._last_proto, proto_code, source,
+                self._last_proto,
+                proto_code,
+                source,
             )
         self._last_proto = proto_code
 
@@ -259,8 +261,7 @@ class VerisureClient:
         """
         if not self._last_proto:
             raise StateNotObservedError(
-                "Client has no current-state observation yet — "
-                "fetch xSStatus before arm/disarm."
+                "Client has no current-state observation yet — fetch xSStatus before arm/disarm."
             )
         return PROTO_TO_STATE[parse_proto_code(self._last_proto)]
 
@@ -295,7 +296,8 @@ class VerisureClient:
         _LOGGER.error("%s", report)
 
     async def _active_services_cached(
-        self, installation: Installation,
+        self,
+        installation: Installation,
     ) -> frozenset[ServiceRequest]:
         """Return the installation's active services, fetching + caching on miss.
 
@@ -314,7 +316,8 @@ class VerisureClient:
         return active
 
     def cached_partitions(
-        self, installation: Installation,
+        self,
+        installation: Installation,
     ) -> tuple[AlarmPartition, ...]:
         """Return the installation's cached alarm partitions.
 
@@ -360,29 +363,26 @@ class VerisureClient:
             _LOGGER.debug("[%s] request vars=%s", operation, safe_vars)
 
         try:
-            async with self._http.post(
-                API_URL, headers=headers, json=content
-            ) as resp:
+            async with self._http.post(API_URL, headers=headers, json=content) as resp:
                 http_status = resp.status
                 response_text = await resp.text()
         except ClientConnectorError as err:
-            raise APIConnectionError(
-                f"Connection error with {API_URL}: {err}"
-            ) from err
+            raise APIConnectionError(f"Connection error with {API_URL}: {err}") from err
 
         if _LOGGER.isEnabledFor(logging.DEBUG):
             snippet = response_text[:_DEBUG_RESPONSE_MAX_BYTES]
             truncated = " (truncated)" if len(response_text) > _DEBUG_RESPONSE_MAX_BYTES else ""
             _LOGGER.debug(
                 "[%s] http=%d response%s: %s",
-                operation, http_status, truncated, snippet,
+                operation,
+                http_status,
+                truncated,
+                snippet,
             )
 
         if http_status == 403:
             if "_Incapsula_Resource" in response_text:
-                raise WAFBlockedError(
-                    "Blocked by Incapsula WAF — back off and retry"
-                )
+                raise WAFBlockedError("Blocked by Incapsula WAF — back off and retry")
             raise APIResponseError(
                 f"HTTP 403 from Verisure API ({operation})",
                 http_status=403,
@@ -424,15 +424,17 @@ class VerisureClient:
                 delay = base * (1.0 + (random.random() - 0.5) * 2 * _RETRY_JITTER)
                 _LOGGER.warning(
                     "Transient %s on %s, retry %d/%d in %.1fs: %s",
-                    type(last_exc).__name__, operation,
-                    attempt, max_attempts, delay, last_exc.message,
+                    type(last_exc).__name__,
+                    operation,
+                    attempt,
+                    max_attempts,
+                    delay,
+                    last_exc.message,
                 )
                 await asyncio.sleep(delay)
 
             try:
-                response_text = await self._execute_raw(
-                    content, operation, installation
-                )
+                response_text = await self._execute_raw(content, operation, installation)
                 try:
                     self._check_graphql_errors(response_text, operation)
                 except SessionExpiredError:
@@ -534,34 +536,40 @@ class VerisureClient:
                 headers["X-Capabilities"] = cap
 
         if self._auth_token:
-            headers["auth"] = json.dumps({
-                "loginTimestamp": self._login_timestamp,
-                "user": self._username,
-                "id": self._generate_request_id(),
-                "country": API_COUNTRY,
-                "lang": API_LANG,
-                "callby": API_CALLBY,
-                "hash": self._auth_token,
-            })
+            headers["auth"] = json.dumps(
+                {
+                    "loginTimestamp": self._login_timestamp,
+                    "user": self._username,
+                    "id": self._generate_request_id(),
+                    "country": API_COUNTRY,
+                    "lang": API_LANG,
+                    "callby": API_CALLBY,
+                    "hash": self._auth_token,
+                }
+            )
 
         if operation in ("mkValidateDevice", "RefreshLogin", "mkSendOTP"):
-            headers["auth"] = json.dumps({
-                "loginTimestamp": self._login_timestamp,
-                "user": self._username,
-                "id": self._generate_request_id(),
-                "country": API_COUNTRY,
-                "lang": API_LANG,
-                "callby": API_CALLBY,
-                "hash": "",
-                "refreshToken": "",
-            })
+            headers["auth"] = json.dumps(
+                {
+                    "loginTimestamp": self._login_timestamp,
+                    "user": self._username,
+                    "id": self._generate_request_id(),
+                    "country": API_COUNTRY,
+                    "lang": API_LANG,
+                    "callby": API_CALLBY,
+                    "hash": "",
+                    "refreshToken": "",
+                }
+            )
 
         if self._otp_challenge is not None:
-            headers["security"] = json.dumps({
-                "token": self._otp_challenge[1],
-                "type": "OTP",
-                "otpHash": self._otp_challenge[0],
-            })
+            headers["security"] = json.dumps(
+                {
+                    "token": self._otp_challenge[1],
+                    "type": "OTP",
+                    "otpHash": self._otp_challenge[0],
+                }
+            )
 
         return headers
 
@@ -586,9 +594,7 @@ class VerisureClient:
                 algorithms=["EdDSA", "HS256"],
             )
         except jwt.exceptions.DecodeError as err:
-            raise AuthenticationError(
-                f"Failed to decode JWT: {err}"
-            ) from err
+            raise AuthenticationError(f"Failed to decode JWT: {err}") from err
 
         exp = decoded.get("exp")
         if not isinstance(exp, (int, float)):
@@ -601,9 +607,7 @@ class VerisureClient:
         Uses a lock to prevent concurrent callers from racing on token refresh.
         """
         async with self._auth_lock:
-            token_expiring = (
-                datetime.now(tz=UTC) + timedelta(minutes=1) > self._auth_token_exp
-            )
+            token_expiring = datetime.now(tz=UTC) + timedelta(minutes=1) > self._auth_token_exp
             if self._auth_token is None or token_expiring:
                 await self.login()
 
@@ -670,9 +674,7 @@ class VerisureClient:
         if result.refresh_token:
             self._refresh_token = result.refresh_token
 
-        _LOGGER.info(
-            "Login successful, token expires %s", self._auth_token_exp
-        )
+        _LOGGER.info("Login successful, token expires %s", self._auth_token_exp)
         return result
 
     async def validate_device(
@@ -703,24 +705,18 @@ class VerisureClient:
             self._otp_challenge = (otp_hash, sms_code)
 
         try:
-            response_text = await self._execute_raw(
-                content, "mkValidateDevice", None
-            )
+            response_text = await self._execute_raw(content, "mkValidateDevice", None)
             self._otp_challenge = None
         except APIResponseError as err:
             self._otp_challenge = None
-            raise AuthenticationError(
-                f"Device validation failed: {err.message}"
-            ) from err
+            raise AuthenticationError(f"Device validation failed: {err.message}") from err
 
         # Check for GraphQL errors — OTP challenges return data instead
         # of raising, so we handle them here in one parse pass.
         try:
             otp = self._check_graphql_errors(response_text, "mkValidateDevice")
         except APIResponseError as err:
-            raise AuthenticationError(
-                f"Device validation failed: {err.message}"
-            ) from err
+            raise AuthenticationError(f"Device validation failed: {err.message}") from err
         if otp is not None:
             return otp
 
@@ -775,15 +771,11 @@ class VerisureClient:
             "operationName": "mkInstallationList",
             "query": INSTALLATION_LIST_QUERY,
         }
-        response_text = await self._execute(
-            content, "mkInstallationList", None
-        )
+        response_text = await self._execute(content, "mkInstallationList", None)
         envelope = InstallationListEnvelope.model_validate_json(response_text)
         return envelope.data.xSInstallations.installations
 
-    async def get_services(
-        self, installation: Installation
-    ) -> list[Service]:
+    async def get_services(self, installation: Installation) -> list[Service]:
         """Get available services and refresh capabilities token."""
         content: GraphQLContent = {
             "operationName": "Srv",
@@ -799,9 +791,7 @@ class VerisureClient:
 
         # Update capabilities token
         self._capabilities[installation.number] = srv.capabilities
-        self._capabilities_exp[installation.number] = self._decode_jwt_expiry(
-            srv.capabilities
-        )
+        self._capabilities_exp[installation.number] = self._decode_jwt_expiry(srv.capabilities)
 
         # Services and partitions might change if the installation is
         # reconfigured; refresh both per-installation caches on every
@@ -843,9 +833,7 @@ class VerisureClient:
             },
             "query": CHECK_ALARM_QUERY,
         }
-        response_text = await self._execute(
-            content, "CheckAlarm", installation
-        )
+        response_text = await self._execute(content, "CheckAlarm", installation)
         envelope = CheckAlarmEnvelope.model_validate_json(response_text)
         return envelope.data.xSCheckAlarm.reference_id
 
@@ -882,15 +870,11 @@ class VerisureClient:
             },
             "query": CHECK_ALARM_STATUS_QUERY,
         }
-        response_text = await self._execute(
-            content, "CheckAlarmStatus", installation
-        )
+        response_text = await self._execute(content, "CheckAlarmStatus", installation)
         envelope = CheckAlarmStatusEnvelope.model_validate_json(response_text)
         return envelope.data.xSCheckAlarmStatus
 
-    async def get_general_status(
-        self, installation: Installation
-    ) -> GeneralStatus:
+    async def get_general_status(self, installation: Installation) -> GeneralStatus:
         """Get alarm status passively (does NOT ping the panel).
 
         Uses xSStatus which reads server-side cached state.
@@ -902,9 +886,7 @@ class VerisureClient:
             "variables": {"numinst": installation.number},
             "query": GENERAL_STATUS_QUERY,
         }
-        response_text = await self._execute(
-            content, "Status", installation
-        )
+        response_text = await self._execute(content, "Status", installation)
         envelope = GeneralStatusEnvelope.model_validate_json(response_text)
         return envelope.data.xSStatus
 
@@ -952,14 +934,19 @@ class VerisureClient:
             )
             current_state = self._current_alarm_state()
             command = resolver.resolve(
-                target=target_state, current=current_state,
+                target=target_state,
+                current=current_state,
             )
 
             _LOGGER.debug(
                 "arm: target=%s command=%s panel=%s currentStatus=%r "
                 "force_arming_remote_id=%r suid=%r",
-                target_state, command.value, installation.panel,
-                self._last_proto, force_arming_remote_id, suid,
+                target_state,
+                command.value,
+                installation.panel,
+                self._last_proto,
+                force_arming_remote_id,
+                suid,
             )
 
             variables: GraphQLVars = {
@@ -978,15 +965,15 @@ class VerisureClient:
                 "variables": variables,
                 "query": ARM_PANEL_MUTATION,
             }
-            response_text = await self._execute(
-                content, "xSArmPanel", installation
-            )
+            response_text = await self._execute(content, "xSArmPanel", installation)
             envelope = ArmPanelEnvelope.model_validate_json(response_text)
             arm_resp = envelope.data.xSArmPanel
 
             _LOGGER.debug(
                 "arm: panel accepted command res=%s msg=%r referenceId=%s",
-                arm_resp.res, arm_resp.msg, arm_resp.reference_id,
+                arm_resp.res,
+                arm_resp.msg,
+                arm_resp.reference_id,
             )
 
             if arm_resp.res != "OK":
@@ -1001,17 +988,12 @@ class VerisureClient:
                 command=command,
                 force_arming_remote_id=force_arming_remote_id,
             )
-            result = await self._poll_operation(
-                installation, arm_resp.reference_id, poll_fn
-            )
+            result = await self._poll_operation(installation, arm_resp.reference_id, poll_fn)
 
             # Poll completed successfully — proto fields must be present.
             # If they're None after a non-WAIT, non-ERROR result, the API
             # returned something unexpected and we crash loud.
-            if (
-                result.protom_response is None
-                or result.protom_response_data is None
-            ):
+            if result.protom_response is None or result.protom_response_data is None:
                 raise APIResponseError(
                     "Arm completed but response missing proto fields",
                     http_status=None,
@@ -1068,15 +1050,16 @@ class VerisureClient:
             "variables": variables,
             "query": ARM_STATUS_QUERY,
         }
-        response_text = await self._execute(
-            content, "ArmStatus", installation
-        )
+        response_text = await self._execute(content, "ArmStatus", installation)
         envelope = ArmStatusEnvelope.model_validate_json(response_text)
         arm_result = envelope.data.xSArmStatus
 
         _LOGGER.debug(
             "arm poll #%d: res=%s status=%r proto=%r",
-            counter, arm_result.res, arm_result.status, arm_result.protom_response,
+            counter,
+            arm_result.res,
+            arm_result.status,
+            arm_result.protom_response,
         )
 
         # Detect force-arm-eligible error BEFORE converting to OperationResult
@@ -1091,9 +1074,7 @@ class VerisureClient:
             exceptions = await self._get_exceptions(
                 installation, arm_result.error.reference_id, suid
             )
-            raise ArmingExceptionError(
-                arm_result.error.reference_id, suid, exceptions
-            )
+            raise ArmingExceptionError(arm_result.error.reference_id, suid, exceptions)
 
         # Surface non-force-arm errors with full diagnostic info
         # (mirrors the disarm path in _check_disarm_status_once)
@@ -1139,9 +1120,7 @@ class VerisureClient:
                 },
                 "query": GET_EXCEPTIONS_QUERY,
             }
-            response_text = await self._execute(
-                content, "xSGetExceptions", installation
-            )
+            response_text = await self._execute(content, "xSGetExceptions", installation)
             envelope = GetExceptionsEnvelope.model_validate_json(response_text)
             result = envelope.data.xSGetExceptions
 
@@ -1151,7 +1130,8 @@ class VerisureClient:
             if result.res != "WAIT":
                 _LOGGER.warning(
                     "Unexpected xSGetExceptions result: %s (msg=%s)",
-                    result.res, result.msg,
+                    result.res,
+                    result.msg,
                 )
                 return []
 
@@ -1187,7 +1167,8 @@ class VerisureClient:
             )
             current_state = self._current_alarm_state()
             target = AlarmState(
-                interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
+                interior=InteriorMode.OFF,
+                perimeter=PerimeterMode.OFF,
             )
             # If current == target (already disarmed), resolver raises
             # SameStateError — a benign race. HA's alarm panel catches
@@ -1199,7 +1180,9 @@ class VerisureClient:
 
             _LOGGER.debug(
                 "disarm: command=%s panel=%s currentStatus=%r",
-                command.value, installation.panel, self._last_proto,
+                command.value,
+                installation.panel,
+                self._last_proto,
             )
 
             content: GraphQLContent = {
@@ -1211,15 +1194,15 @@ class VerisureClient:
                 },
                 "query": DISARM_PANEL_MUTATION,
             }
-            response_text = await self._execute(
-                content, "xSDisarmPanel", installation
-            )
+            response_text = await self._execute(content, "xSDisarmPanel", installation)
             envelope = DisarmPanelEnvelope.model_validate_json(response_text)
             disarm_resp = envelope.data.xSDisarmPanel
 
             _LOGGER.debug(
                 "disarm: panel accepted command res=%s msg=%r referenceId=%s",
-                disarm_resp.res, disarm_resp.msg, disarm_resp.reference_id,
+                disarm_resp.res,
+                disarm_resp.msg,
+                disarm_resp.reference_id,
             )
 
             if disarm_resp.res != "OK":
@@ -1230,16 +1213,12 @@ class VerisureClient:
                 )
 
             poll_fn = partial(
-                self._check_disarm_status_once, command=command,
+                self._check_disarm_status_once,
+                command=command,
             )
-            result = await self._poll_operation(
-                installation, disarm_resp.reference_id, poll_fn
-            )
+            result = await self._poll_operation(installation, disarm_resp.reference_id, poll_fn)
 
-            if (
-                result.protom_response is None
-                or result.protom_response_data is None
-            ):
+            if result.protom_response is None or result.protom_response_data is None:
                 raise APIResponseError(
                     "Disarm completed but response missing proto fields",
                     http_status=None,
@@ -1286,15 +1265,15 @@ class VerisureClient:
             },
             "query": DISARM_STATUS_QUERY,
         }
-        response_text = await self._execute(
-            content, "DisarmStatus", installation
-        )
+        response_text = await self._execute(content, "DisarmStatus", installation)
         envelope = DisarmStatusEnvelope.model_validate_json(response_text)
         disarm_result = envelope.data.xSDisarmStatus
 
         _LOGGER.debug(
             "disarm poll #%d: res=%s status=%r proto=%r",
-            counter, disarm_result.res, disarm_result.status,
+            counter,
+            disarm_result.res,
+            disarm_result.status,
             disarm_result.protom_response,
         )
 
@@ -1319,9 +1298,7 @@ class VerisureClient:
     # Camera / Images
     # -------------------------------------------------------------------
 
-    async def get_raw_device_list(
-        self, installation: Installation
-    ) -> list[RawDevice]:
+    async def get_raw_device_list(self, installation: Installation) -> list[RawDevice]:
         """Return the unfiltered device list from xSDeviceList.
 
         Used by the probe to dump every declared device. For cameras,
@@ -1337,15 +1314,11 @@ class VerisureClient:
             },
             "query": DEVICE_LIST_QUERY,
         }
-        response_text = await self._execute(
-            content, "xSDeviceList", installation
-        )
+        response_text = await self._execute(content, "xSDeviceList", installation)
         envelope = DeviceListEnvelope.model_validate_json(response_text)
         return envelope.data.xSDeviceList.devices
 
-    async def list_camera_devices(
-        self, installation: Installation
-    ) -> list[CameraDevice]:
+    async def list_camera_devices(self, installation: Installation) -> list[CameraDevice]:
         """List active camera devices. Filters xSDeviceList for camera types.
 
         Returns CameraDevice list or raises on API failure.
@@ -1364,7 +1337,8 @@ class VerisureClient:
             if not raw.code.isdigit():
                 _LOGGER.warning(
                     "Camera %s has non-numeric code %r, skipping",
-                    raw.name, raw.code,
+                    raw.name,
+                    raw.code,
                 )
                 continue
             code = int(raw.code)
@@ -1407,9 +1381,7 @@ class VerisureClient:
             },
             "query": REQUEST_IMAGES_MUTATION,
         }
-        response_text = await self._execute(
-            content, "RequestImages", installation
-        )
+        response_text = await self._execute(content, "RequestImages", installation)
         envelope = RequestImagesEnvelope.model_validate_json(response_text)
         result = envelope.data.xSRequestImages
 
@@ -1440,12 +1412,8 @@ class VerisureClient:
             },
             "query": REQUEST_IMAGES_STATUS_QUERY,
         }
-        response_text = await self._execute(
-            content, "RequestImagesStatus", installation
-        )
-        envelope = RequestImagesStatusEnvelope.model_validate_json(
-            response_text
-        )
+        response_text = await self._execute(content, "RequestImagesStatus", installation)
+        envelope = RequestImagesStatusEnvelope.model_validate_json(response_text)
         result = envelope.data.xSRequestImagesStatus
 
         if result.res == "ERROR":
@@ -1475,9 +1443,7 @@ class VerisureClient:
             },
             "query": GET_THUMBNAIL_QUERY,
         }
-        response_text = await self._execute(
-            content, "mkGetThumbnail", installation
-        )
+        response_text = await self._execute(content, "mkGetThumbnail", installation)
         envelope = ThumbnailEnvelope.model_validate_json(response_text)
         return envelope.data.xSGetThumbnail
 
@@ -1503,19 +1469,14 @@ class VerisureClient:
             },
             "query": GET_PHOTO_IMAGES_QUERY,
         }
-        response_text = await self._execute(
-            content, "mkGetPhotoImages", installation
-        )
+        response_text = await self._execute(content, "mkGetPhotoImages", installation)
         envelope = PhotoImagesEnvelope.model_validate_json(response_text)
         devices = envelope.data.xSGetPhotoImages.devices
         if not devices:
             return None
 
         binary_images = [
-            img
-            for dev in devices
-            for img in dev.images
-            if img.type == "BINARY" and img.image
+            img for dev in devices for img in dev.images if img.type == "BINARY" and img.image
         ]
         if not binary_images:
             return None
@@ -1574,25 +1535,18 @@ class VerisureClient:
                     return thumb
 
         try:
-            thumbnail = await asyncio.wait_for(
-                _poll_capture(), timeout=self._poll_timeout
-            )
+            thumbnail = await asyncio.wait_for(_poll_capture(), timeout=self._poll_timeout)
         except TimeoutError:
             raise ImageCaptureError(
-                f"Image capture timed out for {camera.name} "
-                f"after {self._poll_timeout}s"
+                f"Image capture timed out for {camera.name} after {self._poll_timeout}s"
             ) from None
 
         if not thumbnail.image:
-            raise ImageCaptureError(
-                f"Capture completed but no image data for {camera.name}"
-            )
+            raise ImageCaptureError(f"Capture completed but no image data for {camera.name}")
 
         decoded = base64.b64decode(thumbnail.image)
         if len(decoded) < 2 or decoded[0] != 0xFF or decoded[1] != 0xD8:
-            raise ImageCaptureError(
-                f"Captured image is not valid JPEG for {camera.name}"
-            )
+            raise ImageCaptureError(f"Captured image is not valid JPEG for {camera.name}")
 
         return decoded
 
@@ -1604,9 +1558,7 @@ class VerisureClient:
         self,
         installation: Installation,
         reference_id: str,
-        poll_fn: Callable[
-            [Installation, str, int], Awaitable[OperationResult]
-        ],
+        poll_fn: Callable[[Installation, str, int], Awaitable[OperationResult]],
     ) -> OperationResult:
         """Poll until complete or timeout.
 
@@ -1626,16 +1578,12 @@ class VerisureClient:
                             error_type=None,
                         )
                     if result.protom_response is not None:
-                        self._update_last_proto(
-                            result.protom_response, source="poll"
-                        )
+                        self._update_last_proto(result.protom_response, source="poll")
                     return result
                 counter += 1
 
         try:
-            return await asyncio.wait_for(
-                _do_poll(), timeout=self._poll_timeout
-            )
+            return await asyncio.wait_for(_do_poll(), timeout=self._poll_timeout)
         except TimeoutError:
             raise OperationTimeoutError(
                 f"Operation did not complete within {self._poll_timeout}s. "

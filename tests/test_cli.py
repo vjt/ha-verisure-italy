@@ -74,6 +74,7 @@ class TestSessionRoundTrip:
 
     def test_load_warns_on_broad_perms(self, session, monkeypatch, tmp_path, caplog):
         import logging
+
         monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
         path = _save_session(session)
         path.chmod(0o644)  # world-readable
@@ -82,7 +83,10 @@ class TestSessionRoundTrip:
         assert any("broad permissions" in r.message for r in caplog.records)
 
     def test_roundtrip_preserves_all_fields(
-        self, session, monkeypatch, tmp_path,
+        self,
+        session,
+        monkeypatch,
+        tmp_path,
     ):
         monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
         path = _save_session(session)
