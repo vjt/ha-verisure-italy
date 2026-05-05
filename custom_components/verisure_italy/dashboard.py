@@ -168,9 +168,7 @@ def async_unregister_dashboard(hass: HomeAssistant) -> None:
             lovelace_data.dashboards.pop(DASHBOARD_URL, None)
         _LOGGER.debug("Unregistered panel '%s'", DASHBOARD_URL)
     except (AttributeError, KeyError, TypeError):
-        _LOGGER.exception(
-            "Dashboard cleanup hit Lovelace API drift — ignoring"
-        )
+        _LOGGER.exception("Dashboard cleanup hit Lovelace API drift — ignoring")
 
 
 async def async_setup_dashboard(
@@ -223,14 +221,17 @@ async def _setup_dashboard_internal(
 
     lovelace_config = lovelace_data.dashboards.get(DASHBOARD_URL)
     if not isinstance(lovelace_config, LovelaceStorage):
-        lovelace_config = LovelaceStorage(hass, {
-            "id": DASHBOARD_URL,
-            "url_path": DASHBOARD_URL,
-            "title": DASHBOARD_TITLE,
-            "icon": DASHBOARD_ICON,
-            "show_in_sidebar": True,
-            "require_admin": False,
-        })
+        lovelace_config = LovelaceStorage(
+            hass,
+            {
+                "id": DASHBOARD_URL,
+                "url_path": DASHBOARD_URL,
+                "title": DASHBOARD_TITLE,
+                "icon": DASHBOARD_ICON,
+                "show_in_sidebar": True,
+                "require_admin": False,
+            },
+        )
         lovelace_data.dashboards[DASHBOARD_URL] = lovelace_config
         _LOGGER.info("Created dashboard storage for '%s'", DASHBOARD_URL)
 
@@ -242,21 +243,15 @@ async def _setup_dashboard_internal(
     # HA Lovelace storage accepts a plain dict; our TypedDict is a
     # compile-time shape, so cast at the boundary.
     await lovelace_config.async_save(cast("dict[str, Any]", config))
-    _LOGGER.info(
-        "Dashboard updated: alarm + %d cameras", len(entities.cameras)
-    )
+    _LOGGER.info("Dashboard updated: alarm + %d cameras", len(entities.cameras))
 
 
-def _discover_entities(
-    hass: HomeAssistant, config_entry_id: str
-) -> DashboardEntities:
+def _discover_entities(hass: HomeAssistant, config_entry_id: str) -> DashboardEntities:
     """Discover entities grouped by device from the entity registry."""
     registry = er.async_get(hass)
     result = DashboardEntities()
 
-    for entry in registry.entities.get_entries_for_config_entry_id(
-        config_entry_id
-    ):
+    for entry in registry.entities.get_entries_for_config_entry_id(config_entry_id):
         if entry.domain == "alarm_control_panel":
             result.alarm_entity = entry.entity_id
         elif entry.domain == "camera":
@@ -286,9 +281,7 @@ def _build_config(entities: DashboardEntities) -> LovelaceConfig:
     assert entities.alarm_entity is not None
 
     camera_cards: list[LovelaceCard] = []
-    for group in sorted(
-        entities.cameras.values(), key=lambda g: g.camera_entity or ""
-    ):
+    for group in sorted(entities.cameras.values(), key=lambda g: g.camera_entity or ""):
         if group.camera_entity is None:
             continue
 
@@ -302,98 +295,118 @@ def _build_config(entities: DashboardEntities) -> LovelaceConfig:
             ),
         ]
         if group.capture_entity is not None:
-            stack.append(TileCard(
-                type="tile",
-                entity=group.capture_entity,
-                name="Capture",
-                icon="mdi:camera",
-                vertical=False,
-                hide_state=True,
-                tap_action=_TapAction(action="toggle"),
-            ))
+            stack.append(
+                TileCard(
+                    type="tile",
+                    entity=group.capture_entity,
+                    name="Capture",
+                    icon="mdi:camera",
+                    vertical=False,
+                    hide_state=True,
+                    tap_action=_TapAction(action="toggle"),
+                )
+            )
 
-        camera_cards.append(VerticalStackCard(
-            type="vertical-stack",
-            cards=stack,
-        ))
+        camera_cards.append(
+            VerticalStackCard(
+                type="vertical-stack",
+                cards=stack,
+            )
+        )
 
     left_cards: list[LovelaceCard] = []
 
     # Alert banner — appears only when arming was blocked by open zones
     if entities.force_arm_entity is not None:
-        left_cards.append(ConditionalCard(
-            type="conditional",
-            conditions=[{
-                "condition": "state",
-                "entity": entities.force_arm_entity,
-                "state_not": "unavailable",
-            }],
-            card=MarkdownCard(
-                type="markdown",
-                content=(
-                    "## ⚠️ Arming blocked\n"
-                    "Open zones detected. **Force Arm** to bypass or **Cancel**."
+        left_cards.append(
+            ConditionalCard(
+                type="conditional",
+                conditions=[
+                    {
+                        "condition": "state",
+                        "entity": entities.force_arm_entity,
+                        "state_not": "unavailable",
+                    }
+                ],
+                card=MarkdownCard(
+                    type="markdown",
+                    content=(
+                        "## ⚠️ Arming blocked\n"
+                        "Open zones detected. **Force Arm** to bypass or **Cancel**."
+                    ),
                 ),
-            ),
-        ))
+            )
+        )
 
-    left_cards.append(AlarmPanelCard(
-        type="alarm-panel",
-        entity=entities.alarm_entity,
-        name="Alarm",
-        states=["arm_home", "arm_away"],
-    ))
+    left_cards.append(
+        AlarmPanelCard(
+            type="alarm-panel",
+            entity=entities.alarm_entity,
+            name="Alarm",
+            states=["arm_home", "arm_away"],
+        )
+    )
 
     # Force-arm buttons — hidden when unavailable (no open zones)
     if entities.force_arm_entity is not None:
-        left_cards.append(ConditionalCard(
-            type="conditional",
-            conditions=[{
-                "condition": "state",
-                "entity": entities.force_arm_entity,
-                "state_not": "unavailable",
-            }],
-            card=TileCard(
-                type="tile",
-                entity=entities.force_arm_entity,
-                name="Force Arm",
-                icon="mdi:shield-alert",
-                color="orange",
-                vertical=False,
-                hide_state=True,
-                tap_action=_TapAction(action="toggle"),
-            ),
-        ))
+        left_cards.append(
+            ConditionalCard(
+                type="conditional",
+                conditions=[
+                    {
+                        "condition": "state",
+                        "entity": entities.force_arm_entity,
+                        "state_not": "unavailable",
+                    }
+                ],
+                card=TileCard(
+                    type="tile",
+                    entity=entities.force_arm_entity,
+                    name="Force Arm",
+                    icon="mdi:shield-alert",
+                    color="orange",
+                    vertical=False,
+                    hide_state=True,
+                    tap_action=_TapAction(action="toggle"),
+                ),
+            )
+        )
     if entities.force_arm_cancel_entity is not None:
-        left_cards.append(ConditionalCard(
-            type="conditional",
-            conditions=[{
-                "condition": "state",
-                "entity": entities.force_arm_cancel_entity,
-                "state_not": "unavailable",
-            }],
-            card=TileCard(
-                type="tile",
-                entity=entities.force_arm_cancel_entity,
-                name="Cancel",
-                icon="mdi:shield-off-outline",
-                color="red",
-                vertical=False,
-                hide_state=True,
-                tap_action=_TapAction(action="toggle"),
-            ),
-        ))
+        left_cards.append(
+            ConditionalCard(
+                type="conditional",
+                conditions=[
+                    {
+                        "condition": "state",
+                        "entity": entities.force_arm_cancel_entity,
+                        "state_not": "unavailable",
+                    }
+                ],
+                card=TileCard(
+                    type="tile",
+                    entity=entities.force_arm_cancel_entity,
+                    name="Cancel",
+                    icon="mdi:shield-off-outline",
+                    color="red",
+                    vertical=False,
+                    hide_state=True,
+                    tap_action=_TapAction(action="toggle"),
+                ),
+            )
+        )
 
     if entities.capture_all_entity is not None:
-        left_cards.append(TileCard(
-            type="tile",
-            entity=entities.capture_all_entity,
-            name="Capture All",
-            icon="mdi:camera-burst",
-            vertical=False,
-            hide_state=True,
-            tap_action=_TapAction(action="toggle"),
-        ))
+        left_cards.append(
+            TileCard(
+                type="tile",
+                entity=entities.capture_all_entity,
+                name="Capture All",
+                icon="mdi:camera-burst",
+                vertical=False,
+                hide_state=True,
+                tap_action=_TapAction(action="toggle"),
+            )
+        )
 
     sections: list[GridSection] = [
         GridSection(
@@ -404,11 +417,13 @@ def _build_config(entities: DashboardEntities) -> LovelaceConfig:
     ]
 
     if camera_cards:
-        sections.append(GridSection(
-            type="grid",
-            column_span=3,
-            cards=camera_cards,
-        ))
+        sections.append(
+            GridSection(
+                type="grid",
+                column_span=3,
+                cards=camera_cards,
+            )
+        )
 
     return LovelaceConfig(
         views=[

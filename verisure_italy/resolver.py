@@ -68,15 +68,25 @@ _COMMAND_REQUIRES: dict[ArmCommand, frozenset[ServiceRequest]] = {
     # the ARMINTFPART / ARMPARTFINT services. SDVECU responds
     # "Request ARMPARTFINTDAY1 is not valid for Central Unit" if sent
     # blind; hence the explicit sub-capability gate.
-    ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR: frozenset({
-        ServiceRequest.ARM, ServiceRequest.ARMINTFPART,
-    }),
-    ArmCommand.ARM_PARTIAL_FROM_TOTAL: frozenset({
-        ServiceRequest.ARM, ServiceRequest.ARMPARTFINT,
-    }),
-    ArmCommand.ARM_NIGHT_FROM_TOTAL: frozenset({
-        ServiceRequest.ARM, ServiceRequest.ARMPARTFINT, ServiceRequest.ARMNIGHT,
-    }),
+    ArmCommand.ARM_TOTAL_FROM_ARMED_INTERIOR: frozenset(
+        {
+            ServiceRequest.ARM,
+            ServiceRequest.ARMINTFPART,
+        }
+    ),
+    ArmCommand.ARM_PARTIAL_FROM_TOTAL: frozenset(
+        {
+            ServiceRequest.ARM,
+            ServiceRequest.ARMPARTFINT,
+        }
+    ),
+    ArmCommand.ARM_NIGHT_FROM_TOTAL: frozenset(
+        {
+            ServiceRequest.ARM,
+            ServiceRequest.ARMPARTFINT,
+            ServiceRequest.ARMNIGHT,
+        }
+    ),
     ArmCommand.ARM_ANNEX: frozenset({ServiceRequest.ARM, ServiceRequest.ARMANNEX}),
     ArmCommand.ARM_INTERIOR_EXTERIOR: frozenset({ServiceRequest.ARM}),
     ArmCommand.ARM_PERIMETER: frozenset({ServiceRequest.ARM}),
@@ -86,15 +96,17 @@ _COMMAND_REQUIRES: dict[ArmCommand, frozenset[ServiceRequest]] = {
 # panels in the INTERIOR_ONLY family regardless of service declarations.
 # Source of truth: web-bundle panel classifier R(e). See
 # docs/findings/arm-command-vocabulary.md.
-_PERI_COMMANDS: frozenset[ArmCommand] = frozenset({
-    ArmCommand.ARM_PERIMETER,
-    ArmCommand.ARM_TOTAL_PERIMETER,
-    ArmCommand.ARM_PARTIAL_PERIMETER,
-    ArmCommand.ARM_NIGHT_PERIMETER,
-    ArmCommand.ARM_INTERIOR_EXTERIOR,
-    ArmCommand.DISARM_ALL,
-    ArmCommand.DISARM_PERIMETER,
-})
+_PERI_COMMANDS: frozenset[ArmCommand] = frozenset(
+    {
+        ArmCommand.ARM_PERIMETER,
+        ArmCommand.ARM_TOTAL_PERIMETER,
+        ArmCommand.ARM_PARTIAL_PERIMETER,
+        ArmCommand.ARM_NIGHT_PERIMETER,
+        ArmCommand.ARM_INTERIOR_EXTERIOR,
+        ArmCommand.DISARM_ALL,
+        ArmCommand.DISARM_PERIMETER,
+    }
+)
 
 
 class CommandResolver(BaseModel):
@@ -130,9 +142,7 @@ class CommandResolver(BaseModel):
         if self.panel not in PANEL_FAMILIES:
             raise ValueError(f"Unknown panel {self.panel!r}")
         if target == current:
-            raise SameStateError(
-                f"Panel already in target state {target}. No command needed."
-            )
+            raise SameStateError(f"Panel already in target state {target}. No command needed.")
 
         family = effective_family(self.panel, self.alarm_partitions)
         command = self._pick_command(target=target, current=current, family=family)
@@ -163,10 +173,7 @@ class CommandResolver(BaseModel):
         # The web resolver keys transitions on interior mode alone;
         # perimeter flips from an armed state aren't a defined
         # single-command transition. Caller must disarm first.
-        if (
-            current.interior != InteriorMode.OFF
-            and current.perimeter != target.perimeter
-        ):
+        if current.interior != InteriorMode.OFF and current.perimeter != target.perimeter:
             raise ValueError(
                 f"Cross-perimeter armed transition not supported: "
                 f"current={current}, target={target}. "
@@ -219,9 +226,7 @@ class CommandResolver(BaseModel):
                 # This branch is unreachable in practice; the raise below fires
                 # for truly unexpected combinations.
                 pass
-        raise ValueError(
-            f"No command for target={target} current={current} family={family}"
-        )
+        raise ValueError(f"No command for target={target} current={current} family={family}")
 
     def _assert_supported(self, command: ArmCommand) -> None:
         """Raise UnsupportedCommandError if the panel cannot honour `command`.

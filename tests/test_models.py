@@ -255,12 +255,14 @@ def test_service_request_values() -> None:
 
 
 def _svc(request: str, *, active: bool) -> Service:
-    return Service.model_validate({
-        "idService": 0,
-        "active": active,
-        "visible": True,
-        "request": request,
-    })
+    return Service.model_validate(
+        {
+            "idService": 0,
+            "active": active,
+            "visible": True,
+            "request": request,
+        }
+    )
 
 
 def test_active_services_returns_only_active_known_requests() -> None:
@@ -270,10 +272,12 @@ def test_active_services_returns_only_active_known_requests() -> None:
         _svc("PERI", active=False),
         _svc("IMG", active=True),  # not in ServiceRequest — ignored
     ]
-    assert active_services(services) == frozenset({
-        ServiceRequest.ARM,
-        ServiceRequest.DARM,
-    })
+    assert active_services(services) == frozenset(
+        {
+            ServiceRequest.ARM,
+            ServiceRequest.DARM,
+        }
+    )
 
 
 def test_active_services_empty_input() -> None:
@@ -336,9 +340,7 @@ class TestEffectiveFamily:
 
     def test_interior_only_is_stable_with_or_without_partitions(self) -> None:
         # Partitions present (e.g. only MAIN populated, no PERIMETRAL row at all)
-        partitions = (
-            AlarmPartition(id="01", enterStates=("01",), leaveStates=("01",)),
-        )
+        partitions = (AlarmPartition(id="01", enterStates=("01",), leaveStates=("01",)),)
 
         assert effective_family("SDVFAST", partitions) == PanelFamily.INTERIOR_ONLY
 

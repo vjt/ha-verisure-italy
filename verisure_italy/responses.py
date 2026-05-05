@@ -38,9 +38,7 @@ class _ServiceInstallation(BaseModel):
     numinst: str
     capabilities: str
     services: list[Service]
-    config_repo_user: ConfigRepoUser | None = Field(
-        default=None, alias="configRepoUser"
-    )
+    config_repo_user: ConfigRepoUser | None = Field(default=None, alias="configRepoUser")
 
 
 class _SrvData(BaseModel):
@@ -256,9 +254,7 @@ class GraphQLErrorData(BaseModel):
 
     reason: str | None = None
     status: int | None = None
-    need_device_authorization: bool | None = Field(
-        None, alias="needDeviceAuthorization"
-    )
+    need_device_authorization: bool | None = Field(None, alias="needDeviceAuthorization")
     auth_otp_hash: str | None = Field(None, alias="auth-otp-hash")
     auth_phones: list[OtpPhone] | None = Field(None, alias="auth-phones")
 

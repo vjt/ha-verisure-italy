@@ -43,9 +43,7 @@ PROBE_SCHEMA_VERSION = 1
 
 # Probe values are JSON-shaped: primitives, lists, and nested dicts.
 # Recursive type alias — declared via PEP 695 `type` syntax (Python 3.12+).
-type ProbeValue = (
-    str | int | float | bool | None | list["ProbeValue"] | dict[str, "ProbeValue"]
-)
+type ProbeValue = str | int | float | bool | None | list["ProbeValue"] | dict[str, "ProbeValue"]
 type ProbeDict = dict[str, ProbeValue]
 
 # Field names whose presence anywhere in the probe output is a
@@ -54,13 +52,30 @@ type ProbeDict = dict[str, ProbeValue]
 # descriptors (`"name": "MODE_ARM"`). PII-flavoured `name` (installation
 # owner, device labels) is dropped structurally during probe construction.
 # The `test_no_pii_values_in_serialized_output` test catches value leakage.
-_PII_FIELDS: frozenset[str] = frozenset({
-    "numinst", "phone", "email", "surname", "address", "city",
-    "postcode", "province", "serialNumber", "serial_number",
-    "auth_token", "capabilities", "referenceId", "reference_id",
-    "refreshToken", "refresh_token", "hash", "idDevice", "idDeviceIndigitall",
-    "uuid",
-})
+_PII_FIELDS: frozenset[str] = frozenset(
+    {
+        "numinst",
+        "phone",
+        "email",
+        "surname",
+        "address",
+        "city",
+        "postcode",
+        "province",
+        "serialNumber",
+        "serial_number",
+        "auth_token",
+        "capabilities",
+        "referenceId",
+        "reference_id",
+        "refreshToken",
+        "refresh_token",
+        "hash",
+        "idDevice",
+        "idDeviceIndigitall",
+        "uuid",
+    }
+)
 
 
 def _hash_numinst(numinst: str) -> str:
@@ -72,9 +87,7 @@ def _hash_numinst(numinst: str) -> str:
     return hashlib.sha256(numinst.encode("utf-8")).hexdigest()[:8]
 
 
-async def run_probe(
-    client: VerisureClient, installation: Installation
-) -> ProbeDict:
+async def run_probe(client: VerisureClient, installation: Installation) -> ProbeDict:
     """Collect read-only diagnostic data for a Verisure installation.
 
     Returns a redacted dict conforming to PROBE_SCHEMA_VERSION. Never
@@ -84,7 +97,8 @@ async def run_probe(
     """
     _LOGGER.debug(
         "probe: starting for panel=%s numinst=%s",
-        installation.panel, _hash_numinst(installation.number),
+        installation.panel,
+        _hash_numinst(installation.number),
     )
 
     services = await client.get_services(installation)
@@ -113,8 +127,7 @@ async def run_probe(
                     }
                     for attr in svc.attributes.attributes
                 ]
-                if svc.attributes is not None
-                and svc.attributes.attributes is not None
+                if svc.attributes is not None and svc.attributes.attributes is not None
                 else []
             ),
         }
@@ -160,7 +173,8 @@ async def run_probe(
 
     _LOGGER.debug(
         "probe: collected %d services, %d devices",
-        len(service_entries), len(device_entries),
+        len(service_entries),
+        len(device_entries),
     )
     return probe
 
@@ -177,9 +191,7 @@ def assert_redacted(probe: ProbeDict) -> None:
         if isinstance(node, dict):
             for key, value in node.items():
                 if key in _PII_FIELDS:
-                    raise ValueError(
-                        f"PII field {key!r} present at {path or '<root>'}"
-                    )
+                    raise ValueError(f"PII field {key!r} present at {path or '<root>'}")
                 _walk(value, f"{path}.{key}" if path else key)
         elif isinstance(node, list):
             for i, item in enumerate(node):
@@ -196,6 +208,7 @@ def assert_redacted(probe: ProbeDict) -> None:
 def _client_version() -> str:
     """Read the client version lazily to avoid module-init import cycles."""
     from . import __version__
+
     return __version__
 
 

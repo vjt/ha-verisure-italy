@@ -75,9 +75,7 @@ _ARM_TARGETS: dict[PanelFamily, dict[AlarmControlPanelState, AlarmState]] = {
     },
 }
 
-_DISARMED = AlarmState(
-    interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF
-)
+_DISARMED = AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF)
 
 # Reverse map: AlarmState -> HA AlarmControlPanelState, per panel family.
 # On INTERIOR_ONLY, perimeter-involving states are absent by design — a
@@ -86,20 +84,24 @@ _DISARMED = AlarmState(
 _STATE_MAP: dict[PanelFamily, dict[AlarmState, AlarmControlPanelState]] = {
     PanelFamily.PERI_CAPABLE: {
         _DISARMED: AlarmControlPanelState.DISARMED,
-        _ARM_TARGETS[PanelFamily.PERI_CAPABLE][AlarmControlPanelState.ARMED_HOME]:
-            AlarmControlPanelState.ARMED_HOME,
-        _ARM_TARGETS[PanelFamily.PERI_CAPABLE][AlarmControlPanelState.ARMED_AWAY]:
-            AlarmControlPanelState.ARMED_AWAY,
+        _ARM_TARGETS[PanelFamily.PERI_CAPABLE][
+            AlarmControlPanelState.ARMED_HOME
+        ]: AlarmControlPanelState.ARMED_HOME,
+        _ARM_TARGETS[PanelFamily.PERI_CAPABLE][
+            AlarmControlPanelState.ARMED_AWAY
+        ]: AlarmControlPanelState.ARMED_AWAY,
         PROTO_TO_STATE[ProtoCode.PERIMETER_ONLY]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
         PROTO_TO_STATE[ProtoCode.PARTIAL]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
         PROTO_TO_STATE[ProtoCode.TOTAL]: AlarmControlPanelState.ARMED_CUSTOM_BYPASS,
     },
     PanelFamily.INTERIOR_ONLY: {
         _DISARMED: AlarmControlPanelState.DISARMED,
-        _ARM_TARGETS[PanelFamily.INTERIOR_ONLY][AlarmControlPanelState.ARMED_HOME]:
-            AlarmControlPanelState.ARMED_HOME,
-        _ARM_TARGETS[PanelFamily.INTERIOR_ONLY][AlarmControlPanelState.ARMED_AWAY]:
-            AlarmControlPanelState.ARMED_AWAY,
+        _ARM_TARGETS[PanelFamily.INTERIOR_ONLY][
+            AlarmControlPanelState.ARMED_HOME
+        ]: AlarmControlPanelState.ARMED_HOME,
+        _ARM_TARGETS[PanelFamily.INTERIOR_ONLY][
+            AlarmControlPanelState.ARMED_AWAY
+        ]: AlarmControlPanelState.ARMED_AWAY,
     },
 }
 
@@ -111,8 +113,7 @@ assert _STATE_MAP[PanelFamily.PERI_CAPABLE].keys() == set(PROTO_TO_STATE.values(
     f"don't match PROTO_TO_STATE values {set(PROTO_TO_STATE.values())}"
 )
 assert _STATE_MAP.keys() == set(PanelFamily), (
-    f"_STATE_MAP must cover every PanelFamily. Missing: "
-    f"{set(PanelFamily) - _STATE_MAP.keys()}"
+    f"_STATE_MAP must cover every PanelFamily. Missing: {set(PanelFamily) - _STATE_MAP.keys()}"
 )
 
 _NOTIFICATION_ID_PREFIX = f"{DOMAIN}.arming_exception"
@@ -190,9 +191,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
 
     def _update_alarm_state(self) -> None:
         """Update _attr_alarm_state from coordinator data. Crashes on unknown state."""
-        self._attr_alarm_state = _STATE_MAP[self._panel_family][
-            self.coordinator.data.alarm_state
-        ]
+        self._attr_alarm_state = _STATE_MAP[self._panel_family][self.coordinator.data.alarm_state]
         self._update_supported_features()
         self._update_force_attributes()
 
@@ -211,8 +210,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         """
         if self._attr_alarm_state == AlarmControlPanelState.DISARMED:
             self._attr_supported_features = (
-                AlarmControlPanelEntityFeature.ARM_HOME
-                | AlarmControlPanelEntityFeature.ARM_AWAY
+                AlarmControlPanelEntityFeature.ARM_HOME | AlarmControlPanelEntityFeature.ARM_AWAY
             )
         else:
             self._attr_supported_features = AlarmControlPanelEntityFeature(0)
@@ -248,9 +246,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             self.coordinator.force_context is not None
             and self.coordinator.data.alarm_state != _DISARMED
         ):
-            _LOGGER.info(
-                "Clearing stale force-arm context — panel no longer disarmed"
-            )
+            _LOGGER.info("Clearing stale force-arm context — panel no longer disarmed")
             self._clear_force_context()
             self.hass.async_create_task(
                 self._dismiss_notification(),
@@ -277,11 +273,14 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         _LOGGER.warning(
             "Refusing %s: panel %r not in SUPPORTED_PANELS=%s. "
             "Running read-only probe for diagnosis.",
-            action, panel, sorted(SUPPORTED_PANELS),
+            action,
+            panel,
+            sorted(SUPPORTED_PANELS),
         )
         try:
             probe = await run_probe(
-                self.coordinator.client, self.coordinator.installation,
+                self.coordinator.client,
+                self.coordinator.installation,
             )
             _LOGGER.warning(
                 "=== VERISURE PROBE BEGIN ===\n%s\n=== VERISURE PROBE END ===",
@@ -351,9 +350,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         # direct service calls (automations, REST) that bypass the UI.
         if self._attr_alarm_state != AlarmControlPanelState.DISARMED:
             _LOGGER.warning(
-                "Arm-to-%s refused — panel already armed (%s). "
-                "Disarm first to change mode.",
-                ha_state, self._attr_alarm_state,
+                "Arm-to-%s refused — panel already armed (%s). Disarm first to change mode.",
+                ha_state,
+                self._attr_alarm_state,
             )
             return
 
@@ -388,7 +387,8 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 zones = ", ".join(e.alias for e in exc.exceptions)
                 _LOGGER.warning(
                     "Arming blocked by %d open zone(s): %s",
-                    len(exc.exceptions), zones,
+                    len(exc.exceptions),
+                    zones,
                 )
                 # Revert to real panel state — the alarm is still disarmed.
                 # Force-arm status communicated via attributes + dashboard.
@@ -406,7 +406,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self._attr_alarm_state = None
                 _LOGGER.error("Arm timed out — state UNKNOWN: %s", exc.message)
                 await self._notify_operation_failed(
-                    "Arm", exc.message, marker_operation="ARM",
+                    "Arm",
+                    exc.message,
+                    marker_operation="ARM",
                 )
                 self.async_write_ha_state()
             except OperationFailedError as exc:
@@ -415,7 +417,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self._update_alarm_state()
                 _LOGGER.error("Arm failed: %s", exc.message)
                 await self._notify_operation_failed(
-                    "Arm", exc.message, marker_operation="ARM",
+                    "Arm",
+                    exc.message,
+                    marker_operation="ARM",
                 )
                 self.async_write_ha_state()
                 return
@@ -424,7 +428,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 msg = exc.message if isinstance(exc, VerisureError) else str(exc)
                 _LOGGER.error("Arm failed (unexpected): %s", msg)
                 await self._notify_operation_failed(
-                    "Arm", msg, marker_operation="ARM",
+                    "Arm",
+                    msg,
+                    marker_operation="ARM",
                 )
                 self.async_write_ha_state()
                 return
@@ -467,18 +473,20 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 # Show UNKNOWN — disarmed is NEVER a safe default to assume
                 # (security software). Post-`with` refresh resolves it.
                 self._attr_alarm_state = None
-                _LOGGER.error(
-                    "Disarm timed out — state UNKNOWN: %s", exc.message
-                )
+                _LOGGER.error("Disarm timed out — state UNKNOWN: %s", exc.message)
                 await self._notify_operation_failed(
-                    "Disarm", exc.message, marker_operation="DISARM",
+                    "Disarm",
+                    exc.message,
+                    marker_operation="DISARM",
                 )
                 self.async_write_ha_state()
             except OperationFailedError as exc:
                 self._update_alarm_state()
                 _LOGGER.error("Disarm failed: %s", exc.message)
                 await self._notify_operation_failed(
-                    "Disarm", exc.message, marker_operation="DISARM",
+                    "Disarm",
+                    exc.message,
+                    marker_operation="DISARM",
                 )
                 self.async_write_ha_state()
                 return
@@ -487,7 +495,9 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 msg = exc.message if isinstance(exc, VerisureError) else str(exc)
                 _LOGGER.error("Disarm failed (unexpected): %s", msg)
                 await self._notify_operation_failed(
-                    "Disarm", msg, marker_operation="DISARM",
+                    "Disarm",
+                    msg,
+                    marker_operation="DISARM",
                 )
                 self.async_write_ha_state()
                 return
@@ -516,7 +526,8 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         async with self._arm_lock, self.coordinator.suppress_updates():
             _LOGGER.info(
                 "Force-arming with %d bypassed zone(s): %s",
-                len(ctx.exceptions), zones,
+                len(ctx.exceptions),
+                zones,
             )
             await self._dismiss_notification()
             self.async_write_ha_state()
@@ -531,13 +542,13 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             except SameStateError as exc:
                 # Panel already in target state — treat as success.
                 self._log_force_arm_audit(
-                    ctx=ctx, started_at=started_at, result="noop",
+                    ctx=ctx,
+                    started_at=started_at,
+                    result="noop",
                     error_class=type(exc).__name__,
                     error_message=exc.message,
                 )
-                _LOGGER.info(
-                    "Force-arm is a no-op — panel already in target state"
-                )
+                _LOGGER.info("Force-arm is a no-op — panel already in target state")
                 self._clear_force_context()
                 self._update_alarm_state()
                 self.async_write_ha_state()
@@ -548,22 +559,26 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 # consumed server-side whether or not we got confirmation)
                 # and show UNKNOWN until refresh resolves.
                 self._log_force_arm_audit(
-                    ctx=ctx, started_at=started_at, result="timeout",
+                    ctx=ctx,
+                    started_at=started_at,
+                    result="timeout",
                     error_class=type(exc).__name__,
                     error_message=exc.message,
                 )
                 self._clear_force_context()
                 self._attr_alarm_state = None
-                _LOGGER.error(
-                    "Force arm timed out — state UNKNOWN: %s", exc.message
-                )
+                _LOGGER.error("Force arm timed out — state UNKNOWN: %s", exc.message)
                 await self._notify_operation_failed(
-                    "Force arm", exc.message, marker_operation="ARM",
+                    "Force arm",
+                    exc.message,
+                    marker_operation="ARM",
                 )
                 self.async_write_ha_state()
             except OperationFailedError as exc:
                 self._log_force_arm_audit(
-                    ctx=ctx, started_at=started_at, result="failure",
+                    ctx=ctx,
+                    started_at=started_at,
+                    result="failure",
                     error_class=type(exc).__name__,
                     error_message=exc.message,
                 )
@@ -573,14 +588,18 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 # Client-level operation is still "arm" — the marker block
                 # in the log reads VERISURE ARM FAILURE BEGIN, not "FORCE ARM".
                 await self._notify_operation_failed(
-                    "Force arm", exc.message, marker_operation="ARM",
+                    "Force arm",
+                    exc.message,
+                    marker_operation="ARM",
                 )
                 self.async_write_ha_state()
                 return
             except (VerisureError, ValidationError) as exc:
                 msg = exc.message if isinstance(exc, VerisureError) else str(exc)
                 self._log_force_arm_audit(
-                    ctx=ctx, started_at=started_at, result="failure",
+                    ctx=ctx,
+                    started_at=started_at,
+                    result="failure",
                     error_class=type(exc).__name__,
                     error_message=msg,
                 )
@@ -588,13 +607,17 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 self._update_alarm_state()
                 _LOGGER.error("Force arm failed (unexpected): %s", msg)
                 await self._notify_operation_failed(
-                    "Force arm", msg, marker_operation="ARM",
+                    "Force arm",
+                    msg,
+                    marker_operation="ARM",
                 )
                 self.async_write_ha_state()
                 return
             else:
                 self._log_force_arm_audit(
-                    ctx=ctx, started_at=started_at, result="success",
+                    ctx=ctx,
+                    started_at=started_at,
+                    result="success",
                 )
                 _LOGGER.info("Force-armed successfully, bypassed: %s", zones)
                 self._expire_force_context()
@@ -658,9 +681,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
                 "verisure_italy_expire_force_context",
             )
 
-        self._force_context_timer = async_call_later(
-            self.hass, 120, _on_force_context_expired
-        )
+        self._force_context_timer = async_call_later(self.hass, 120, _on_force_context_expired)
 
     def _cancel_force_context_timer(self) -> None:
         """Cancel the force context expiry timer if active."""
@@ -726,8 +747,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             "suid": ctx.suid,
             "mode": ctx.mode,
             "target": (
-                f"interior={ctx.target.interior.value},"
-                f"perimeter={ctx.target.perimeter.value}"
+                f"interior={ctx.target.interior.value},perimeter={ctx.target.perimeter.value}"
             ),
             "zones": [e.alias for e in ctx.exceptions],
             "proto_before": self.coordinator.data.proto_code.value,
@@ -741,10 +761,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
         _LOGGER.info("FORCE_ARM_AUDIT %s", json.dumps(audit, sort_keys=True))
 
     def _notification_id(self) -> str:
-        return (
-            f"{_NOTIFICATION_ID_PREFIX}"
-            f"_{self.coordinator.installation.number}"
-        )
+        return f"{_NOTIFICATION_ID_PREFIX}_{self.coordinator.installation.number}"
 
     async def _notify_arm_exceptions(self, exc: ArmingExceptionError) -> None:
         """Create a persistent notification about open zones."""
@@ -801,9 +818,7 @@ class VerisureAlarmPanel(  # type: ignore[reportIncompatibleVariableOverride]
             },
         )
 
-    def _fire_arming_exception_event(
-        self, exc: ArmingExceptionError, mode: str
-    ) -> None:
+    def _fire_arming_exception_event(self, exc: ArmingExceptionError, mode: str) -> None:
         """Fire an HA event for automation consumption."""
         self.hass.bus.async_fire(
             f"{DOMAIN}_arming_exception",

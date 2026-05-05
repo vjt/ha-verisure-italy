@@ -29,7 +29,8 @@ from verisure_italy.models import (
 def _make_data() -> VerisureStatusData:
     return VerisureStatusData(
         alarm_state=AlarmState(
-            interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF,
+            interior=InteriorMode.OFF,
+            perimeter=PerimeterMode.OFF,
         ),
         proto_code=ProtoCode.DISARMED,
         timestamp="2026-01-01T00:00:00",
@@ -52,7 +53,10 @@ def _bare_coordinator() -> VerisureCoordinator:
     coord._services_discovered = True  # skip xSSrv discovery branch
     coord.active_services = frozenset()  # type: ignore[attr-defined]
     coord.installation = Installation(
-        number="1234567", alias="Home", panel="SDVECU", type="home",
+        number="1234567",
+        alias="Home",
+        panel="SDVECU",
+        type="home",
     )
     return coord
 

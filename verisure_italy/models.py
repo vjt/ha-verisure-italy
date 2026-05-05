@@ -73,17 +73,13 @@ class AlarmState(BaseModel):
 # The canonical mapping. Six entries, no defaults, no fallbacks.
 PROTO_TO_STATE: dict[ProtoCode, AlarmState] = {
     ProtoCode.DISARMED: AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.OFF),
-    ProtoCode.PERIMETER_ONLY: AlarmState(
-        interior=InteriorMode.OFF, perimeter=PerimeterMode.ON
-    ),
+    ProtoCode.PERIMETER_ONLY: AlarmState(interior=InteriorMode.OFF, perimeter=PerimeterMode.ON),
     ProtoCode.PARTIAL: AlarmState(interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.OFF),
     ProtoCode.PARTIAL_PERIMETER: AlarmState(
         interior=InteriorMode.PARTIAL, perimeter=PerimeterMode.ON
     ),
     ProtoCode.TOTAL: AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.OFF),
-    ProtoCode.TOTAL_PERIMETER: AlarmState(
-        interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON
-    ),
+    ProtoCode.TOTAL_PERIMETER: AlarmState(interior=InteriorMode.TOTAL, perimeter=PerimeterMode.ON),
 }
 
 STATE_TO_PROTO: dict[AlarmState, ProtoCode] = {v: k for k, v in PROTO_TO_STATE.items()}
@@ -461,9 +457,7 @@ PANEL_FAMILIES: dict[str, PanelFamily] = {
 SUPPORTED_PANELS: frozenset[str] = frozenset(PANEL_FAMILIES.keys())
 
 
-def effective_family(
-    panel: str, alarm_partitions: tuple[AlarmPartition, ...]
-) -> PanelFamily:
+def effective_family(panel: str, alarm_partitions: tuple[AlarmPartition, ...]) -> PanelFamily:
     """Return the install's effective family, demoting on missing perimeter perms.
 
     `PANEL_FAMILIES` classifies panels by model. A `PERI_CAPABLE` model

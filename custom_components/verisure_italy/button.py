@@ -46,8 +46,7 @@ async def async_setup_entry(
             VerisureCaptureAllButton(coordinator),
         )
         entities.extend(
-            VerisureCaptureButton(coordinator, camera)
-            for camera in coordinator.camera_devices
+            VerisureCaptureButton(coordinator, camera) for camera in coordinator.camera_devices
         )
 
     async_add_entities(entities)
@@ -117,9 +116,7 @@ class VerisureCaptureButton(  # type: ignore[reportIncompatibleVariableOverride]
         self._capturing = False
 
         inst = coordinator.installation
-        self._attr_unique_id = (
-            f"{DOMAIN}_{inst.number}_capture_{camera.zone_id}"
-        )
+        self._attr_unique_id = f"{DOMAIN}_{inst.number}_capture_{camera.zone_id}"
         self._attr_name = "Capture"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{inst.number}_camera_{camera.zone_id}")},

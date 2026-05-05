@@ -64,89 +64,99 @@ def _make_jwt() -> str:
 
 
 def _services_body() -> str:
-    return json.dumps({
-        "data": {
-            "xSSrv": {
-                "res": "OK",
-                "msg": "",
-                "installation": {
-                    "numinst": INSTALLATION.number,
-                    "capabilities": _make_jwt(),
-                    "services": [
-                        {
-                            "idService": 11,
-                            "active": True,
-                            "visible": True,
-                            "request": "EST",
-                            "bde": True,
-                            "isPremium": False,
-                            "codOper": True,
-                            "minWrapperVersion": "10.0.0",
-                            "description": "Alarm Status",
-                            "attributes": {
-                                "attributes": [
-                                    {"name": "MODE_ARM", "value": "ARM1", "active": True},
-                                    {"name": "MODE_ARMPERI", "value": "ARM1PERI1", "active": True},
-                                ],
+    return json.dumps(
+        {
+            "data": {
+                "xSSrv": {
+                    "res": "OK",
+                    "msg": "",
+                    "installation": {
+                        "numinst": INSTALLATION.number,
+                        "capabilities": _make_jwt(),
+                        "services": [
+                            {
+                                "idService": 11,
+                                "active": True,
+                                "visible": True,
+                                "request": "EST",
+                                "bde": True,
+                                "isPremium": False,
+                                "codOper": True,
+                                "minWrapperVersion": "10.0.0",
+                                "description": "Alarm Status",
+                                "attributes": {
+                                    "attributes": [
+                                        {"name": "MODE_ARM", "value": "ARM1", "active": True},
+                                        {
+                                            "name": "MODE_ARMPERI",
+                                            "value": "ARM1PERI1",
+                                            "active": True,
+                                        },
+                                    ],
+                                },
                             },
-                        },
-                        {
-                            "idService": 506,
-                            "active": True,
-                            "visible": True,
-                            "request": "TIMELINE",
-                            "bde": False,
-                            "description": "Timeline",
-                            "attributes": None,
-                        },
-                    ],
-                    "configRepoUser": {"alarmPartitions": []},
-                },
+                            {
+                                "idService": 506,
+                                "active": True,
+                                "visible": True,
+                                "request": "TIMELINE",
+                                "bde": False,
+                                "description": "Timeline",
+                                "attributes": None,
+                            },
+                        ],
+                        "configRepoUser": {"alarmPartitions": []},
+                    },
+                }
             }
         }
-    })
+    )
 
 
 def _device_list_body() -> str:
-    return json.dumps({
-        "data": {
-            "xSDeviceList": {
-                "res": "OK",
-                "devices": [
-                    {
-                        "id": "0",
-                        "code": "1",
-                        "zoneId": None,
-                        "name": "Centrale",
-                        "type": "CENT",
-                        "isActive": None,
-                        "serialNumber": "SECRET-SERIAL-001",
-                    },
-                    {
-                        "id": "12",
-                        "code": "12",
-                        "zoneId": "QR12",
-                        "name": "Cucina",
-                        "type": "QR",
-                        "isActive": True,
-                        "serialNumber": "SECRET-SERIAL-002",
-                    },
-                ],
+    return json.dumps(
+        {
+            "data": {
+                "xSDeviceList": {
+                    "res": "OK",
+                    "devices": [
+                        {
+                            "id": "0",
+                            "code": "1",
+                            "zoneId": None,
+                            "name": "Centrale",
+                            "type": "CENT",
+                            "isActive": None,
+                            "serialNumber": "SECRET-SERIAL-001",
+                        },
+                        {
+                            "id": "12",
+                            "code": "12",
+                            "zoneId": "QR12",
+                            "name": "Cucina",
+                            "type": "QR",
+                            "isActive": True,
+                            "serialNumber": "SECRET-SERIAL-002",
+                        },
+                    ],
+                }
             }
         }
-    })
+    )
 
 
 def _status_body() -> str:
-    return json.dumps({
-        "data": {
-            "xSStatus": {
-                "status": "0",
-                "timestampUpdate": "2026-04-20T12:00:00",
-                "exceptions": None,
+    return json.dumps(
+        {
+            "data": {
+                "xSStatus": {
+                    "status": "0",
+                    "timestampUpdate": "2026-04-20T12:00:00",
+                    "exceptions": None,
+                }
             }
         }
-    })
+    )
 
 
 @pytest.fixture
@@ -177,9 +187,7 @@ async def client(http_session):
     c._auth_token = "tok"
     c._auth_token_exp = datetime.now(tz=UTC) + timedelta(minutes=30)
     c._capabilities[INSTALLATION.number] = _make_jwt()
-    c._capabilities_exp[INSTALLATION.number] = (
-        datetime.now(tz=UTC) + timedelta(minutes=30)
-    )
+    c._capabilities_exp[INSTALLATION.number] = datetime.now(tz=UTC) + timedelta(minutes=30)
     return c
 
 
@@ -213,8 +221,13 @@ class TestRunProbe:
         probe = await run_probe(client, INSTALLATION)
 
         assert set(probe.keys()) >= {
-            "schema_version", "timestamp", "client_version",
-            "installation", "services", "devices", "alarm_state",
+            "schema_version",
+            "timestamp",
+            "client_version",
+            "installation",
+            "services",
+            "devices",
+            "alarm_state",
         }
 
     async def test_installation_hash_replaces_numinst(self, mock_api, client):
@@ -288,9 +301,18 @@ class TestRunProbe:
         text = json.dumps(probe)
 
         forbidden_values = [
-            INSTALLATION.number, "Mario", "Rossi", "Via Test 1", "Roma",
-            "m@r.it", "+390000000", "Casa", "SECRET-SERIAL-001",
-            "SECRET-SERIAL-002", "Centrale", "Cucina",
+            INSTALLATION.number,
+            "Mario",
+            "Rossi",
+            "Via Test 1",
+            "Roma",
+            "m@r.it",
+            "+390000000",
+            "Casa",
+            "SECRET-SERIAL-001",
+            "SECRET-SERIAL-002",
+            "Centrale",
+            "Cucina",
         ]
         for val in forbidden_values:
             assert val not in text, f"PII value leaked: {val!r}"
@@ -315,8 +337,15 @@ class TestAssertRedacted:
 
 class TestPIIFieldsSet:
     def test_covers_core_identifiers(self):
-        required = {"numinst", "phone", "email", "address",
-                    "serialNumber", "capabilities", "referenceId"}
+        required = {
+            "numinst",
+            "phone",
+            "email",
+            "address",
+            "serialNumber",
+            "capabilities",
+            "referenceId",
+        }
         missing = required - _PII_FIELDS
         assert not missing, f"PII set missing: {missing}"
 
@@ -325,9 +354,8 @@ class TestSDVECUReferenceFixture:
     """Regression: committed SDVECU probe parses, matches schema v1, redacted."""
 
     from pathlib import Path as _Path
-    FIXTURE_PATH = (
-        _Path(__file__).parent / "fixtures" / "probe_sdvecu_reference.json"
-    )
+
+    FIXTURE_PATH = _Path(__file__).parent / "fixtures" / "probe_sdvecu_reference.json"
 
     def _load(self) -> dict[str, object]:
         with self.FIXTURE_PATH.open() as f:
@@ -342,8 +370,13 @@ class TestSDVECUReferenceFixture:
     def test_top_level_keys(self):
         keys = set(self._load().keys())
         assert keys >= {
-            "schema_version", "timestamp", "client_version",
-            "installation", "services", "devices", "alarm_state",
+            "schema_version",
+            "timestamp",
+            "client_version",
+            "installation",
+            "services",
+            "devices",
+            "alarm_state",
         }
 
     def test_panel_is_sdvecu(self):
@@ -360,9 +393,7 @@ class TestSDVECUReferenceFixture:
     def test_arm_service_present(self):
         services = self._load()["services"]
         assert isinstance(services, list)
-        arm_services = [
-            s for s in services if isinstance(s, dict) and s.get("request") == "ARM"
-        ]
+        arm_services = [s for s in services if isinstance(s, dict) and s.get("request") == "ARM"]
         assert len(arm_services) == 1, "SDVECU has one ARM service"
 
     def test_redaction(self):
@@ -377,20 +408,22 @@ class TestSDVECUReferenceFixture:
 
 
 def _installation(panel: str = "SDVFAST", numinst: str = "1234567") -> Installation:
-    return Installation.model_validate({
-        "numinst": numinst,
-        "alias": "Casa",
-        "panel": panel,
-        "type": "HOME",
-        "name": "Secret",
-        "surname": "Person",
-        "address": "Via Privata 1",
-        "city": "Roma",
-        "postcode": "00100",
-        "province": "RM",
-        "email": "secret@test.it",
-        "phone": "+390000000000",
-    })
+    return Installation.model_validate(
+        {
+            "numinst": numinst,
+            "alias": "Casa",
+            "panel": panel,
+            "type": "HOME",
+            "name": "Secret",
+            "surname": "Person",
+            "address": "Via Privata 1",
+            "city": "Roma",
+            "postcode": "00100",
+            "province": "RM",
+            "email": "secret@test.it",
+            "phone": "+390000000000",
+        }
+    )
 
 
 def test_failure_report_has_begin_and_end_markers() -> None:
@@ -430,9 +463,13 @@ def test_failure_report_contains_required_fields() -> None:
         operation="arm",
         installation=_installation(panel="SDVFAST"),
         command=ArmCommand.ARM_TOTAL,
-        active_services=frozenset({
-            ServiceRequest.ARM, ServiceRequest.DARM, ServiceRequest.ARMDAY,
-        }),
+        active_services=frozenset(
+            {
+                ServiceRequest.ARM,
+                ServiceRequest.DARM,
+                ServiceRequest.ARMDAY,
+            }
+        ),
         current_proto="D",
         alarm_partitions=(),
         error=OperationFailedError("timeout", error_code="AM.42", error_type="BLOCKING"),
@@ -476,8 +513,13 @@ def test_failure_report_redacts_pii() -> None:
     # never emitted by the formatter anyway; the other leaks below
     # catch the real PII values.
     for leak in (
-        "Secret", "Person", "Via Privata 1",
-        "Roma", "00100", "secret@test.it", "+390000000000",
+        "Secret",
+        "Person",
+        "Via Privata 1",
+        "Roma",
+        "00100",
+        "secret@test.it",
+        "+390000000000",
     ):
         assert leak not in report, f"PII leak: {leak!r}"
 
@@ -517,9 +559,13 @@ def test_failure_report_active_services_are_sorted() -> None:
         operation="arm",
         installation=_installation(),
         command=ArmCommand.ARM_TOTAL,
-        active_services=frozenset({
-            ServiceRequest.PERI, ServiceRequest.ARM, ServiceRequest.DARM,
-        }),
+        active_services=frozenset(
+            {
+                ServiceRequest.PERI,
+                ServiceRequest.ARM,
+                ServiceRequest.DARM,
+            }
+        ),
         current_proto="D",
         alarm_partitions=(),
         error=OperationFailedError("x", error_code=None, error_type=None),
@@ -531,11 +577,13 @@ def test_failure_report_active_services_are_sorted() -> None:
 def _make_partitions(*specs: tuple[str, list[str], list[str]]) -> tuple[AlarmPartition, ...]:
     """Build a tuple of AlarmPartition from (id, enter_states, leave_states) triples."""
     return tuple(
-        AlarmPartition.model_validate({
-            "id": pid,
-            "enterStates": enters,
-            "leaveStates": leaves,
-        })
+        AlarmPartition.model_validate(
+            {
+                "id": pid,
+                "enterStates": enters,
+                "leaveStates": leaves,
+            }
+        )
         for pid, enters, leaves in specs
     )
 
