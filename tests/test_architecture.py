@@ -84,7 +84,7 @@ class TestNoAnyInAnnotations:
                 isinstance(node, ast.AnnAssign)
                 and node.annotation
                 and self._annotation_contains_any(node.annotation)
-            ):  # noqa: E501
+            ):
                 violations.append(f"{filepath}:{node.lineno}: variable annotation contains `Any`")
 
         return violations
@@ -150,7 +150,7 @@ class TestNoBareDict:
                 isinstance(node, ast.AnnAssign)
                 and node.annotation
                 and self._is_bare_dict(node.annotation)
-            ):  # noqa: E501
+            ):
                 violations.append(f"{filepath}:{node.lineno}: variable annotation is bare `dict`")
 
         return violations
@@ -201,7 +201,7 @@ class TestNoObjectAnnotation:
                 isinstance(node, ast.AnnAssign)
                 and node.annotation
                 and self._is_object(node.annotation)
-            ):  # noqa: E501
+            ):
                 violations.append(f"{filepath}:{node.lineno}: variable annotation is `object`")
 
         return violations
