@@ -2,7 +2,7 @@
 name = "verisure-italy"
 version = "0.9.6"
 description = "Async Python client for the Verisure Italy alarm API"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 license = "MIT"
 authors = [
     {name = "Marcello Barnaba", email = "vjt@openssl.it"},
@@ -12,7 +12,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Home Automation",
     "Typing :: Typed",
@@ -63,7 +62,7 @@ include = ["verisure_italy/", "custom_components/verisure_italy/"]
 reportMissingTypeStubs = false
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py313"
 line-length = 99
 
 [tool.ruff.lint]
