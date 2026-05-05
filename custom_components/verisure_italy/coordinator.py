@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -225,7 +225,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         await super().async_shutdown()
 
     @asynccontextmanager
-    async def suppress_updates(self) -> AsyncIterator[None]:
+    async def suppress_updates(self) -> AsyncGenerator[None]:
         """Suppress background polls while a mutation is in flight.
 
         Use with `async with` around arm/disarm calls — composable with
