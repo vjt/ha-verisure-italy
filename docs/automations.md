@@ -78,16 +78,19 @@ failed arm is **silent** — HA logs a WARNING and moves on.
   - action: alarm_control_panel.alarm_arm_away
     target:
       entity_id: alarm_control_panel.verisure_alarm
-  - wait_for_trigger:
-    - trigger: state
-      entity_id: alarm_control_panel.verisure_alarm
-      to: armed_away
+  # wait_template (not wait_for_trigger): the alarm_arm_away service
+  # call blocks until the integration writes armed_away, so by the
+  # time we get here the state has already transitioned. wait_for_trigger
+  # only fires on transitions and would always time out, firing the
+  # CRITICAL branch on every successful arm. wait_template returns
+  # immediately when the condition is already true.
+  - wait_template: "{{ is_state('alarm_control_panel.verisure_alarm', 'armed_away') }}"
     timeout: "00:01:00"
     continue_on_timeout: true
   - choose:
     - conditions:
       - condition: template
-        value_template: "{{ not wait.trigger }}"
+        value_template: "{{ not wait.completed }}"
       sequence:
       - action: notify.mobile_app_you
         data:
@@ -146,16 +149,19 @@ the case where the service call is issued but doesn't land.
   - action: alarm_control_panel.alarm_arm_away
     target:
       entity_id: alarm_control_panel.verisure_alarm
-  - wait_for_trigger:
-    - trigger: state
-      entity_id: alarm_control_panel.verisure_alarm
-      to: armed_away
+  # wait_template (not wait_for_trigger): the alarm_arm_away service
+  # call blocks until the integration writes armed_away, so by the
+  # time we get here the state has already transitioned. wait_for_trigger
+  # only fires on transitions and would always time out, firing the
+  # CRITICAL branch on every successful arm. wait_template returns
+  # immediately when the condition is already true.
+  - wait_template: "{{ is_state('alarm_control_panel.verisure_alarm', 'armed_away') }}"
     timeout: "00:01:00"
     continue_on_timeout: true
   - choose:
     - conditions:
       - condition: template
-        value_template: "{{ not wait.trigger }}"
+        value_template: "{{ not wait.completed }}"
       sequence:
       - action: notify.mobile_app_you
         data:
