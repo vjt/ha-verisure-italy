@@ -41,8 +41,10 @@ final report.
 
 ### 3. Flush checkpoint
 
-Find the active checkpoint (`status: active` in `docs/checkpoints/`).
-Add a new session section `## Sn: Descriptive Title (YYYY-MM-DD)`.
+Find the active checkpoint (`status: active` in `.claude/checkpoints/`).
+Checkpoints are local session notes: `.claude/checkpoints/` is
+gitignored and must never be committed — the repo is public, and
+session notes carry install-specific data. Add a new session section `## Sn: Descriptive Title (YYYY-MM-DD)`.
 
 Content for each session section:
 - What was built/fixed, grouped by topic (not chronologically)
@@ -51,7 +53,7 @@ Content for each session section:
 - Stats line: test count, pyright errors, commit range
 
 Use existing checkpoint sections as format reference. Be concise
-but complete — the checkpoint is the permanent record.
+but complete — the checkpoint is the local session record.
 
 ### 4. Update todo.md
 
@@ -79,9 +81,9 @@ Rotate if ANY of:
 1. Change `status: active` to `status: done` in frontmatter.
 2. Determine next CP number (increment from current).
 3. Create new checkpoint file
-   `docs/checkpoints/YYYY-MM-DD-cpNN.md` with `status: active`,
+   `.claude/checkpoints/YYYY-MM-DD-cpNN.md` with `status: active`,
    `# CPNN`, and a `Previous:` line summarizing the closed checkpoint.
-4. Commit: `docs: close CPxx, create CPyy`.
+4. Nothing to commit — checkpoints stay local.
 
 ### 6. Update living docs (if needed)
 
@@ -107,7 +109,7 @@ reasons.
 `docs/patterns.md`, `CLAUDE.md`) for references to renamed/removed
 types, methods, proto codes, or changed patterns from this session.
 Fix stale references. Don't touch `docs/reviews/` or
-`docs/checkpoints/` — historical records.
+`.claude/checkpoints/` — historical records.
 
 ### 7. Auto-memory update (user-scoped only)
 
@@ -123,7 +125,7 @@ Skip if nothing new was learned.
 
 Commit all doc changes:
 ```
-docs: close session — checkpoint + CHANGELOG + [whatever else]
+docs: close session — CHANGELOG + [whatever else]
 ```
 
 Push to origin.

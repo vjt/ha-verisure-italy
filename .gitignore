@@ -1,6 +1,8 @@
 __pycache__/
 .claude/*
 !.claude/skills
+# Session checkpoints: local only, never in the public repo.
+.claude/checkpoints/
 *.py[cod]
 *.egg-info/
 dist/

@@ -24,7 +24,8 @@ enforced, not advisory.
 
 ### 2. Find active checkpoint
 
-Find the checkpoint with `status: active` in `docs/checkpoints/`.
+Find the checkpoint with `status: active` in `.claude/checkpoints/`
+(local, gitignored — never in the repo).
 Report:
 - CP number and how many sessions it has (count `## S` headers)
 - Line count — warn if approaching 200 (time to rotate)
