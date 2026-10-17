@@ -143,13 +143,29 @@ _RETRY_JITTER: float = 0.2
 _DEBUG_RESPONSE_MAX_BYTES = 4096
 
 # Keys scrubbed from GraphQL variables before logging. These are
-# credentials or opaque device identifiers — never written to logs.
+# credentials, opaque device identifiers or the installation number
+# (PII) — never written to logs.
 _SENSITIVE_VAR_KEYS: frozenset[str] = frozenset(
     {
         "password",
         "idDevice",
         "idDeviceIndigitall",
         "uuid",
+        "numinst",
+        "otpHash",
+    }
+)
+
+# Keys scrubbed, at any depth, from GraphQL response bodies before
+# logging: the login JWT and refresh token (xSLoginToken /
+# xSValidateDevice), the capabilities JWT (xSSrv) and the
+# installation number (PII).
+_SENSITIVE_RESPONSE_KEYS: frozenset[str] = frozenset(
+    {
+        "hash",
+        "refreshToken",
+        "capabilities",
+        "numinst",
     }
 )
 
@@ -157,6 +173,7 @@ _SENSITIVE_VAR_KEYS: frozenset[str] = frozenset(
 PollFn = Callable[[Installation, str, int], Awaitable[OperationResult]]
 GraphQLVars = dict[str, str | int | bool | list[int]]
 GraphQLContent = dict[str, str | GraphQLVars]
+type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
 
 
 def _sanitize_vars(variables: GraphQLVars | None) -> dict[str, str | int | bool | list[int]]:
@@ -164,6 +181,32 @@ def _sanitize_vars(variables: GraphQLVars | None) -> dict[str, str | int | bool 
     if variables is None:
         return {}
     return {k: ("<redacted>" if k in _SENSITIVE_VAR_KEYS else v) for k, v in variables.items()}
+
+
+def _redact_json(value: JsonValue) -> JsonValue:
+    """Return a copy of a decoded JSON value with sensitive keys redacted."""
+    if isinstance(value, dict):
+        return {
+            k: ("<redacted>" if k in _SENSITIVE_RESPONSE_KEYS else _redact_json(v))
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_json(v) for v in value]
+    return value
+
+
+def _sanitize_response(response_text: str) -> str:
+    """Return a response body safe to write to debug logs.
+
+    JSON bodies are re-serialized with sensitive keys redacted. A body
+    that is not JSON (Incapsula WAF HTML, empty 5xx) carries no GraphQL
+    payload and is returned unchanged.
+    """
+    try:
+        decoded: JsonValue = json.loads(response_text)
+    except ValueError:
+        return response_text
+    return json.dumps(_redact_json(decoded), ensure_ascii=False)
 
 
 def generate_uuid() -> str:
@@ -370,8 +413,9 @@ class VerisureClient:
             raise APIConnectionError(f"Connection error with {API_URL}: {err}") from err
 
         if _LOGGER.isEnabledFor(logging.DEBUG):
-            snippet = response_text[:_DEBUG_RESPONSE_MAX_BYTES]
-            truncated = " (truncated)" if len(response_text) > _DEBUG_RESPONSE_MAX_BYTES else ""
+            safe_text = _sanitize_response(response_text)
+            snippet = safe_text[:_DEBUG_RESPONSE_MAX_BYTES]
+            truncated = " (truncated)" if len(safe_text) > _DEBUG_RESPONSE_MAX_BYTES else ""
             _LOGGER.debug(
                 "[%s] http=%d response%s: %s",
                 operation,

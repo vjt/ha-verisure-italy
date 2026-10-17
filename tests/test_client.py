@@ -828,6 +828,64 @@ class TestGetServices:
 
 
 # ---------------------------------------------------------------------------
+# Debug log redaction
+# ---------------------------------------------------------------------------
+
+
+class TestDebugLogRedaction:
+    """DEBUG logs carry request vars and response bodies — never secrets."""
+
+    async def test_login_hides_password_and_tokens(self, mock_api, client, caplog):
+        token = _make_jwt()
+        mock_api.post(API_URL, body=_login_ok(token))
+
+        with caplog.at_level(logging.DEBUG, logger="verisure_italy.client"):
+            await client.login()
+
+        assert client._auth_token == token
+        assert token not in caplog.text
+        assert "refresh-abc" not in caplog.text
+        assert "password123" not in caplog.text
+        assert "Login successful" in caplog.text
+
+    async def test_services_hides_capabilities_and_numinst(self, mock_api, client, caplog):
+        _authenticate(client)
+        cap_token = _make_jwt(120)
+        mock_api.post(API_URL, body=_services_response(cap_token))
+
+        with caplog.at_level(logging.DEBUG, logger="verisure_italy.client"):
+            await client.get_services(INSTALLATION)
+
+        assert client._capabilities[INSTALLATION.number] == cap_token
+        assert cap_token not in caplog.text
+        assert INSTALLATION.number not in caplog.text
+        assert "TIMELINE" in caplog.text
+
+    async def test_status_keeps_state_fields_hides_numinst(self, mock_api, client, caplog):
+        _authenticate(client)
+        mock_api.post(API_URL, body=_general_status("D"))
+
+        with caplog.at_level(logging.DEBUG, logger="verisure_italy.client"):
+            await client.get_general_status(INSTALLATION)
+
+        assert INSTALLATION.number not in caplog.text
+        assert '"status": "D"' in caplog.text
+        assert '"timestampUpdate": "2026-04-02T10:30:00"' in caplog.text
+
+    async def test_non_json_body_logged_unchanged(self, mock_api, client, caplog):
+        _authenticate(client)
+        mock_api.post(API_URL, status=403, body="<html>_Incapsula_Resource</html>")
+
+        with (
+            caplog.at_level(logging.DEBUG, logger="verisure_italy.client"),
+            pytest.raises(WAFBlockedError),
+        ):
+            await client.get_general_status(INSTALLATION)
+
+        assert "<html>_Incapsula_Resource</html>" in caplog.text
+
+
+# ---------------------------------------------------------------------------
 # Alarm status tests
 # ---------------------------------------------------------------------------
 
