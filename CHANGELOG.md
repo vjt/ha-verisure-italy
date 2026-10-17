@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.11.0 — 2026-10-17 (disarm confirmation)
+
+Fixes phantom disarms: `xSStatus` briefly reporting "D" (~4 s) while
+the panel stays armed, which HA published as `disarmed` and which
+fired notifications, camera standby and the away safety net. Raw
+captures and analysis in `docs/findings/phantom-disarm.md`.
+
+### Changes
+
+- **Externally-sourced "D" is confirmed before publishing.** When the
+  client last tracked an armed state, a polled "D" is held (last
+  confirmed state stays published, `currentStatus` untouched) and
+  re-polled after the confirmation delay. Published only if "D"
+  returns with the same `timestampUpdate`; any other state discards
+  it (WARNING in the log), a new `timestampUpdate` restarts the wait.
+  A "D" after our own disarm command, or on first refresh, is
+  published immediately. Passive `xSStatus` only — no panel pings,
+  nothing in the Verisure timeline.
+- **New option `disarm_confirm_delay`** (seconds, 1–60, default 5 =
+  one poll). Applied live from the options flow.
+- `VerisureClient.observed_proto()` — public read of the last
+  observed/commanded proto code.
+
+### Tradeoff
+
+A real disarm from the app or keypad reaches HA one confirmation
+delay later (default ~5 s).
+
+### Tests
+
+- `TestDisarmConfirmation` (`tests/test_coordinator.py`) — phantom
+  replayed from the 21:07 capture, real disarm from the 21:40
+  capture, early re-poll, timestamp change, own disarm, first
+  refresh, recheck scheduling.
+
 ## 0.10.0 — 2026-10-17 (debug log redaction)
 
 Security release. Prerequisite for enabling `verisure_italy.client`
