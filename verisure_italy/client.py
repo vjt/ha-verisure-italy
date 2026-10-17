@@ -179,7 +179,7 @@ _SENSITIVE_RESPONSE_KEYS: frozenset[str] = frozenset(
 PollFn = Callable[[Installation, str, int], Awaitable[OperationResult]]
 GraphQLVars = dict[str, str | int | bool | list[int]]
 GraphQLContent = dict[str, str | GraphQLVars]
-type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+type JsonValue = str | int | float | bool | list[JsonValue] | dict[str, JsonValue] | None
 
 
 def _sanitize_vars(variables: GraphQLVars | None) -> dict[str, str | int | bool | list[int]]:

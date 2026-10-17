@@ -43,7 +43,7 @@ PROBE_SCHEMA_VERSION = 1
 
 # Probe values are JSON-shaped: primitives, lists, and nested dicts.
 # Recursive type alias — declared via PEP 695 `type` syntax (Python 3.12+).
-type ProbeValue = str | int | float | bool | None | list["ProbeValue"] | dict[str, "ProbeValue"]
+type ProbeValue = str | int | float | bool | list["ProbeValue"] | dict[str, "ProbeValue"] | None
 type ProbeDict = dict[str, ProbeValue]
 
 # Field names whose presence anywhere in the probe output is a
