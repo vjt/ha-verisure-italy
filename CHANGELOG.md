@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.12.0 — 2026-10-17 (debug log redaction, installation identity)
+
+Security release. Completes the 0.10.0 debug-log redaction.
+
+### Fixes
+
+- **`xSSrv` installation identity redacted from DEBUG logs.** `alias`
+  (the installation street address), `sim` (SIM number) and `instIbs`
+  were written in clear on every services fetch. They are now
+  replaced with `<redacted>` at any depth, like the tokens and
+  `numinst`. `alias` also hides zone names in logged arm-exception
+  bodies; the raised error still names the zones.
+
+### Tests
+
+- `TestDebugLogRedaction` — xSSrv installation identity, and
+  redaction at arbitrary nesting depth.
+
 ## 0.11.0 — 2026-10-17 (disarm confirmation)
 
 Fixes phantom disarms: `xSStatus` briefly reporting "D" (~4 s) while
