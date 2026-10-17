@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.0 — 2026-10-17 (debug log redaction)
+
+Security release. Prerequisite for enabling `verisure_italy.client`
+DEBUG logging on a live install, to capture the raw `xSStatus`
+payloads behind phantom "D" (disarmed) reads.
+
+### Fixes
+
+- **Response bodies logged at DEBUG are now redacted.** `_execute_raw`
+  wrote raw responses to the log, including the login JWT (`hash`)
+  and `refreshToken` from `xSLoginToken` / `xSValidateDevice`, the
+  capabilities JWT from `xSSrv`, and `numinst`. These keys are now
+  replaced with `<redacted>` at any depth. Non-JSON bodies (WAF HTML)
+  are logged unchanged.
+- **`numinst` and `otpHash` redacted from logged request vars**,
+  alongside `password`, `idDevice`, `idDeviceIndigitall`, `uuid`.
+
+### Tests
+
+- `TestDebugLogRedaction` (`tests/test_client.py`) — login, services,
+  status and WAF bodies at DEBUG level.
+
 ## 0.9.6 — 2026-05-04 (Issue #7 — optional `configRepoUser`)
 
 Bug-fix release for Issue #7 (`alan210874`, SDVFAST). The v0.9.4
