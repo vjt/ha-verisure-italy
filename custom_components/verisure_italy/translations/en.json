@@ -70,7 +70,8 @@
         "data": {
           "poll_interval": "Status poll interval (seconds)",
           "poll_timeout": "Operation timeout (seconds)",
-          "poll_delay": "Operation poll delay (seconds)"
+          "poll_delay": "Operation poll delay (seconds)",
+          "disarm_confirm_delay": "Disarm confirmation delay (seconds)"
         }
       }
     }

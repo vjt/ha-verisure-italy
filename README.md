@@ -32,7 +32,7 @@ replaces the Verisure mobile app for alarm control and camera monitoring.
 - **Cameras** — auto-discovered, parallel on-demand capture with per-camera and capture-all buttons
 - **Auto-managed dashboard** — Lovelace dashboard auto-populated with alarm panel, camera grid, and capture buttons
 - **Passive polling** via xSStatus — no panel ping, no timeline spam
-- **Configurable** — poll interval, operation timeout, and poll delay tunable from the UI
+- **Configurable** — poll interval, operation timeout, poll delay and disarm confirmation delay tunable from the UI
 - **Config flow** with 2FA/OTP support
 
 ## Installation (HACS)

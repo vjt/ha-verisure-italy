@@ -25,6 +25,7 @@ from verisure_italy import (
 
 from .const import (
     CONF_DEVICE_ID,
+    CONF_DISARM_CONFIRM_DELAY,
     CONF_INSTALLATION,
     CONF_INSTALLATION_ALIAS,
     CONF_INSTALLATION_NUMBER,
@@ -33,6 +34,7 @@ from .const import (
     CONF_POLL_INTERVAL,
     CONF_POLL_TIMEOUT,
     CONF_UUID,
+    DEFAULT_DISARM_CONFIRM_DELAY,
     DEFAULT_POLL_DELAY,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
@@ -570,6 +572,10 @@ class VerisureItOptionsFlow(OptionsFlow):
                         CONF_POLL_DELAY,
                         default=opts.get(CONF_POLL_DELAY, DEFAULT_POLL_DELAY),
                     ): vol.All(int, vol.Range(min=1, max=10)),
+                    vol.Required(
+                        CONF_DISARM_CONFIRM_DELAY,
+                        default=opts.get(CONF_DISARM_CONFIRM_DELAY, DEFAULT_DISARM_CONFIRM_DELAY),
+                    ): vol.All(int, vol.Range(min=1, max=60)),
                 }
             ),
         )

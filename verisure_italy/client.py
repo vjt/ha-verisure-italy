@@ -80,6 +80,7 @@ from .models import (
     OperationResult,
     OtpPhone,
     PerimeterMode,
+    ProtoCode,
     RawDevice,
     Service,
     ServiceRequest,
@@ -292,6 +293,15 @@ class VerisureClient:
                 source,
             )
         self._last_proto = proto_code
+
+    def observed_proto(self) -> ProtoCode | None:
+        """Return the last proto code observed or commanded, None before the first.
+
+        Raises UnexpectedStateError if the tracked code is not a ProtoCode.
+        """
+        if not self._last_proto:
+            return None
+        return parse_proto_code(self._last_proto)
 
     def _current_alarm_state(self) -> AlarmState:
         """Return the client's tracked current state as an AlarmState.

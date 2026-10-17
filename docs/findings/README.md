@@ -38,6 +38,9 @@ The Verisure API is undocumented. Everything here was discovered by:
 - [`unavailable-flapping.md`](unavailable-flapping.md) — why the
   alarm entity flaps to `unavailable` and the 6h sticky outage root
   cause (over-broad `AuthenticationError` classification)
+- [`phantom-disarm.md`](phantom-disarm.md) — `xSStatus` briefly
+  reports "D" while the panel stays armed; raw captures vs a real
+  disarm, and the timestampUpdate-based confirmation (v0.11.0)
 
 Automation: [`scripts/dissect-web-bundle.sh`](../../scripts/dissect-web-bundle.sh)
 auto-detects the latest web bundle, downloads it, and regenerates the

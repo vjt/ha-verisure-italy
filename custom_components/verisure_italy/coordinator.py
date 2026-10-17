@@ -11,13 +11,14 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Callable
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -50,11 +51,13 @@ from verisure_italy.models import PROTO_TO_STATE, AlarmPartition, ZoneException
 
 from .const import (
     CONF_DEVICE_ID,
+    CONF_DISARM_CONFIRM_DELAY,
     CONF_INSTALLATION,
     CONF_POLL_DELAY,
     CONF_POLL_INTERVAL,
     CONF_POLL_TIMEOUT,
     CONF_UUID,
+    DEFAULT_DISARM_CONFIRM_DELAY,
     DEFAULT_POLL_DELAY,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
@@ -107,6 +110,21 @@ class VerisureStatusData(BaseModel):
     exceptions: list[ZoneException]
 
 
+class PendingDisarm(BaseModel):
+    """An externally-sourced "D" reading held back until confirmed.
+
+    xSStatus occasionally reports "D" for a few seconds while the panel
+    stays armed (phantom disarm, docs/findings/phantom-disarm.md). A
+    single response is indistinguishable from a real disarm; only
+    persistence of the same `timestampUpdate` tells them apart.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    timestamp_update: str
+    first_seen: float  # event-loop clock, seconds
+
+
 class ForceArmContext(BaseModel):
     """Typed context for a pending force-arm operation."""
 
@@ -144,6 +162,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         poll_interval = opts.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
         poll_timeout = opts.get(CONF_POLL_TIMEOUT, DEFAULT_POLL_TIMEOUT)
         poll_delay = opts.get(CONF_POLL_DELAY, DEFAULT_POLL_DELAY)
+        disarm_confirm_delay = opts.get(CONF_DISARM_CONFIRM_DELAY, DEFAULT_DISARM_CONFIRM_DELAY)
 
         super().__init__(
             hass,
@@ -210,6 +229,15 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
         # entity's `_arm_lock` so the whole arm call is race-free end-to-end.
         self._updates_suppressed: bool = False
 
+        # Disarm confirmation. A "D" polled while the client last saw an
+        # armed state is held in `_pending_disarm` and published only if
+        # a poll at least `disarm_confirm_delay` seconds later returns
+        # "D" with the same timestampUpdate. Anything else discards it.
+        self.disarm_confirm_delay: float = float(disarm_confirm_delay)
+        self._pending_disarm: PendingDisarm | None = None
+        self._disarm_recheck_unsub: Callable[[], None] | None = None
+        self._clock: Callable[[], float] = hass.loop.time
+
         # Set by VerisureAlarmPanel.__init__ — used by force-arm buttons
         self.alarm_entity: ForceArmable | None = None
 
@@ -218,6 +246,7 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
 
     async def async_shutdown(self) -> None:
         """Clean up entity references. Session managed by HA."""
+        self._cancel_disarm_recheck()
         self.camera_entities.clear()
         self.alarm_entity = None
         await super().async_shutdown()
@@ -405,6 +434,13 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
                 self.camera_devices = []
 
         proto = parse_proto_code(status.status)
+        if not self._may_publish(proto, status.timestamp_update):
+            # Unconfirmed "D": keep serving the last confirmed snapshot.
+            # The client's last proto is left untouched too, so an arm
+            # or disarm in the meantime sends the real current state.
+            # A held "D" implies a prior armed observation, hence data.
+            assert self.data is not None
+            return self.data
         alarm_state = PROTO_TO_STATE[proto]
 
         # Keep the client's currentStatus in sync with passive polls,
@@ -417,6 +453,80 @@ class VerisureCoordinator(DataUpdateCoordinator[VerisureStatusData]):
             timestamp=status.timestamp_update,
             exceptions=status.exceptions or [],
         )
+
+    def _may_publish(self, proto: ProtoCode, timestamp_update: str) -> bool:
+        """Decide whether a polled proto code may be published now.
+
+        Returns False while an externally-sourced "D" awaits
+        confirmation. A "D" needs none when the client already tracks
+        "D" (our own disarm command, or already disarmed) or has no
+        observation yet (first refresh).
+        """
+        pending = self._pending_disarm
+        if proto != ProtoCode.DISARMED:
+            if pending is not None:
+                _LOGGER.warning(
+                    "Unconfirmed disarm discarded: panel reports %s "
+                    "(timestampUpdate=%s) %.1fs after D (timestampUpdate=%s)",
+                    proto.value,
+                    timestamp_update,
+                    self._clock() - pending.first_seen,
+                    pending.timestamp_update,
+                )
+                self._clear_pending_disarm()
+            return True
+
+        prior = self.client.observed_proto()
+        if prior is None or prior == ProtoCode.DISARMED:
+            self._clear_pending_disarm()
+            return True
+
+        now = self._clock()
+        if pending is None or pending.timestamp_update != timestamp_update:
+            _LOGGER.info(
+                "Unconfirmed disarm: D (timestampUpdate=%s) while last state %s "
+                "— holding, recheck in %.0fs",
+                timestamp_update,
+                prior.value,
+                self.disarm_confirm_delay,
+            )
+            self._pending_disarm = PendingDisarm(timestamp_update=timestamp_update, first_seen=now)
+            self._schedule_disarm_recheck()
+            return False
+
+        elapsed = now - pending.first_seen
+        if elapsed < self.disarm_confirm_delay:
+            return False
+
+        _LOGGER.info(
+            "Disarm confirmed: D with same timestampUpdate=%s after %.1fs",
+            timestamp_update,
+            elapsed,
+        )
+        self._clear_pending_disarm()
+        return True
+
+    def _schedule_disarm_recheck(self) -> None:
+        """Poll again once the confirmation delay has elapsed."""
+        self._cancel_disarm_recheck()
+
+        @callback
+        def _on_recheck(_now: datetime) -> None:
+            self._disarm_recheck_unsub = None
+            self.hass.async_create_task(self.async_refresh(), "verisure_italy_disarm_recheck")
+
+        self._disarm_recheck_unsub = async_call_later(
+            self.hass, self.disarm_confirm_delay, _on_recheck
+        )
+
+    def _cancel_disarm_recheck(self) -> None:
+        if self._disarm_recheck_unsub is not None:
+            self._disarm_recheck_unsub()
+            self._disarm_recheck_unsub = None
+
+    def _clear_pending_disarm(self) -> None:
+        self._pending_disarm = None
+        self._cancel_disarm_recheck()
 
     async def async_capture_all_cameras(self) -> None:
         """Capture all cameras concurrently, staggered 0.5s apart.

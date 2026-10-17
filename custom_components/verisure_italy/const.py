@@ -14,7 +14,12 @@ CONF_UUID = "uuid"
 CONF_POLL_INTERVAL = "poll_interval"
 CONF_POLL_TIMEOUT = "poll_timeout"
 CONF_POLL_DELAY = "poll_delay"
+CONF_DISARM_CONFIRM_DELAY = "disarm_confirm_delay"
 
 DEFAULT_POLL_INTERVAL = 5
 DEFAULT_POLL_TIMEOUT = 60
 DEFAULT_POLL_DELAY = 2
+# Seconds an externally-sourced "D" must persist, with the same
+# timestampUpdate, before it is published as disarmed. One poll by
+# default. See docs/findings/phantom-disarm.md.
+DEFAULT_DISARM_CONFIRM_DELAY = 5

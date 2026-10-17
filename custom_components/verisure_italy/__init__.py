@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 
 from .const import (
+    CONF_DISARM_CONFIRM_DELAY,
     CONF_INSTALLATION,
     CONF_INSTALLATION_ALIAS,
     CONF_INSTALLATION_NUMBER,
@@ -17,6 +18,7 @@ from .const import (
     CONF_POLL_DELAY,
     CONF_POLL_INTERVAL,
     CONF_POLL_TIMEOUT,
+    DEFAULT_DISARM_CONFIRM_DELAY,
     DEFAULT_POLL_DELAY,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
@@ -93,11 +95,15 @@ async def _async_options_updated(hass: HomeAssistant, entry: VerisureConfigEntry
         timeout=float(opts.get(CONF_POLL_TIMEOUT, DEFAULT_POLL_TIMEOUT)),
         delay=float(opts.get(CONF_POLL_DELAY, DEFAULT_POLL_DELAY)),
     )
+    coordinator.disarm_confirm_delay = float(
+        opts.get(CONF_DISARM_CONFIRM_DELAY, DEFAULT_DISARM_CONFIRM_DELAY)
+    )
     _LOGGER.info(
-        "Options updated: interval=%ss, timeout=%ss, delay=%ss",
+        "Options updated: interval=%ss, timeout=%ss, delay=%ss, disarm confirm=%ss",
         opts.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
         opts.get(CONF_POLL_TIMEOUT, DEFAULT_POLL_TIMEOUT),
         opts.get(CONF_POLL_DELAY, DEFAULT_POLL_DELAY),
+        opts.get(CONF_DISARM_CONFIRM_DELAY, DEFAULT_DISARM_CONFIRM_DELAY),
     )
 
 

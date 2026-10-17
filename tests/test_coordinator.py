@@ -16,9 +16,11 @@ from custom_components.verisure_italy.coordinator import (
     VerisureCoordinator,
     VerisureStatusData,
 )
+from verisure_italy.client import VerisureClient
 from verisure_italy.models import (
     PROTO_TO_STATE,
     AlarmState,
+    GeneralStatus,
     Installation,
     InteriorMode,
     PerimeterMode,
@@ -49,6 +51,9 @@ def _bare_coordinator() -> VerisureCoordinator:
     coord.data = _make_data()  # type: ignore[attr-defined]
     coord.client = MagicMock()
     coord.client.get_general_status = AsyncMock()
+    coord.client.observed_proto = MagicMock(return_value=None)
+    coord._pending_disarm = None
+    coord._disarm_recheck_unsub = None
     coord._cameras_discovered = True  # skip camera discovery branch
     coord._services_discovered = True  # skip xSSrv discovery branch
     coord.active_services = frozenset()  # type: ignore[attr-defined]
@@ -112,3 +117,164 @@ class TestPollShortCircuit:
 
         coord.client.get_general_status.assert_awaited_once()
         assert result.alarm_state == PROTO_TO_STATE[ProtoCode.DISARMED]
+
+
+# ---------------------------------------------------------------------------
+# Disarm confirmation (phantom "D", docs/findings/phantom-disarm.md)
+# ---------------------------------------------------------------------------
+
+
+class _FakeClock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _status(code: str, timestamp_update: str) -> GeneralStatus:
+    return GeneralStatus.model_validate(
+        {"status": code, "timestampUpdate": timestamp_update, "exceptions": None}
+    )
+
+
+def _snapshot(code: ProtoCode) -> VerisureStatusData:
+    return VerisureStatusData(
+        alarm_state=PROTO_TO_STATE[code],
+        proto_code=code,
+        timestamp="1792252634012",
+        exceptions=[],
+    )
+
+
+@pytest.fixture
+def scheduled(monkeypatch: pytest.MonkeyPatch) -> list[MagicMock]:
+    """Record async_call_later calls; each returns a MagicMock unsub."""
+    calls: list[MagicMock] = []
+
+    def _fake_call_later(_hass: object, _delay: float, action: object) -> MagicMock:
+        unsub = MagicMock()
+        unsub.action = action
+        unsub.delay = _delay
+        calls.append(unsub)
+        return unsub
+
+    monkeypatch.setattr(
+        "custom_components.verisure_italy.coordinator.async_call_later", _fake_call_later
+    )
+    return calls
+
+
+def _confirming_coordinator(prior: ProtoCode | None) -> tuple[VerisureCoordinator, _FakeClock]:
+    """Coordinator with a real client whose last observation is `prior`."""
+    coord = _bare_coordinator()
+    coord.client = VerisureClient(
+        username="test@test.it",
+        password="password123",
+        http_session=MagicMock(),
+        device_id="test-device-id",
+        uuid="test-uuid-1234",
+        id_device_indigitall="",
+        poll_delay=0.0,
+        poll_timeout=2.0,
+    )
+    if prior is None:
+        coord.data = None
+    else:
+        coord.client.set_last_proto(prior.value)
+        coord.data = _snapshot(prior)
+    coord.hass = MagicMock()
+    clock = _FakeClock()
+    coord._clock = clock
+    coord.disarm_confirm_delay = 5.0
+    coord._pending_disarm = None
+    coord._disarm_recheck_unsub = None
+    return coord, clock
+
+
+async def _poll(
+    coord: VerisureCoordinator, code: str, timestamp_update: str
+) -> VerisureStatusData:
+    coord.client.get_general_status = AsyncMock(return_value=_status(code, timestamp_update))
+    return await coord._async_update_data()
+
+
+class TestDisarmConfirmation:
+    async def test_phantom_d_never_published(self, scheduled):
+        """21:07 incident: D for 4.3s, then A with a newer timestampUpdate."""
+        coord, clock = _confirming_coordinator(ProtoCode.TOTAL_PERIMETER)
+        armed = coord.data
+
+        held = await _poll(coord, "D", "1792264029172")
+        assert held is armed
+        assert coord.client.observed_proto() == ProtoCode.TOTAL_PERIMETER
+
+        clock.now += 4.3
+        result = await _poll(coord, "A", "1792264033514")
+        assert result.alarm_state == PROTO_TO_STATE[ProtoCode.TOTAL_PERIMETER]
+        assert coord._pending_disarm is None
+        scheduled[0].assert_called_once()  # recheck cancelled
+
+    async def test_real_disarm_published_after_delay(self, scheduled):
+        """21:40 capture: D repeated with the same timestampUpdate."""
+        coord, clock = _confirming_coordinator(ProtoCode.TOTAL_PERIMETER)
+
+        assert await _poll(coord, "D", "1792266009978") is coord.data
+        assert len(scheduled) == 1
+        assert scheduled[0].delay == 5.0
+
+        clock.now += 5.0
+        result = await _poll(coord, "D", "1792266009978")
+        assert result.alarm_state == PROTO_TO_STATE[ProtoCode.DISARMED]
+        assert coord.client.observed_proto() == ProtoCode.DISARMED
+        assert coord._pending_disarm is None
+
+    async def test_same_d_before_delay_still_held(self, scheduled):
+        coord, clock = _confirming_coordinator(ProtoCode.TOTAL_PERIMETER)
+        armed = coord.data
+
+        await _poll(coord, "D", "1792266009978")
+        clock.now += 3.0
+        assert await _poll(coord, "D", "1792266009978") is armed
+
+    async def test_new_timestamp_restarts_confirmation(self, scheduled):
+        coord, clock = _confirming_coordinator(ProtoCode.TOTAL_PERIMETER)
+        armed = coord.data
+
+        await _poll(coord, "D", "1792266009978")
+        clock.now += 3.0
+        assert await _poll(coord, "D", "1792266012978") is armed
+        clock.now += 3.0  # 6s after the first D, 3s after the new one
+        assert await _poll(coord, "D", "1792266012978") is armed
+        clock.now += 2.0
+        result = await _poll(coord, "D", "1792266012978")
+        assert result.alarm_state == PROTO_TO_STATE[ProtoCode.DISARMED]
+
+    async def test_own_disarm_published_immediately(self, scheduled):
+        """After our disarm command the client already tracks D."""
+        coord, _clock = _confirming_coordinator(ProtoCode.TOTAL_PERIMETER)
+        coord.client.set_last_proto(ProtoCode.DISARMED.value)
+
+        result = await _poll(coord, "D", "1792266009978")
+
+        assert result.alarm_state == PROTO_TO_STATE[ProtoCode.DISARMED]
+        assert scheduled == []
+
+    async def test_first_refresh_d_published_immediately(self, scheduled):
+        coord, _clock = _confirming_coordinator(None)
+
+        result = await _poll(coord, "D", "1792266009978")
+
+        assert result.alarm_state == PROTO_TO_STATE[ProtoCode.DISARMED]
+        assert scheduled == []
+
+    async def test_recheck_triggers_refresh(self, scheduled):
+        coord, _clock = _confirming_coordinator(ProtoCode.TOTAL_PERIMETER)
+        coord.async_refresh = MagicMock(return_value="refresh-coro")
+
+        await _poll(coord, "D", "1792266009978")
+        scheduled[0].action(None)
+
+        coord.hass.async_create_task.assert_called_once_with(
+            "refresh-coro", "verisure_italy_disarm_recheck"
+        )
