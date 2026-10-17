@@ -15,7 +15,7 @@ import pytest
 from aiohttp import ClientConnectorError, ClientSession
 from aioresponses import aioresponses
 
-from verisure_italy.client import API_URL, VerisureClient
+from verisure_italy.client import API_URL, VerisureClient, _sanitize_response
 from verisure_italy.exceptions import (
     APIConnectionError,
     APIResponseError,
@@ -871,6 +871,39 @@ class TestDebugLogRedaction:
         assert INSTALLATION.number not in caplog.text
         assert '"status": "D"' in caplog.text
         assert '"timestampUpdate": "2026-04-02T10:30:00"' in caplog.text
+
+    async def test_services_hides_installation_identity(self, mock_api, client, caplog):
+        """xSSrv installation alias (address), SIM and instIbs never logged."""
+        _authenticate(client)
+        body = json.loads(_services_response())
+        body["data"]["xSSrv"]["installation"].update(
+            {"alias": "Via Finta 1", "sim": "8939000000000000001", "instIbs": "IBS-424242"}
+        )
+        mock_api.post(API_URL, body=json.dumps(body))
+
+        with caplog.at_level(logging.DEBUG, logger="verisure_italy.client"):
+            await client.get_services(INSTALLATION)
+
+        assert "Via Finta 1" not in caplog.text
+        assert "8939000000000000001" not in caplog.text
+        assert "IBS-424242" not in caplog.text
+        assert "TIMELINE" in caplog.text
+
+    def test_identity_keys_redacted_at_any_depth(self):
+        body = json.dumps(
+            {
+                "alias": "top-alias",
+                "a": [{"b": {"sim": "deep-sim", "c": [[{"instIbs": "deep-ibs"}]]}}],
+                "keep": "visible",
+            }
+        )
+
+        safe = _sanitize_response(body)
+
+        assert "top-alias" not in safe
+        assert "deep-sim" not in safe
+        assert "deep-ibs" not in safe
+        assert "visible" in safe
 
     async def test_non_json_body_logged_unchanged(self, mock_api, client, caplog):
         _authenticate(client)

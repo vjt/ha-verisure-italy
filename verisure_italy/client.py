@@ -159,14 +159,19 @@ _SENSITIVE_VAR_KEYS: frozenset[str] = frozenset(
 
 # Keys scrubbed, at any depth, from GraphQL response bodies before
 # logging: the login JWT and refresh token (xSLoginToken /
-# xSValidateDevice), the capabilities JWT (xSSrv) and the
-# installation number (PII).
+# xSValidateDevice), the capabilities JWT (xSSrv), the installation
+# number and the xSSrv installation identity — alias (the street
+# address), SIM number and instIbs (PII). `alias` also drops zone
+# names from arm exceptions; those still surface in the raised error.
 _SENSITIVE_RESPONSE_KEYS: frozenset[str] = frozenset(
     {
         "hash",
         "refreshToken",
         "capabilities",
         "numinst",
+        "alias",
+        "sim",
+        "instIbs",
     }
 )
 
