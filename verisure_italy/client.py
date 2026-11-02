@@ -15,6 +15,7 @@ import json
 import logging
 import random
 import secrets
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from functools import partial
@@ -31,6 +32,7 @@ from .exceptions import (
     ArmingExceptionError,
     AuthenticationError,
     ImageCaptureError,
+    LoginRejectedError,
     OperationFailedError,
     OperationTimeoutError,
     SameStateError,
@@ -137,6 +139,13 @@ DEFAULT_POLL_TIMEOUT: float = 60.0
 # absorbing blips; persistent failures still surface on the third
 # attempt. See docs/findings/unavailable-flapping.md.
 _RETRY_DELAYS: tuple[float, ...] = (5.0, 10.0)
+
+# Seconds to wait before the next login after 1, 2, 3, ... consecutive
+# rejections (403 on mkLoginToken, Issue #13). Without it the
+# coordinator re-logged in on every 5s poll — an account-lockout risk.
+# One more rejection after the last delay raises LoginRejectedError
+# and the client stops logging in for good.
+_LOGIN_BACKOFF: tuple[float, ...] = (60.0, 120.0, 300.0, 900.0)
 _RETRY_JITTER: float = 0.2
 
 # Max bytes of response text written to the debug log per call. Responses
@@ -267,6 +276,9 @@ class VerisureClient:
         self._last_proto: str = ""
         self._apollo_operation_id: str = secrets.token_hex(64)
         self._auth_lock = asyncio.Lock()
+        self._login_rejections: int = 0
+        self._login_retry_at: float = 0.0
+        self._monotonic: Callable[[], float] = time.monotonic
 
     def set_poll_params(self, *, timeout: float | None = None, delay: float | None = None) -> None:
         """Update poll parameters at runtime."""
@@ -680,6 +692,24 @@ class VerisureClient:
     # Authentication
     # -------------------------------------------------------------------
 
+    def _check_login_backoff(self) -> None:
+        """Refuse a login, without sending it, while backing off.
+
+        Raises LoginRejectedError once the backoff is exhausted, and
+        APIResponseError while a backoff delay is running.
+        """
+        if self._login_rejections > len(_LOGIN_BACKOFF):
+            raise LoginRejectedError(
+                f"Verisure rejected {self._login_rejections} logins in a row (403); stopped trying"
+            )
+        remaining = self._login_retry_at - self._monotonic()
+        if remaining > 0:
+            raise APIResponseError(
+                f"Login backoff after {self._login_rejections} rejected login(s): "
+                f"next attempt in {remaining:.0f}s",
+                http_status=None,
+            )
+
     async def login(self) -> LoginResponse:
         """Authenticate. Returns LoginResponse or raises.
 
@@ -715,18 +745,34 @@ class VerisureClient:
             "query": LOGIN_TOKEN_MUTATION,
         }
 
+        self._check_login_backoff()
         try:
             response_text = await self._execute(content, "mkLoginToken", None)
         except SessionExpiredError as err:
             # A 403 on login is not an expired session: there is none
             # yet. Raised as-is it escaped the coordinator's re-login
             # handler as an unexpected error (Issue #13). Upstream
-            # rejection of unknown cause, so transient, not a credential
-            # fault — see docs/findings/unavailable-flapping.md.
+            # rejection of unknown cause: back off, and give up once the
+            # backoff is exhausted.
+            self._login_rejections += 1
+            if self._login_rejections > len(_LOGIN_BACKOFF):
+                raise LoginRejectedError(
+                    f"Verisure rejected {self._login_rejections} logins in a row (403); "
+                    "stopped trying"
+                ) from err
+            delay = _LOGIN_BACKOFF[self._login_rejections - 1]
+            self._login_retry_at = self._monotonic() + delay
+            _LOGGER.warning(
+                "Login rejected by Verisure (403), %d in a row; next attempt in %.0fs",
+                self._login_rejections,
+                delay,
+            )
             raise APIResponseError(
                 "Login rejected by Verisure (403)",
                 http_status=None,
             ) from err
+        self._login_rejections = 0
+        self._login_retry_at = 0.0
 
         envelope = LoginEnvelope.model_validate_json(response_text)
         result = envelope.data.xSLoginToken

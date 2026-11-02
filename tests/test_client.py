@@ -15,12 +15,13 @@ import pytest
 from aiohttp import ClientConnectorError, ClientSession
 from aioresponses import aioresponses
 
-from verisure_italy.client import API_URL, VerisureClient, _sanitize_response
+from verisure_italy.client import _LOGIN_BACKOFF, API_URL, VerisureClient, _sanitize_response
 from verisure_italy.exceptions import (
     APIConnectionError,
     APIResponseError,
     ArmingExceptionError,
     AuthenticationError,
+    LoginRejectedError,
     OperationFailedError,
     OperationTimeoutError,
     SessionExpiredError,
@@ -644,6 +645,81 @@ class TestLogin:
         assert not isinstance(exc_info.value, SessionExpiredError)
         assert client._auth_token is None
 
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class TestLoginBackoff:
+    """Rejected logins back off, then stop: never hammer mkLoginToken."""
+
+    @pytest.fixture
+    def clock(self, client):
+        clock = _Clock()
+        client._monotonic = clock
+        return clock
+
+    async def test_rejected_login_backs_off_without_request(self, mock_api, client, clock):
+        mock_api.post(API_URL, body=_error_session_expired())
+        with pytest.raises(APIResponseError):
+            await client.login()
+
+        # No response registered: a request would raise APIConnectionError.
+        with pytest.raises(APIResponseError, match="backoff"):
+            await client.login()
+
+    async def test_retries_after_delay(self, mock_api, client, clock):
+        mock_api.post(API_URL, body=_error_session_expired())
+        with pytest.raises(APIResponseError):
+            await client.login()
+
+        clock.now += _LOGIN_BACKOFF[0]
+        token = _make_jwt()
+        mock_api.post(API_URL, body=_login_ok(token))
+        await client.login()
+
+        assert client._auth_token == token
+
+    async def test_success_resets_backoff(self, mock_api, client, clock):
+        mock_api.post(API_URL, body=_error_session_expired())
+        with pytest.raises(APIResponseError):
+            await client.login()
+        clock.now += _LOGIN_BACKOFF[0]
+        mock_api.post(API_URL, body=_login_ok())
+        await client.login()
+
+        # Fresh rejection starts from the first delay again.
+        mock_api.post(API_URL, body=_error_session_expired())
+        with pytest.raises(APIResponseError):
+            await client.login()
+        clock.now += _LOGIN_BACKOFF[0]
+        mock_api.post(API_URL, body=_login_ok())
+        await client.login()
+
+    async def test_gives_up_after_backoff_exhausted(self, mock_api, client, clock):
+        for delay in _LOGIN_BACKOFF:
+            mock_api.post(API_URL, body=_error_session_expired())
+            with pytest.raises(APIResponseError):
+                await client.login()
+            clock.now += delay
+        mock_api.post(API_URL, body=_error_session_expired())
+
+        with pytest.raises(LoginRejectedError):
+            await client.login()
+        # Stopped for good: no further request, even much later.
+        clock.now += 86400
+        with pytest.raises(LoginRejectedError):
+            await client.login()
+
+    async def test_login_rejected_is_authentication_error(self):
+        assert issubclass(LoginRejectedError, AuthenticationError)
+
+
+class TestLoginErrors:
     async def test_2fa_required(self, mock_api, client):
         mock_api.post(API_URL, body=_login_2fa_required())
 

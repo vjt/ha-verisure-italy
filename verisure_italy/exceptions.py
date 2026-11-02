@@ -25,6 +25,15 @@ class AuthenticationError(VerisureError):
     """Login failed — bad credentials or account locked."""
 
 
+class LoginRejectedError(AuthenticationError):
+    """Verisure kept rejecting the login; the client stopped trying.
+
+    Raised once the login backoff is exhausted, and on every login
+    attempt after that. Terminal for this client instance: only new
+    credentials (a new client) try again.
+    """
+
+
 class TwoFactorRequiredError(VerisureError):
     """Device needs 2FA validation before it can be used."""
 

@@ -12,13 +12,14 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.verisure_italy.coordinator import (
     VerisureCoordinator,
     VerisureStatusData,
 )
-from verisure_italy.client import VerisureClient
+from verisure_italy.client import _LOGIN_BACKOFF, VerisureClient
 from verisure_italy.exceptions import SessionExpiredError
 from verisure_italy.models import (
     PROTO_TO_STATE,
@@ -146,6 +147,31 @@ class TestReloginRejected:
 
         with pytest.raises(UpdateFailed, match="Re-authentication network error"):
             await coord._async_update_data()
+
+    async def test_exhausted_login_backoff_stops_polling(self):
+        """After the login backoff gives up, raise ConfigEntryAuthFailed:
+        HA stops polling and asks for credentials instead of re-logging
+        in forever."""
+        coord = _bare_coordinator()
+        coord.client = VerisureClient(
+            username="test@test.it",
+            password="password123",
+            http_session=MagicMock(),
+            device_id="test-device-id",
+            uuid="test-uuid-1234",
+            id_device_indigitall="",
+            poll_delay=0.0,
+            poll_timeout=2.0,
+        )
+        coord.client._login_rejections = len(_LOGIN_BACKOFF) + 1
+        coord.client.get_general_status = AsyncMock(
+            side_effect=SessionExpiredError("Session expired during Status")
+        )
+        coord.client._execute_raw = AsyncMock()
+
+        with pytest.raises(ConfigEntryAuthFailed, match="stopped trying"):
+            await coord._async_update_data()
+        coord.client._execute_raw.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
