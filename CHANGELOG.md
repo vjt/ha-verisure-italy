@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.12.2 — 2026-11-02 (login backoff)
+
+### Fixes
+
+- **Rejected logins back off, then stop** (follow-up to Issue #13).
+  When Verisure answered 403 to `mkLoginToken`, the coordinator
+  logged in again on every 5 s poll — an account-lockout risk. After
+  a rejection the client now waits 60 s, 2 min, 5 min, 15 min before
+  the next login (no request sent in between; polls fail as
+  `UpdateFailed`). One more rejection after that raises the new
+  `LoginRejectedError` (an `AuthenticationError`): the coordinator
+  raises `ConfigEntryAuthFailed`, HA stops polling and asks to
+  re-enter credentials. A successful login resets the backoff.
+
+### Tests
+
+- `TestLoginBackoff` (`tests/test_client.py`), and
+  `TestReloginRejected.test_exhausted_login_backoff_stops_polling`.
+
 ## 0.12.1 — 2026-11-02 (Issues #12, #13)
 
 ### Fixes
