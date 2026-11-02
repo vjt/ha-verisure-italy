@@ -630,6 +630,20 @@ class TestLogin:
         assert client._auth_token_exp > datetime.now(tz=UTC)
         assert client._auth_token_exp < datetime.now(tz=UTC) + timedelta(minutes=31)
 
+    async def test_403_on_login_is_response_error(self, mock_api, client):
+        """Issue #13: a 403 on mkLoginToken is not an expired session.
+
+        There is no session yet. Raising SessionExpiredError escaped the
+        coordinator's re-login handler as an unexpected error.
+        """
+        mock_api.post(API_URL, body=_error_session_expired())
+
+        with pytest.raises(APIResponseError) as exc_info:
+            await client.login()
+
+        assert not isinstance(exc_info.value, SessionExpiredError)
+        assert client._auth_token is None
+
     async def test_2fa_required(self, mock_api, client):
         mock_api.post(API_URL, body=_login_2fa_required())
 

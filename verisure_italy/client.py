@@ -715,7 +715,18 @@ class VerisureClient:
             "query": LOGIN_TOKEN_MUTATION,
         }
 
-        response_text = await self._execute(content, "mkLoginToken", None)
+        try:
+            response_text = await self._execute(content, "mkLoginToken", None)
+        except SessionExpiredError as err:
+            # A 403 on login is not an expired session: there is none
+            # yet. Raised as-is it escaped the coordinator's re-login
+            # handler as an unexpected error (Issue #13). Upstream
+            # rejection of unknown cause, so transient, not a credential
+            # fault — see docs/findings/unavailable-flapping.md.
+            raise APIResponseError(
+                "Login rejected by Verisure (403)",
+                http_status=None,
+            ) from err
 
         envelope = LoginEnvelope.model_validate_json(response_text)
         result = envelope.data.xSLoginToken

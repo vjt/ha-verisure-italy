@@ -8,15 +8,18 @@ ARMING/DISARMING transition state.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.verisure_italy.coordinator import (
     VerisureCoordinator,
     VerisureStatusData,
 )
 from verisure_italy.client import VerisureClient
+from verisure_italy.exceptions import SessionExpiredError
 from verisure_italy.models import (
     PROTO_TO_STATE,
     AlarmState,
@@ -117,6 +120,32 @@ class TestPollShortCircuit:
 
         coord.client.get_general_status.assert_awaited_once()
         assert result.alarm_state == PROTO_TO_STATE[ProtoCode.DISARMED]
+
+
+class TestReloginRejected:
+    async def test_403_on_relogin_is_update_failed(self):
+        """Issue #13: Status says the session expired, then mkLoginToken
+        itself gets a 403. Must surface as UpdateFailed (retried next
+        poll), not escape as an unexpected error."""
+        coord = _bare_coordinator()
+        coord.client = VerisureClient(
+            username="test@test.it",
+            password="password123",
+            http_session=MagicMock(),
+            device_id="test-device-id",
+            uuid="test-uuid-1234",
+            id_device_indigitall="",
+            poll_delay=0.0,
+            poll_timeout=2.0,
+        )
+        coord.client.get_general_status = AsyncMock(
+            side_effect=SessionExpiredError("Session expired during Status")
+        )
+        forbidden = json.dumps({"errors": [{"message": "Forbidden", "data": {"status": 403}}]})
+        coord.client._execute_raw = AsyncMock(return_value=forbidden)
+
+        with pytest.raises(UpdateFailed, match="Re-authentication network error"):
+            await coord._async_update_data()
 
 
 # ---------------------------------------------------------------------------
