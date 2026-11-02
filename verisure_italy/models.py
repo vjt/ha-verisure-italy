@@ -261,6 +261,20 @@ class ZoneException(BaseModel):
     alias: str
 
 
+class StatusException(BaseModel):
+    """An exception entry listed by xSStatus.
+
+    Informational only — nothing acts on it. Unlike the arm-flow
+    ZoneException, Verisure sends entries with null deviceType and alias
+    (Issue #12), so both are nullable here: a null in an unused field
+    must not make the alarm state unavailable.
+    """
+
+    status: str
+    device_type: str | None = Field(alias="deviceType")
+    alias: str | None
+
+
 class PanelError(BaseModel):
     """Error details from the panel (returned in arm/disarm status).
 
@@ -296,7 +310,7 @@ class GeneralStatus(BaseModel):
 
     status: str
     timestamp_update: str = Field(alias="timestampUpdate")
-    exceptions: list[ZoneException] | None = None
+    exceptions: list[StatusException] | None = None
 
 
 class CheckAlarmResponse(BaseModel):

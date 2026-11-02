@@ -47,7 +47,12 @@ from verisure_italy.exceptions import (
     OperationTimeoutError,
     UnexpectedStateError,
 )
-from verisure_italy.models import PROTO_TO_STATE, AlarmPartition, ZoneException
+from verisure_italy.models import (
+    PROTO_TO_STATE,
+    AlarmPartition,
+    StatusException,
+    ZoneException,
+)
 
 from .const import (
     CONF_DEVICE_ID,
@@ -107,7 +112,7 @@ class VerisureStatusData(BaseModel):
     alarm_state: AlarmState
     proto_code: ProtoCode
     timestamp: str
-    exceptions: list[ZoneException]
+    exceptions: list[StatusException]
 
 
 class PendingDisarm(BaseModel):

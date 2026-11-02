@@ -1006,6 +1006,25 @@ class TestGetGeneralStatus:
         assert status.status == "B"
         assert status.timestamp_update == "2026-04-02T10:30:00"
 
+    async def test_exception_with_null_fields_does_not_fail_poll(self, mock_api, client):
+        """Issue #12: xSStatus may list exceptions with null deviceType/alias.
+
+        They are informational; the alarm state itself must still parse.
+        """
+        _authenticate(client)
+        body = json.loads(_general_status("D"))
+        body["data"]["xSStatus"]["exceptions"] = [
+            {"status": "0", "deviceType": None, "alias": None},
+            {"status": "0", "deviceType": "MG", "alias": "Finestra"},
+        ]
+        mock_api.post(API_URL, body=json.dumps(body))
+
+        status = await client.get_general_status(INSTALLATION)
+
+        assert status.status == "D"
+        assert status.exceptions is not None
+        assert [e.alias for e in status.exceptions] == [None, "Finestra"]
+
 
 # ---------------------------------------------------------------------------
 # Arm / disarm tests
