@@ -273,9 +273,9 @@ Arm button lets you decide.
   - action: notify.mobile_app_you
     data:
       message: "Open zones: {{ trigger.event.data.zones | join(', ') }} — force-arming..."
+  # No data: the service takes no fields (it acts on the stored
+  # force-arm context), and passing entity_id fails validation.
   - action: verisure_italy.force_arm
-    data:
-      entity_id: alarm_control_panel.verisure_alarm
   mode: single
 ```
 

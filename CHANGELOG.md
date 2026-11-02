@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Null fields in `xSStatus` exceptions no longer make the alarm
+  unavailable** (Issue #12). Verisure can list exception entries with
+  null `deviceType` and `alias`; the strict arm-flow `ZoneException`
+  model rejected the whole poll. `xSStatus` entries now parse into a
+  dedicated `StatusException` with nullable fields. They are
+  informational — nothing acts on them.
+- **A 403 on login is no longer an "unexpected error"** (Issue #13).
+  `mkLoginToken` answered 403 is reported as `APIResponseError`
+  instead of `SessionExpiredError`, which escaped the coordinator's
+  re-login handler. The poll now fails as a normal `UpdateFailed` and
+  retries next interval.
+- **Docs:** the force-arm automation example passed `entity_id` to
+  `verisure_italy.force_arm`, which takes no fields and rejects it.
+
 ## 0.12.0 — 2026-10-17 (debug log redaction, installation identity)
 
 Security release. Completes the 0.10.0 debug-log redaction.
