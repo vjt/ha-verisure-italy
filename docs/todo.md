@@ -8,8 +8,8 @@ Backlog for ha-verisure. Prune aggressively — completed items go in
 `CHANGELOG.md`, not here. Keep context on pending items so the next
 session can pick them up cold.
 
-Updated: 2026-05-04 (v0.9.6 shipped for Issue #7 — optional
-`configRepoUser`; Issue #1 still awaiting reporter response).
+Updated: 2026-11-03 (v0.12.2 shipped: #12 null exception fields,
+#13 login 403 + backoff; #11/#12/#13 awaiting reporters).
 
 ## Immediate
 
@@ -27,6 +27,14 @@ Updated: 2026-05-04 (v0.9.6 shipped for Issue #7 — optional
   if arm works, close. If a `VERISURE ARM FAILURE BEGIN` block
   lands, the new partition + command fields should pinpoint cause
   at a glance. Reference: `docs/findings/arm-command-vocabulary.md`.
+- **Issues #11, #12, #13 awaiting reporters** (replies posted
+  2026-11-02/03). #11 (alan210874, SDVFAST): panel refuses arm outright
+  (`usm3`, `error_mg_open_zone`), no force context — asked whether the
+  Verisure app can force-arm; if yes, capture what it sends. #12
+  (Fabrizio): close once 0.12.1+ confirmed. #13 (alexmarco10): root
+  cause of the login 403 unknown — asked version, recovery, frequency,
+  concurrent account use.
+
 ## High
 
 - **xSActV2 observability** — the alarm timeline query is reverse-
@@ -36,7 +44,8 @@ Updated: 2026-05-04 (v0.9.6 shipped for Issue #7 — optional
   - **Alarm trigger detection + HA event** — push a fast HA event
     the moment the panel rings (faster than the 15s `xSStatus`
     poll). Signal sources: `xSStatus.exceptions { status deviceType
-    alias }` (already fetched, dropped by `GeneralStatus`) and
+    alias }` (parsed since 0.12.1 as `GeneralStatus.exceptions:
+    list[StatusException] | None`, exposed on `VerisureStatusData`) and
     `xSActV2` signal types in the 5xx / 7xx range. Needs a live
     trigger capture first. See `docs/findings/verisure-api.md`.
   - **Alarm report browsing** — the web UI's "VIEW REPORT" buttons

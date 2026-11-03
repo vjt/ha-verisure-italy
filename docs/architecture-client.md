@@ -57,6 +57,12 @@ sequenceDiagram
 - JWT tokens are EdDSA-signed, per-installation capabilities
 - Device registration is permanent — 2FA is only needed once per `device_id`
 - Token refresh is `asyncio.Lock`-protected to prevent concurrent re-auth races
+- A 403 on login itself is not an expired session: it raises
+  `APIResponseError` (coordinator → `UpdateFailed`) and starts a backoff
+  (`_LOGIN_BACKOFF` = 60s, 2m, 5m, 15m, no requests while waiting). The
+  next rejection after the last step raises `LoginRejectedError`
+  (coordinator → `ConfigEntryAuthFailed`: polling stops, HA reauth).
+  A successful login resets the count.
 
 ## Alarm State Model
 
@@ -178,6 +184,7 @@ sequenceDiagram
 ```
 VerisureError
 ├── AuthenticationError        # Bad credentials / locked account
+│   └── LoginRejectedError     # Login 403'd past the backoff; client stops
 ├── TwoFactorRequiredError     # Device needs 2FA
 ├── SessionExpiredError        # JWT expired
 ├── APIResponseError           # GraphQL error (has http_status)
