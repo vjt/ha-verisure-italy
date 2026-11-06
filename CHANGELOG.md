@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.12.3 — 2026-11-06 (HACS default store)
+
+Integration-only bump. No code changes; the `verisure-italy` Python
+package stays at 0.12.2.
+
+### Changes
+
+- **HACS and hassfest validation workflows**
+  (`.github/workflows/validate.yaml`, `.github/workflows/hassfest.yaml`),
+  run on every push, pull request and nightly, as required for the
+  HACS default repository list (the catalog the Home Assistant
+  Marketplace reads).
+- **`manifest.json`**: add `issue_tracker` (required by HACS) and the
+  integration category `security_safety.alarm_systems`.
+- **`LICENSE`** is the plain MIT text again, so GitHub detects it as
+  MIT. The trademark and non-affiliation notice moved to the README.
+
 ## 0.12.2 — 2026-11-02 (login backoff)
 
 ### Fixes

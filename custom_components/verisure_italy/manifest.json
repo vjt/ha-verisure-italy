@@ -1,12 +1,14 @@
 {
   "domain": "verisure_italy",
   "name": "Verisure Italy",
+  "categories": ["security_safety.alarm_systems"],
   "codeowners": ["@vjt"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/vjt/ha-verisure-italy",
   "homeassistant": "2026.2.0",
   "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/vjt/ha-verisure-italy/issues",
   "requirements": ["verisure-italy>=0.12.2"],
-  "version": "0.12.2"
+  "version": "0.12.3"
 }
