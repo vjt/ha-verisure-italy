@@ -13,7 +13,11 @@ package stays at 0.12.2.
   HACS default repository list (the catalog the Home Assistant
   Marketplace reads).
 - **`manifest.json`**: add `issue_tracker` (required by HACS) and the
-  integration category `security_safety.alarm_systems`.
+  integration category `security_safety.alarm_systems`; declare
+  `lovelace` in `after_dependencies` (the integration manages a Lovelace
+  dashboard); drop the `homeassistant` key, which hassfest does not
+  accept in a manifest. The minimum Home Assistant version (2026.2.0)
+  stays in `hacs.json`, where HACS and the Marketplace read it.
 - **`LICENSE`** is the plain MIT text again, so GitHub detects it as
   MIT. The trademark and non-affiliation notice moved to the README.
 
