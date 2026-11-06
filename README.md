@@ -15,7 +15,10 @@ Home Assistant custom component for **Verisure Italy** alarm systems.
 Talks directly to `customers.verisure.it/owa-api/graphql`. Fully
 replaces the Verisure mobile app for alarm control and camera monitoring.
 
-> **Not affiliated with Verisure Group or Securitas Direct.**
+> **Not affiliated with Verisure Group or Securitas Direct.** This project is
+> not endorsed by or connected to Verisure Group, Securitas Direct, or any of
+> their subsidiaries. All product names, trademarks, and registered trademarks
+> are property of their respective owners.
 
 📖 Long-form walk-through: **[How I replaced the Verisure app with Home Assistant](https://sindro.me/posts/2026-04-04-verisure-italy-home-assistant/)** ([🇮🇹 italiano](https://sindro.me/it/posts/2026-04-04-verisure-italy-home-assistant/))
 
