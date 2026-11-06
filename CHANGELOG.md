@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.12.4 — 2026-11-06 (version alignment)
+
+No code changes. The `verisure-italy` Python package, the integration
+manifest and the GitHub release carry the same version again.
+
+### Changes
+
+- **Versions aligned at 0.12.4**: `pyproject.toml`, `manifest.json`
+  `version`, and the `verisure-italy>=0.12.4` requirement in
+  `manifest.json`. The package is published to PyPI as 0.12.4; its code
+  is the same as 0.12.2.
+- 0.12.3 bumped only the integration manifest, so the v0.12.3 tag points
+  at a commit whose package version is still 0.12.2. That tag is left as
+  published; 0.12.4 supersedes it.
+
 ## 0.12.3 — 2026-11-06 (HACS default store)
 
 Integration-only bump. No code changes; the `verisure-italy` Python
