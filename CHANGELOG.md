@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.12.5 — 2026-11-17 (reauth translations)
+
+### Fixes
+
+- **Reauth form labels**: `translations/en.json` was missing the
+  `reauth_confirm`, `reauth_2fa_phone` and `reauth_2fa_code` steps and
+  the `reauth_successful` abort message. Custom integrations read
+  `en.json`, not `strings.json`, so the reauth form showed up without
+  titles or field labels. `en.json` is now synced from `strings.json`,
+  and a test fails if the two drift apart. Reported in the HACS review.
+- **Client version in diagnostics**: `verisure_italy.__version__`
+  still said 0.9.6, so HA diagnostics and the CLI `--version` reported
+  the wrong client version. It now matches the package version, and a
+  test checks that it agrees with `pyproject.toml` and `manifest.json`.
+
+### Docs
+
+- **README**: new section comparing this integration with
+  `guerrerotook/securitas-direct-new-api`: how each one picks the
+  commands it sends, the perimeter check, button-to-state mapping, and
+  phantom-disarm handling.
+
 ## 0.12.4 — 2026-11-06 (version alignment)
 
 No code changes. The `verisure-italy` Python package, the integration
