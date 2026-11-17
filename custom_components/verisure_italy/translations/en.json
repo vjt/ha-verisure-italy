@@ -30,6 +30,28 @@
           "installation": "Installation"
         }
       },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "Your Verisure session expired. Enter your credentials to reconnect.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "reauth_2fa_phone": {
+        "title": "Select Phone",
+        "description": "Choose which phone should receive the SMS code.",
+        "data": {
+          "phone": "Phone"
+        }
+      },
+      "reauth_2fa_code": {
+        "title": "Two-Factor Authentication",
+        "description": "SMS code sent to {phone}. Enter it below.",
+        "data": {
+          "code": "SMS Code"
+        }
+      },
       "reconfigure": {
         "title": "Reconfigure Credentials",
         "description": "Enter new Verisure Italy credentials.",
@@ -54,6 +76,7 @@
       }
     },
     "abort": {
+      "reauth_successful": "Re-authentication successful.",
       "reconfigure_successful": "Credentials updated successfully."
     },
     "error": {
