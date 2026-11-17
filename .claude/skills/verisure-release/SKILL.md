@@ -17,23 +17,21 @@ Abort on any failure.
 
 ## Version bump
 
-Three files to update — all three MUST match:
+Four places to update — all MUST match:
 
 1. `pyproject.toml` — `version = "X.Y.Z"` (line 3)
 2. `custom_components/verisure_italy/manifest.json` — `"version": "X.Y.Z"`
 3. `custom_components/verisure_italy/manifest.json` — `"requirements": ["verisure-italy>=X.Y.Z"]`
+4. `verisure_italy/__init__.py` — `__version__ = "X.Y.Z"` (feeds HA
+   diagnostics and CLI `--version`; was stale at 0.9.6 until 0.12.5)
 
-After editing, verify all three match:
-```bash
-grep '"version"' custom_components/verisure_italy/manifest.json
-grep '^version' pyproject.toml
-grep 'verisure-italy>=' custom_components/verisure_italy/manifest.json
-```
+After editing, `pytest tests/test_version.py -q` must pass — it asserts
+all four match.
 
 ## Commit and tag
 
 ```bash
-git add pyproject.toml custom_components/verisure_italy/manifest.json CHANGELOG.md
+git add pyproject.toml custom_components/verisure_italy/manifest.json verisure_italy/__init__.py CHANGELOG.md
 git commit -m "chore: bump to X.Y.Z"
 git tag -a vX.Y.Z -m "vX.Y.Z — <one-line summary from CHANGELOG>"
 git push origin master --tags
