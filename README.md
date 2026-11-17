@@ -200,3 +200,29 @@ ruff check verisure_italy/ tests/ custom_components/
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Comparison with securitas-direct-new-api
+
+[guerrerotook/securitas-direct-new-api](https://github.com/guerrerotook/securitas-direct-new-api)
+("Verisure OWA", domain `securitas`) is the multi-country integration
+in the HACS default catalog. It supports Italy too, and talks to the
+same API. Compared against its v5.11.0 release:
+
+| | securitas-direct-new-api | This integration |
+|---|---|---|
+| Scope | 10 countries; alarm, cameras, smart locks, annex, environmental sensors, custom cards | Italy only; alarm and cameras |
+| Commands sent to the panel | Chosen at runtime by trial: candidate commands are sent in order, any the API rejects with HTTP 400/404 is stored as unsupported, and the next one is tried ([`_base.py`](https://github.com/guerrerotook/securitas-direct-new-api/blob/v5.11.0/custom_components/securitas/alarm_control_panel/_base.py#L843-L907)). Away with perimeter tries the Spanish alias `ARMINTEXT1` before the Italian `ARM1PERI1` ([`command_resolver.py`](https://github.com/guerrerotook/securitas-direct-new-api/blob/v5.11.0/custom_components/securitas/verisure_owa_api/command_resolver.py#L85-L91)) | Decided before anything is sent: the official web app's own command logic (decoded from its JS bundle), restricted to the services the installation reports as active. Panel models the Italian API doesn't list get no commands at all: arm and disarm are refused and a diagnostic is logged. Verified live on `SDVECU` |
+| Perimeter support | On if any of four heuristics says so: JWT capability, service flag, service attribute, partition `02` permissions ([`capabilities.py`](https://github.com/guerrerotook/securitas-direct-new-api/blob/v5.11.0/custom_components/securitas/verisure_owa_api/capabilities.py)) | Partition `02` permissions only, the same check Verisure's own web app makes |
+| HA button → panel state | Configured by the user. With the defaults for a perimeter install, Partial + Perimeter (`B`) has no button and shows as `armed_custom_bypass` | Fixed, see [Alarm State Mapping](#alarm-state-mapping); setup asks only for login, 2FA and installation |
+| Brief false "disarmed" from the API while the panel stays armed | Published as reported | Held until a second poll confirms it ([phantom disarm](docs/findings/phantom-disarm.md)) |
+
+Working out the panel at runtime is the reasonable design for one
+integration that has to serve every Verisure panel in every
+country. This integration gives up that coverage so that its
+behaviour is decided before anything is sent: no command goes out
+just to find out whether the panel accepts it.
+
+If you are outside Italy, or need locks, annex or environmental
+sensors, use securitas-direct-new-api. If you have an Italian panel,
+this integration does less, and every command it sends is chosen
+before it goes out.
