@@ -8,10 +8,19 @@ Backlog for ha-verisure. Prune aggressively — completed items go in
 `CHANGELOG.md`, not here. Keep context on pending items so the next
 session can pick them up cold.
 
-Updated: 2026-11-03 (v0.12.2 shipped: #12 null exception fields,
-#13 login 403 + backoff; #11/#12/#13 awaiting reporters).
+Updated: 2026-11-17 (v0.12.5 shipped: en.json reauth translations,
+`__version__` fix; HACS default submission declined, stays custom repo).
 
 ## Immediate
+
+- **Propose phantom-disarm confirmation upstream** — promised publicly
+  to frenck on hacs/default#13517 (2026-11-17). Open an issue on
+  `guerrerotook/securitas-direct-new-api` describing the symptom and the
+  `timestampUpdate` persistence discriminator, with the capture from
+  `docs/findings/phantom-disarm.md` (redact numinst / timestamps if
+  needed). Upstream v5.11.0 has no handling: its coordinator publishes
+  every polled proto code (`coordinators.py` `_async_update_data` →
+  `record_confirmed_proto_code`).
 
 - **Issue #1 arm failure (ewinters-ca-spark)** — re-pinged 2026-05-01
   with v0.9.4 update: panel-type discovery now has a real allowlist
@@ -57,6 +66,12 @@ Updated: 2026-11-03 (v0.12.2 shipped: #12 null exception fields,
     interaction.
 
 ## Medium
+
+- **Italian translation (`translations/it.json`)** — an Italy-only
+  integration ships an English-only UI. Upstream ships `it.json`.
+  Translate `strings.json` (config, options, entity names, services);
+  extend `tests/test_translations.py` to assert `it.json` has the same
+  key tree as `strings.json`.
 
 - **Higher-resolution camera images** — all `xSRequestImages` output
   is 640×352 LOW. Worth revisiting if Verisure exposes a different

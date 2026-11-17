@@ -197,7 +197,9 @@ query names and variable shapes.
 ## Releasing
 
 1. Update `CHANGELOG.md`
-2. Bump version in `pyproject.toml` and `manifest.json`
+2. Bump version in `pyproject.toml`, `manifest.json` (`version` and
+   the `verisure-italy>=` requirement) and `verisure_italy/__init__.py`
+   (`__version__`). `tests/test_version.py` fails if any of them differ.
 3. Commit, tag, push:
    ```bash
    git add -A && git commit -m "chore: bump to X.Y.Z"
